@@ -11,7 +11,19 @@ No dependencies, no build step, no image or audio assets — one canvas, ES modu
 python3 -m http.server 8781
 ```
 
-Then open <http://localhost:8781>. (Any static server works; ES modules need `http://`, not `file://`.)
+Then open <http://localhost:8781>. (Any static server works; the `src/*.js` modules need `http://`,
+not `file://`.)
+
+### Or build one file you can double-click
+
+```bash
+node build.js
+```
+
+Writes `dist/terminal-velocity.html` — the nine modules and the stylesheet inlined into a single
+self-contained page. That one runs straight from `file://` with no server at all, because the
+restriction is on loading *external* module files, not on an inline `<script type="module">`.
+Copy it anywhere; it works offline.
 
 ## Controls
 
