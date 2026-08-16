@@ -6,7 +6,7 @@ import { Input } from './input.js';
 import { Terrain } from './terrain.js';
 import { LEVELS, endlessLevel, WORLDS } from './levels.js';
 import { Particles } from './particles.js';
-import { Ship, ENVELOPE, normalizeAngle } from './ship.js';
+import { Ship, ENVELOPE, normalizeAngle, DEFAULT_SETTINGS } from './ship.js';
 import * as R from './render.js';
 
 const canvas = document.getElementById('game');
@@ -31,8 +31,16 @@ const store = {
   },
 };
 
+const settings = {
+  ...DEFAULT_SETTINGS,
+  ...(() => { try { return JSON.parse(safeStore.get('tv_settings') || '{}'); } catch { return {}; } })(),
+};
+function saveSettings() {
+  safeStore.set('tv_settings', JSON.stringify(settings));
+}
+
 const g = {
-  state: 'menu',           // menu | select | brief | play | result | crash | gameover | victory | paused | help
+  state: 'menu',           // menu | select | brief | play | result | crash | gameover | victory | paused | help | settings
   level: null,
   levelIndex: 0,
   endless: false,
@@ -137,7 +145,7 @@ function simulate(dt) {
   while (acc >= FIXED && steps < 8) {
     acc -= FIXED;
     steps++;
-    const ev = ship.step(FIXED, input, g.level, g.terrain, g.levelTime);
+    const ev = ship.step(FIXED, input, g.level, g.terrain, g.levelTime, settings);
     if (ev === 'land') return onLand();
     if (ev === 'crash') return onCrash();
     pickups();
@@ -402,6 +410,7 @@ function screenHTML(s) {
           ${btn('select', 'MISSIONS')}
           ${btn('endless', 'ENDLESS RUN')}
           ${btn('help', 'HOW TO FLY')}
+          ${btn('settings', 'SETTINGS')}
         </div>
         <div class="foot">${audio.muted ? '🔇' : '🔊'} press M to ${audio.muted ? 'unmute' : 'mute'}</div>
       </div>`;
@@ -415,6 +424,11 @@ function screenHTML(s) {
           <div><kbd>D</kbd><kbd>→</kbd><span>Right attitude burner</span></div>
           <div><kbd>S</kbd><kbd>↓</kbd><span>Attitude hold — burns fuel to kill spin</span></div>
           <div><kbd>R</kbd><span>Retry</span><kbd>P</kbd><span>Pause</span><kbd>M</kbd><span>Mute</span></div>
+        </div>
+        <p class="body">Prefer arrows that just move the lander? <b>Settings → Steering → Direct</b> turns the
+        side burners into sideways thrusters and keeps the hull upright, so left means left with no attitude
+        to manage. Classic rotation can also be inverted there.</p>
+        <div class="keys">
         </div>
         <p class="body">Land with <b>both legs</b> inside a flashing pad. Keep descent under
         <b>${(ENVELOPE.GOOD.vy / 6).toFixed(1)}</b>, drift under <b>${(ENVELOPE.GOOD.vx / 6).toFixed(1)}</b>
@@ -505,10 +519,36 @@ function screenHTML(s) {
         <div class="btns">${btn('next', 'ENTER ENDLESS', true, 'SPACE')}${btn('menu', 'MENU')}</div>
       </div>`;
 
+    case 'settings': {
+      const opt = (key, value, title, blurb) => `
+        <button class="opt${settings[key] === value ? ' on' : ''}" data-action="set:${key}:${value}">
+          <span class="opt-title">${title}</span>
+          <span class="opt-blurb">${blurb}</span>
+        </button>`;
+      return `<div class="screen">
+        <h2>SETTINGS</h2>
+        <div class="setting">
+          <div class="setting-name">STEERING</div>
+          <div class="opts">
+            ${opt('steering', 'classic', 'CLASSIC', 'Side burners rotate the lander. Point the nose, then burn — the 1969 problem, and the only way to fly the tight pads well.')}
+            ${opt('steering', 'direct', 'DIRECT', 'Side burners push the lander sideways and the hull stays upright. Left means left on its own, no attitude to manage.')}
+          </div>
+        </div>
+        <div class="setting${settings.steering === 'direct' ? ' dimmed' : ''}">
+          <div class="setting-name">ROTATION${settings.steering === 'direct' ? ' — classic only' : ''}</div>
+          <div class="opts">
+            ${opt('invertRotation', false, 'NORMAL', 'Left burner tips the nose left, so left plus booster drifts you left.')}
+            ${opt('invertRotation', true, 'INVERTED', 'Left burner tips the nose right. Some pilots read the stick the other way round.')}
+          </div>
+        </div>
+        <div class="btns">${btn('back', 'DONE', true, 'SPACE')}</div>
+      </div>`;
+    }
+
     case 'paused':
       return `<div class="screen">
         <h2>PAUSED</h2>
-        <div class="btns">${btn('resume', 'RESUME', true, 'P')}${btn('retry', 'RESTART MISSION', false, 'R')}${btn('menu', 'MENU')}</div>
+        <div class="btns">${btn('resume', 'RESUME', true, 'P')}${btn('retry', 'RESTART MISSION', false, 'R')}${btn('settings', 'SETTINGS')}${btn('menu', 'MENU')}</div>
       </div>`;
   }
   return '';
@@ -529,6 +569,13 @@ function crashReason() {
 function act(action) {
   audio.unlock();
   audio.ui();
+  if (action.startsWith('set:')) {
+    const [, key, raw] = action.split(':');
+    settings[key] = raw === 'true' ? true : raw === 'false' ? false : raw;
+    saveSettings();
+    renderOverlay();
+    return;
+  }
   if (action.startsWith('go:')) {
     const i = +action.slice(3);
     g.endless = false;
@@ -548,8 +595,9 @@ function act(action) {
       startLevel(LEVELS.length);
       break;
     case 'select': setState('select'); break;
+    case 'settings': g.settingsFrom = g.state; setState('settings'); break;
     case 'help': setState('help'); break;
-    case 'back': setState('menu'); break;
+    case 'back': setState(g.settingsFrom === 'paused' ? 'paused' : 'menu'); g.settingsFrom = null; break;
     case 'launch': launch(); break;
     case 'next':
       if (g.state === 'victory') { g.endless = true; startLevel(LEVELS.length); }
@@ -615,3 +663,11 @@ window.__game = g;
 window.__ship = ship;
 window.__act = act;
 window.__input = input;
+window.__settings = settings;
+
+/** Opened by the macOS app's Settings menu item (Cmd-,). */
+window.__openSettings = () => {
+  if (g.state === 'play') { audio.silence(); g.settingsFrom = 'paused'; }
+  else g.settingsFrom = g.state;
+  setState('settings');
+};

@@ -109,6 +109,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "About TERMINAL VELOCITY", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
+        let prefs = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        prefs.keyEquivalentModifierMask = [.command]
+        prefs.target = self
+        appMenu.addItem(prefs)
+        appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Hide", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(withTitle: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
@@ -132,6 +137,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
     @objc private func reloadGame() {
         web.reload()
+    }
+
+    /// Cmd-, opens the game's own settings screen, pausing a flight in progress.
+    @objc private func openSettings() {
+        web.evaluateJavaScript("window.__openSettings && window.__openSettings()", completionHandler: nil)
     }
 }
 

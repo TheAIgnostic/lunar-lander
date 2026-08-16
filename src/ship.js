@@ -10,7 +10,14 @@ export const SHIP = {
   burnMain: 9,        // fuel/s - a full tank is roughly 25s of continuous burn
   burnRcs: 3.2,
   burnHold: 5,
+  sideThrust: 62,     // px/s^2 of lateral push in DIRECT steering
+  burnSide: 5.5,      // translating costs more than nudging the attitude
   radius: 20,
+};
+
+export const DEFAULT_SETTINGS = {
+  steering: 'classic',    // 'classic' = burners rotate | 'direct' = burners translate
+  invertRotation: false,  // classic only: swap which burner spins which way
 };
 
 // Landing envelope, loosest-first check order matters in verdict().
@@ -73,7 +80,7 @@ export class Ship {
   feet() { return FEET.map((p) => this.toWorld(p[0], p[1])); }
 
   /** One fixed physics step. Returns an event string or null. */
-  step(dt, input, level, terrain, t) {
+  step(dt, input, level, terrain, t, settings = DEFAULT_SETTINGS) {
     if (!this.alive || this.landed) return null;
 
     const hasFuel = this.fuel > 0;
@@ -81,24 +88,37 @@ export class Ship {
     this.rcsLeft = input.left && hasFuel;
     this.rcsRight = input.right && hasFuel;
     this.holding = input.hold && hasFuel && Math.abs(this.spin) > 0.02;
+    this.direct = settings.steering === 'direct';
 
     let burn = 0;
     if (this.thrusting) burn += SHIP.burnMain;
-    if (this.rcsLeft) burn += SHIP.burnRcs;
-    if (this.rcsRight) burn += SHIP.burnRcs;
-    if (this.holding) burn += SHIP.burnHold;
+    if (this.rcsLeft) burn += this.direct ? SHIP.burnSide : SHIP.burnRcs;
+    if (this.rcsRight) burn += this.direct ? SHIP.burnSide : SHIP.burnRcs;
+    if (this.holding && !this.direct) burn += SHIP.burnHold;
     this.fuel = Math.max(0, this.fuel - burn * dt);
 
-    // Angular
-    if (this.rcsLeft) this.spin -= SHIP.rcsAccel * dt;
-    if (this.rcsRight) this.spin += SHIP.rcsAccel * dt;
-    if (this.holding) {
-      const damp = Math.sign(this.spin) * Math.min(Math.abs(this.spin), 6 * dt);
-      this.spin -= damp;
+    if (this.direct) {
+      // DIRECT mode: the side thrusters translate instead of rotating, and the
+      // hull holds itself upright. Left means left, with no attitude to fly.
+      if (this.rcsLeft) this.vx -= SHIP.sideThrust * dt;
+      if (this.rcsRight) this.vx += SHIP.sideThrust * dt;
+      this.spin *= Math.pow(0.86, dt * 60);
+      this.angle += this.spin * dt;
+      this.angle -= this.angle * Math.min(1, dt * 7);   // ease back to level
+      if (Math.abs(this.angle) < 0.002) this.angle = 0;
+    } else {
+      // CLASSIC mode: side burners are attitude control.
+      const dir = settings.invertRotation ? -1 : 1;
+      if (this.rcsLeft) this.spin -= SHIP.rcsAccel * dir * dt;
+      if (this.rcsRight) this.spin += SHIP.rcsAccel * dir * dt;
+      if (this.holding) {
+        const damp = Math.sign(this.spin) * Math.min(Math.abs(this.spin), 6 * dt);
+        this.spin -= damp;
+      }
+      this.spin = clamp(this.spin, -SHIP.maxSpin, SHIP.maxSpin);
+      this.spin *= Math.pow(SHIP.spinDamp, dt * 60);
+      this.angle += this.spin * dt;
     }
-    this.spin = clamp(this.spin, -SHIP.maxSpin, SHIP.maxSpin);
-    this.spin *= Math.pow(SHIP.spinDamp, dt * 60);
-    this.angle += this.spin * dt;
 
     // Linear
     const throttleTarget = this.thrusting ? 1 : 0;

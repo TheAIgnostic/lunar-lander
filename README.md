@@ -54,6 +54,19 @@ else without that step requires an Apple Developer account to sign and notarize.
 
 Touch devices get three on-screen pads in landscape.
 
+### Steering modes
+
+**Settings** (in the menu, on the pause screen, or `⌘,` in the macOS app) offers two schemes:
+
+- **Classic** — the side burners are attitude control. Point the nose, then burn. Left plus booster
+  drifts you left; left on its own only spins you. This is the 1969 problem, and the only way to fly
+  the tight pads well.
+- **Direct** — the side burners push the lander sideways and the hull holds itself upright. Left
+  means left with no attitude to manage, at a slightly higher fuel cost per nudge.
+
+Classic rotation can also be **inverted**, for pilots who read the stick the other way round. The
+choice persists between sessions.
+
 ## Layout
 
 ```
