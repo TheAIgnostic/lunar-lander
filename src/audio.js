@@ -1,0 +1,166 @@
+// Fully synthesized audio - no files. Everything is WebAudio nodes.
+import { clamp } from './util.js';
+
+export class Audio {
+  constructor() {
+    this.ctx = null;
+    this.muted = localStorage.getItem('tv_muted') === '1';
+    this.ready = false;
+  }
+
+  /** Must be called from a user gesture before anything will sound. */
+  unlock() {
+    if (this.ctx) {
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+      return;
+    }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    this.ctx = new AC();
+    const master = this.ctx.createGain();
+    master.gain.value = this.muted ? 0 : 0.9;
+    master.connect(this.ctx.destination);
+    this.master = master;
+
+    // Shared noise buffer for all the thruster voices.
+    const len = this.ctx.sampleRate * 2;
+    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    this.noiseBuf = buf;
+
+    this.main = this._thruster(320, 0.55);
+    this.rcs = this._thruster(1500, 0.16);
+    this.ready = true;
+  }
+
+  _thruster(baseCutoff, gain) {
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noiseBuf;
+    src.loop = true;
+    const filt = this.ctx.createBiquadFilter();
+    filt.type = 'lowpass';
+    filt.frequency.value = baseCutoff;
+    filt.Q.value = 1.2;
+    const g = this.ctx.createGain();
+    g.gain.value = 0;
+    src.connect(filt).connect(g).connect(this.master);
+    src.start();
+    return { src, filt, g, gain, baseCutoff };
+  }
+
+  setMuted(m) {
+    this.muted = m;
+    localStorage.setItem('tv_muted', m ? '1' : '0');
+    if (this.master) this.master.gain.value = m ? 0 : 0.9;
+  }
+
+  /** Continuous engine levels, called every frame. */
+  engines(mainOn, rcsOn) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    const set = (v, on) => {
+      v.g.gain.setTargetAtTime(on ? v.gain : 0, t, on ? 0.02 : 0.08);
+      v.filt.frequency.setTargetAtTime(v.baseCutoff * (on ? 1.6 : 1), t, 0.05);
+    };
+    set(this.main, mainOn);
+    set(this.rcs, rcsOn);
+  }
+
+  silence() {
+    if (!this.ready) return;
+    this.engines(false, false);
+  }
+
+  _env(node, peak, attack, decay) {
+    const t = this.ctx.currentTime;
+    node.gain.cancelScheduledValues(t);
+    node.gain.setValueAtTime(0.0001, t);
+    node.gain.exponentialRampToValueAtTime(Math.max(peak, 0.0002), t + attack);
+    node.gain.exponentialRampToValueAtTime(0.0001, t + attack + decay);
+  }
+
+  blip(freq = 880, dur = 0.08, type = 'square', vol = 0.12) {
+    if (!this.ready) return;
+    const o = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    o.type = type;
+    o.frequency.value = freq;
+    o.connect(g).connect(this.master);
+    this._env(g, vol, 0.005, dur);
+    o.start();
+    o.stop(this.ctx.currentTime + dur + 0.05);
+  }
+
+  arpeggio(notes, step = 0.09, type = 'triangle', vol = 0.16) {
+    if (!this.ready) return;
+    notes.forEach((f, i) => setTimeout(() => this.blip(f, 0.28, type, vol), i * step * 1000));
+  }
+
+  explosion() {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noiseBuf;
+    const filt = this.ctx.createBiquadFilter();
+    filt.type = 'lowpass';
+    filt.frequency.setValueAtTime(1800, t);
+    filt.frequency.exponentialRampToValueAtTime(90, t + 1.1);
+    const g = this.ctx.createGain();
+    src.connect(filt).connect(g).connect(this.master);
+    this._env(g, 0.75, 0.01, 1.2);
+    src.start();
+    src.stop(t + 1.4);
+
+    const o = this.ctx.createOscillator();
+    const og = this.ctx.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(120, t);
+    o.frequency.exponentialRampToValueAtTime(28, t + 0.7);
+    o.connect(og).connect(this.master);
+    this._env(og, 0.45, 0.01, 0.8);
+    o.start();
+    o.stop(t + 1.0);
+  }
+
+  touchdown(quality) {
+    if (!this.ready) return;
+    const thump = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    thump.type = 'sine';
+    const t = this.ctx.currentTime;
+    thump.frequency.setValueAtTime(180, t);
+    thump.frequency.exponentialRampToValueAtTime(50, t + 0.25);
+    thump.connect(g).connect(this.master);
+    this._env(g, 0.4, 0.005, 0.3);
+    thump.start();
+    thump.stop(t + 0.4);
+    if (quality === 'PERFECT') this.arpeggio([523.25, 659.25, 783.99, 1046.5], 0.085);
+    else if (quality === 'GOOD') this.arpeggio([523.25, 659.25, 783.99], 0.09);
+    else this.arpeggio([392, 493.88], 0.1, 'square', 0.12);
+  }
+
+  alarm() {
+    this.blip(220, 0.12, 'sawtooth', 0.1);
+  }
+
+  pickup() {
+    this.arpeggio([880, 1174.66], 0.06, 'triangle', 0.13);
+  }
+
+  ui(up = true) {
+    this.blip(up ? 660 : 440, 0.05, 'square', 0.07);
+  }
+
+  /** Wind bed for atmosphere levels. */
+  setWind(strength) {
+    if (!this.ready) return;
+    if (!this.windVoice) {
+      this.windVoice = this._thruster(240, 0.25);
+      this.windVoice.filt.Q.value = 3;
+    }
+    const on = strength > 0.05;
+    const t = this.ctx.currentTime;
+    this.windVoice.g.gain.setTargetAtTime(on ? clamp(strength, 0, 1) * 0.22 : 0, t, 0.4);
+  }
+}

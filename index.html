@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>TERMINAL VELOCITY — a vector lander</title>
+<meta name="theme-color" content="#05060c" />
+<link rel="stylesheet" href="style.css" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🚀</text></svg>" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="overlay"></div>
+
+  <div id="touch" class="hidden">
+    <div class="cluster">
+      <button id="t-left" class="tbtn" aria-label="rotate left">◀</button>
+      <button id="t-hold" class="tbtn small" aria-label="attitude hold">≡</button>
+      <button id="t-right" class="tbtn" aria-label="rotate right">▶</button>
+    </div>
+    <button id="t-thrust" class="tbtn thrust" aria-label="booster">▲<span>BURN</span></button>
+  </div>
+
+  <div id="rotate">Rotate your device to landscape for the full instrument panel.</div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
