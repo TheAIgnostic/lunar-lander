@@ -1,10 +1,10 @@
 // Fully synthesized audio - no files. Everything is WebAudio nodes.
-import { clamp } from './util.js';
+import { clamp, safeStore } from './util.js';
 
 export class Audio {
   constructor() {
     this.ctx = null;
-    this.muted = localStorage.getItem('tv_muted') === '1';
+    this.muted = safeStore.get('tv_muted') === '1';
     this.ready = false;
   }
 
@@ -51,7 +51,7 @@ export class Audio {
 
   setMuted(m) {
     this.muted = m;
-    localStorage.setItem('tv_muted', m ? '1' : '0');
+    safeStore.set('tv_muted', m ? '1' : '0');
     if (this.master) this.master.gain.value = m ? 0 : 0.9;
   }
 

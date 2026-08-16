@@ -25,6 +25,24 @@ self-contained page. That one runs straight from `file://` with no server at all
 restriction is on loading *external* module files, not on an inline `<script type="module">`.
 Copy it anywhere; it works offline.
 
+## macOS app
+
+```bash
+./macos/build.sh            # builds dist/Terminal Velocity.app
+./macos/build.sh --install  # ...and copies it to /Applications
+```
+
+A ~900 KB native shell: an `NSWindow` hosting the bundled page in a `WKWebView`, with its own Dock
+icon (drawn by `macos/make-icon.swift` from the same polygon the game draws the ship with), a menu
+bar, and native full screen. The game code is untouched — no Electron, no framework, just `swiftc`
+and the Xcode command line tools.
+
+The build ends with a self-test: it loads the page headlessly, asserts the game booted inside the
+web view, and fails the build if it did not.
+
+Being unsigned, the first launch from Finder may need a right-click -> Open. Handing it to someone
+else without that step requires an Apple Developer account to sign and notarize.
+
 ## Controls
 
 | Key | Action |

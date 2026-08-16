@@ -1,6 +1,6 @@
 // TERMINAL VELOCITY - state machine, camera, scoring, persistence.
 
-import { clamp, lerp, approach, makeRng, formatScore, DEG } from './util.js';
+import { clamp, lerp, approach, makeRng, formatScore, safeStore, DEG } from './util.js';
 import { Audio } from './audio.js';
 import { Input } from './input.js';
 import { Terrain } from './terrain.js';
@@ -20,14 +20,14 @@ const particles = new Particles();
 const ship = new Ship();
 
 const store = {
-  get high() { return +(localStorage.getItem('tv_high') || 0); },
-  set high(v) { localStorage.setItem('tv_high', String(v)); },
-  get unlocked() { return +(localStorage.getItem('tv_unlocked') || 1); },
-  set unlocked(v) { localStorage.setItem('tv_unlocked', String(Math.max(v, this.unlocked))); },
-  get bests() { try { return JSON.parse(localStorage.getItem('tv_bests') || '{}'); } catch { return {}; } },
+  get high() { return +(safeStore.get('tv_high') || 0); },
+  set high(v) { safeStore.set('tv_high', String(v)); },
+  get unlocked() { return +(safeStore.get('tv_unlocked') || 1); },
+  set unlocked(v) { safeStore.set('tv_unlocked', String(Math.max(v, this.unlocked))); },
+  get bests() { try { return JSON.parse(safeStore.get('tv_bests') || '{}'); } catch { return {}; } },
   setBest(id, v) {
     const b = this.bests;
-    if (!b[id] || v > b[id]) { b[id] = v; localStorage.setItem('tv_bests', JSON.stringify(b)); }
+    if (!b[id] || v > b[id]) { b[id] = v; safeStore.set('tv_bests', JSON.stringify(b)); }
   },
 };
 

@@ -44,3 +44,28 @@ export const pad = (n, w = 2) => String(n).padStart(w, '0');
 export function formatScore(n) {
   return Math.round(n).toLocaleString('en-US');
 }
+
+/**
+ * localStorage that cannot throw. Safari refuses it on file:// URLs and private
+ * windows refuse it everywhere, so the game falls back to memory and merely
+ * forgets scores between sessions instead of failing to start.
+ */
+export const safeStore = (() => {
+  let backing = null;
+  try {
+    const probe = '__tv_probe';
+    window.localStorage.setItem(probe, '1');
+    window.localStorage.removeItem(probe);
+    backing = window.localStorage;
+  } catch {
+    backing = null;
+  }
+  const memory = new Map();
+  const guard = (fn, fallback) => { try { return fn(); } catch { return fallback; } };
+  return {
+    persistent: backing !== null,
+    get: (k) => guard(() => (backing ? backing.getItem(k) : (memory.has(k) ? memory.get(k) : null)), null),
+    set: (k, v) => guard(() => (backing ? backing.setItem(k, v) : memory.set(k, v)), undefined),
+    remove: (k) => guard(() => (backing ? backing.removeItem(k) : memory.delete(k)), undefined),
+  };
+})();
