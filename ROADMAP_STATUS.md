@@ -82,7 +82,15 @@ scheduled until the MVP is stable — the spec says the same.
 
 ## Progress
 
-- [ ] M0 — not started
+- [x] **M0 — audit + rails** (commit `d56726e`)
+  - `docs/ARCHITECTURE.md`: file ownership, every physics constant, mission->chapter mapping
+  - `src/debug.js`: F3 telemetry overlay, F4 landing-envelope bars
+  - deterministic seeds (`?seed=N` / `__setSeed`) — verified reproducible and seed-sensitive
+  - frame loop split into `advance(dt)` + `draw()`; headless harness runs 12 missions in 437 ms
+    (rAF does not fire in a hidden tab, which had been stalling every test sweep)
+  - `test/BASELINE.md`: reference sweep at seed 12345 — 10/12 landed, 9 PERFECT
+  - acceptance: controls untouched, no new errors, macOS self-test passes
+- [ ] M1 — landing grade rework
 
 ## Decisions (Tom, 2026-08-16)
 
@@ -101,4 +109,8 @@ None.
 
 ## Next task
 
-M0: audit and rails.
+**M1 — landing grade rework.** Combined severity score (vy 45 / vx 25 / angle 20 / centre 10)
+normalised against the body envelope, thresholds in config, 150-250 ms touchdown aggregation
+window, settle-upright resolves upward, post-landing breakdown panel showing exact metrics and
+what prevented the next grade. Verify against `test/BASELINE.md` — grades may change by design,
+but fuel use and flight paths must not.
