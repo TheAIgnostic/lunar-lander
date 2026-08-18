@@ -127,7 +127,7 @@ export function saveMeta(meta, store = safeStore) {
 export function newRun(chapterId, seed, shuttles = 3) {
   return {
     version: SAVE_VERSION,
-    chapterId,
+    chapterId,                 // planet id of the chapter being flown
     missionIndex: 0,
     shuttles,
     maxShuttles: shuttles,
@@ -135,8 +135,10 @@ export function newRun(chapterId, seed, shuttles = 3) {
     score: 0,
     combo: 0,
     missionsCleared: 0,
+    chaptersCleared: 0,
+    visited: [chapterId],
     sector: 1,
-    unbanked: { salvage: 0, data: 0, cores: 0 },
+    haul: { salvageSafe: 0, salvageCargo: 0, data: 0, cores: 0, materials: {} },
     startedAt: Date.now(),
   };
 }
@@ -178,14 +180,21 @@ export function clearRun(store = safeStore) {
  * Fold a finished expedition into permanent progress. Called whether the run
  * was completed or lost: a failed expedition must still leave something behind.
  */
-export function bankRun(meta, run, { completed }) {
+export function bankRun(meta, run, { completed, settled }) {
   const m = coerceMeta(meta);
-  m.banked.salvage += run.unbanked.salvage || 0;
-  m.banked.data += run.unbanked.data || 0;
-  m.banked.cores += run.unbanked.cores || 0;
+  const s = settled || { salvage: 0, data: 0, cores: 0, materials: {} };
+  m.banked.salvage += s.salvage || 0;
+  m.banked.data += s.data || 0;
+  m.banked.cores += s.cores || 0;
+  for (const [k, v] of Object.entries(s.materials || {})) {
+    m.banked.materials[k] = (m.banked.materials[k] || 0) + v;
+  }
   m.stats.bestScore = Math.max(m.stats.bestScore, run.score || 0);
-  if (completed && !m.clearedChapters.includes(run.chapterId)) {
-    m.clearedChapters.push(run.chapterId);
+  for (const id of run.visited || []) {
+    if (completed && !m.clearedChapters.includes(id)) m.clearedChapters.push(id);
+  }
+  for (const id of run.visited || []) {
+    if (!m.discoveredPlanets.includes(id)) m.discoveredPlanets.push(id);
   }
   const prev = m.chapterBests[run.chapterId] || 0;
   if ((run.score || 0) > prev) m.chapterBests[run.chapterId] = run.score || 0;

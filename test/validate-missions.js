@@ -6,7 +6,8 @@ import { validateTerrain } from '../src/validate.js';
 import { flyMission } from './pilot.js';
 import { LEVELS } from '../src/levels.js';
 import { ARCHETYPE_NAMES } from '../src/archetypes.js';
-import { MOON_LEVELS, MARS_LEVELS, EUROPA_LEVELS } from '../src/missions.js';
+import { MOON_LEVELS, MARS_LEVELS, EUROPA_LEVELS, generateChapter } from '../src/missions.js';
+import { PLANET_IDS } from '../src/planets.js';
 
 const SEEDS = +(process.argv[2] || 12);
 let hardFail = 0;
@@ -108,6 +109,30 @@ for (const level of MARS_LEVELS) {
 console.log(`\nvalidating the Europa chapter\n`);
 for (const level of EUROPA_LEVELS) {
   assess(`${level.id} ${level.title}`, level, seedList);
+}
+
+console.log(`\nvalidating generated survey chapters (every body, sector 1 and 3)\n`);
+for (const pid of PLANET_IDS) {
+  for (const sector of [1, 3]) {
+    const ch = generateChapter(pid, 4242, sector);
+    let worstReach = 0, worstLand = 0, structural = 0;
+    for (const level of ch.levels) {
+      for (const seed of seedList.slice(0, 6)) {
+        const terrain = new Terrain(level, seed);
+        const v = validateTerrain(level, terrain);
+        if (v.problems.length) structural++;
+        const runs = [flyMission(level, terrain, {}), flyMission(level, terrain, { approach: 'left' })];
+        if (!runs.some((r) => r.reached)) worstReach++;
+        if (!runs.some((r) => r.outcome === 'land')) worstLand++;
+      }
+    }
+    const n = ch.levels.length * 6;
+    const ok = structural === 0 && worstReach === 0;
+    if (!ok) hardFail++;
+    console.log(`${ok ? (worstLand ? 'ok* ' : 'ok  ') : 'FAIL'} ${(pid + ' s' + sector).padEnd(22)}` +
+      ` structural ${String(n - structural).padStart(3)}/${n}   reachable ${String(n - worstReach).padStart(3)}/${n}` +
+      `   landed ${String(n - worstLand).padStart(3)}/${n}`);
+  }
 }
 
 console.log(`\nvalidating the classic campaign (legacy terrain)\n`);

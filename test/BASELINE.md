@@ -188,3 +188,34 @@ and a storage adapter that throws on every call.
 
 **A corrupt save never blanks the game.** The bad bytes are moved to `tv_save_corrupt`, defaults
 load, and the menu says so.
+
+
+---
+
+## M9 — route and economy
+
+**Every body is playable.** Route cards would be a lie if half of them led nowhere, so bodies
+without authored missions get a five-mission survey chapter generated from their PlanetDefinition —
+same systems, same validator. All ten bodies, at two sector depths, six seeds per mission:
+
+- **structural 30/30 and reachable 30/30 on every body**, both depths
+- landed 30/30 on seven bodies; Titan 22–24/30, Venus 26–28/30, Mars s3 28/30 — the three thickest
+  atmospheres, and the pilot's weakest ground
+
+Generating them exposed a fuel bug worth recording: the formula priced gravity and hazards but not
+the *atmosphere*, so every Titan survey ran the tank dry at ~40 s with the pad in sight. Fuel now
+pays for hovering, fighting the air, and hazards. Titan's planet drag also sat at 0.30 against the
+0.14–0.18 the authored Titan missions use; it is 0.20 now.
+
+**The run loop, verified end to end in the game:**
+
+| Step | Result |
+| --- | --- |
+| Clear a chapter | route screen, four offers, easiest first, some forecasts marked incomplete |
+| Pick a body | the same expedition continues there; authored chapter if one exists, generated otherwise |
+| Clear a second chapter | sector checkpoint |
+| Checkpoint | 1,156 salvage banked, sector → 2, shuttles restored to 3/3, haul reset |
+
+**The risk split works as specified:** half of salvage is transmitted on pickup and half rides as
+cargo; research data is never lost; tech cores need the lander down safely. A lost expedition keeps
+the transmitted half and the research, and loses the cargo — 34 assertions cover it.

@@ -6,6 +6,7 @@
 // carried now so the content does not need rewriting when those land.
 
 import { PLANETS, gravityFor } from './planets.js';
+import { makeRng } from './util.js';
 
 export const MOON_MISSIONS = [
   {
@@ -210,6 +211,92 @@ export const EUROPA_MISSIONS = [
 ];
 
 export const EUROPA_LEVELS = EUROPA_MISSIONS.map(missionToLevel);
+
+const SURVEY_NAMES = [
+  ['FIRST SURVEY', 'The first look at a body always costs more than the map suggests.'],
+  ['LOW APPROACH', 'Second landing, tighter ground. The forecast was optimistic.'],
+  ['DEEP FIELD', 'Further in, where the terrain stops being scenery.'],
+  ['HARD SHOULDER', 'A narrow shelf, and reasons not to be here.'],
+  ['LAST LIGHT', 'The mastery landing. Everything this body does, at once.'],
+];
+
+/**
+ * A five-mission chapter generated from a PlanetDefinition, for bodies with no
+ * authored missions yet. Same shape, same systems, same validator - the route
+ * screen would be a lie if half the cards led nowhere.
+ */
+export function generateChapter(planetId, seed = 1, sector = 1) {
+  const planet = PLANETS[planetId];
+  const rng = makeRng(((seed ^ 0x5bf03635) + planetId.length * 7919) >>> 0);
+  const gravity = gravityFor(planetId);
+  const palette = planet.terrainPalette;
+
+  const missions = SURVEY_NAMES.map(([name, brief], i) => {
+    const step = i / 4;                       // 0 at mission 1, 1 at mission 5
+    const depth = Math.min(2, (sector - 1) * 0.5);
+    const archetype = palette[(i + rng.int(0, palette.length - 1)) % palette.length];
+    const padWidth = Math.round(200 - 110 * step - depth * 14);
+    const mult = i >= 3 ? 5 : i >= 1 ? 3 : 2;
+    // Fuel has to pay for three things: hovering against gravity for the length
+    // of the flight, fighting the atmosphere, and the hazards. Ignoring the
+    // atmosphere term made every Titan survey run the tank dry.
+    const fuel = Math.round(
+      80 + gravity * 0.9 + (planet.drag || 0) * 180 + Math.abs(planet.wind || 0) * 0.35
+      + planet.hazards.length * 6 - i * 5 - depth * 4,
+    );
+    return {
+      id: `${planetId.toLowerCase()}-s${sector}-${i + 1}`,
+      planet: planetId, index: i + 1,
+      name: `${name}`,
+      brief,
+      width: 2800 + i * 100 + Math.round(depth * 150),
+      relief: 200 + i * 26 + Math.round(depth * 30),
+      detail: 0.9 + i * 0.18,
+      rough: 160 + i * 18,
+      fuel,
+      terrain: { archetype },
+      pads: i >= 3
+        ? [{ mult, width: padWidth }, { mult: 2, width: padWidth + 70 }]
+        : [{ mult, width: padWidth }, { mult: mult + 1, width: Math.round(padWidth * 0.7) }],
+      hazards: planet.hazards.length ? undefined : [],   // undefined = inherit the planet's
+      fuelCells: i >= 2 ? 2 : 0,
+      enemyBudget: Math.min(3, Math.max(0, i - 1 + Math.floor(depth))),
+      optionalObjective: null,
+      procedural: true,
+    };
+  });
+
+  return {
+    id: `${planetId.toLowerCase()}-s${sector}`,
+    planet: planetId,
+    title: planet.displayName,
+    procedural: true,
+    levels: missions.map(missionToLevel),
+  };
+}
+
+/**
+ * The chapter for a body: authored where one exists, generated otherwise.
+ * Accepts a planet id ('LUNA'); a chapter id ('moon') is tolerated so older
+ * saves and links keep working.
+ */
+export function chapterFor(planetId, seed = 1, sector = 1) {
+  const id = String(planetId);
+  const authored = Object.values(CHAPTERS).find(
+    (c) => c.planet === id || c.id === id.toLowerCase(),
+  );
+  if (authored) return authored;
+  if (!PLANETS[id]) throw new Error(`chapterFor: no such planet ${id}`);
+  return generateChapter(id, seed, sector);
+}
+
+/** Display name for a body, whichever id form is to hand. */
+export function chapterTitle(planetId) {
+  const id = String(planetId);
+  const authored = Object.values(CHAPTERS).find((c) => c.planet === id || c.id === id.toLowerCase());
+  if (authored) return authored.title;
+  return PLANETS[id] ? PLANETS[id].displayName : id;
+}
 
 export const CHAPTERS = {
   moon: { id: 'moon', planet: 'LUNA', title: 'THE MOON', levels: MOON_LEVELS },

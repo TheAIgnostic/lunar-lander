@@ -5,12 +5,14 @@ import { Audio } from './audio.js';
 import { Input } from './input.js';
 import { Terrain } from './terrain.js';
 import { LEVELS, endlessLevel, WORLDS } from './levels.js';
-import { CHAPTERS } from './missions.js';
+import { CHAPTERS, chapterFor, chapterTitle } from './missions.js';
 import { Particles } from './particles.js';
 import { Ship, ENVELOPE, normalizeAngle, DEFAULT_SETTINGS } from './ship.js';
 import { LANDING, capsFor } from './landing.js';
 import { PLANETS, gravityFor } from './planets.js';
 import * as Save from './save.js';
+import { missionReward, addReward, settleHaul } from './economy.js';
+import { routeOffers, isCheckpoint } from './route.js';
 import * as R from './render.js';
 import { Debug } from './debug.js';
 import { spawnFor } from './spawn.js';
@@ -103,6 +105,7 @@ resize();
 
 /** The mission list the current campaign draws from. */
 function activeLevels() {
+  if (g.chapter) return g.chapter.levels;
   const ch = CHAPTERS[g.campaign];
   return ch ? ch.levels : LEVELS;
 }
@@ -116,6 +119,7 @@ function levelSeedSalt(level) {
 }
 
 function levelFor(index) {
+  if (g.chapter) return g.chapter.levels[clamp(index, 0, g.chapter.levels.length - 1)];
   const chapter = CHAPTERS[g.campaign];
   if (chapter) return chapter.levels[clamp(index, 0, chapter.levels.length - 1)];
   if (index < LEVELS.length) return LEVELS[index];
@@ -159,10 +163,11 @@ function startLevel(index, freshSeed = true) {
 }
 
 /** Start a fresh expedition: three shuttles, one seed, five missions. */
-function beginExpedition(chapterId) {
+function beginExpedition(planetId) {
   const seed = g.forcedSeed != null ? g.forcedSeed : (Math.random() * 1e9) | 0;
-  g.run = Save.newRun(chapterId, seed);
-  g.campaign = chapterId;
+  g.run = Save.newRun(planetId, seed);
+  g.chapter = chapterFor(planetId, seed, 1);
+  g.campaign = planetId;
   g.endless = false;
   g.score = 0; g.combo = 0; g.newRecord = false;
   g.lives = g.run.shuttles;
@@ -173,8 +178,9 @@ function beginExpedition(chapterId) {
 /** Pick an interrupted expedition back up exactly where it stopped. */
 function resumeExpedition() {
   const run = Save.loadRun();
-  if (!run || !CHAPTERS[run.chapterId]) { setState('chapters'); return; }
+  if (!run) { setState('chapters'); return; }
   g.run = run;
+  g.chapter = chapterFor(run.chapterId, run.seed, run.sector);
   g.campaign = run.chapterId;
   g.endless = false;
   g.score = run.score;
@@ -345,8 +351,12 @@ function onLand() {
 
   if (g.run) {
     g.run.missionsCleared++;
-    g.run.unbanked.salvage += Math.round(total * 0.05);
-    g.run.unbanked.data += q === 'PERFECT' ? 12 : q === 'GOOD' ? 8 : 4;
+    const reward = missionReward({
+      grade: q, padMultiplier: mult, fuelLeft: ship.fuel, maxFuel: ship.maxFuel,
+      rareMaterial: g.level.rareMaterial, firstClear: true, offPad,
+    });
+    g.run.haul = addReward(g.run.haul, reward);
+    g.lastReward = reward;
     persistRun();
   }
   meta.stats.landings++;
@@ -362,10 +372,11 @@ function onLand() {
       if (g.run) {
         // A cleared chapter returns a shuttle, up to the expedition maximum.
         g.lives = Math.min(g.run.maxShuttles, g.lives + 1);
-        meta = Save.bankRun(meta, { ...g.run, score: g.score }, { completed: true });
-        Save.saveMeta(meta);
-        Save.clearRun();
-        g.run = null;
+        g.run.chaptersCleared++;
+        g.run.shuttles = g.lives;
+        persistRun();
+        setState(isCheckpoint(g.run.chaptersCleared) ? 'checkpoint' : 'route');
+        return;
       }
       setState('victory');
     } else setState('result');
@@ -393,8 +404,9 @@ function onCrash() {
     if (tok !== g.token) return;
     if (g.lives <= 0 && g.run) {
       // Expedition over: bank what was gathered, then release the run.
-      g.lastRunSummary = { missions: g.run.missionsCleared, chapter: g.run.chapterId };
-      meta = Save.bankRun(meta, { ...g.run, score: g.score }, { completed: false });
+      const settled = settleHaul(g.run.haul, { completed: false });
+      g.lastRunSummary = { missions: g.run.missionsCleared, chapter: g.run.chapterId, settled };
+      meta = Save.bankRun(meta, { ...g.run, score: g.score }, { completed: false, settled });
       Save.saveMeta(meta);
       Save.clearRun();
       g.run = null;
@@ -531,7 +543,7 @@ function screenHTML(s) {
   switch (s) {
     case 'menu':
       const pending = Save.loadRun();
-      const chapterName = pending && CHAPTERS[pending.chapterId] ? CHAPTERS[pending.chapterId].title : null;
+      const chapterName = pending ? chapterTitle(pending.chapterId) : null;
       return `<div class="screen menu">
         <h1 class="title">TERMINAL<span>VELOCITY</span></h1>
         <p class="tag">A vector lander. Finite fuel. One shot at the pad.</p>
@@ -652,9 +664,9 @@ function screenHTML(s) {
 
     case 'victory':
       return `<div class="screen">
-        <div class="verdict" style="color:#4dff9f;text-shadow:0 0 30px #4dff9f">${CHAPTERS[g.campaign] ? 'CHAPTER COMPLETE' : 'PROGRAM COMPLETE'}</div>
-        <p class="body">${CHAPTERS[g.campaign]
-          ? `${(CHAPTERS[g.campaign] || {}).title || 'The chapter'} is surveyed. Five landings, and the lander still flies.`
+        <div class="verdict" style="color:#4dff9f;text-shadow:0 0 30px #4dff9f">${g.chapter ? 'CHAPTER COMPLETE' : 'PROGRAM COMPLETE'}</div>
+        <p class="body">${g.chapter
+          ? `${chapterTitle(g.campaign)} is surveyed. Five landings, and the lander still flies.`
           : 'All twelve missions flown. The unsurveyed sectors are open — they do not end.'}</p>
         <div class="stats big"><span>SCORE</span><b>${formatScore(g.score)}</b></div>
         <div class="btns">${btn('next', 'ENTER ENDLESS', true, 'SPACE')}${btn('menu', 'MENU')}</div>
@@ -664,7 +676,7 @@ function screenHTML(s) {
       const cards = Object.values(CHAPTERS).map((ch) => {
         const p = PLANETS[ch.planet];
         const acc = WORLDS[p.world].accent;
-        return `<button class="tile chapter" data-action="chapter:${ch.id}">
+        return `<button class="tile chapter" data-action="chapter:${ch.planet}">
           <span class="world" style="color:${acc}">${p.displayName}</span>
           <span class="name">${ch.levels.length} MISSIONS</span>
           <span class="best">${p.summary}</span>
@@ -702,6 +714,39 @@ function screenHTML(s) {
           </div>
         </div>
         <div class="btns">${btn('back', 'DONE', true, 'SPACE')}</div>
+      </div>`;
+    }
+
+    case 'route':
+    case 'checkpoint': {
+      const run = g.run;
+      const checkpoint = g.state === 'checkpoint';
+      const offers = routeOffers(
+        [...meta.clearedChapters, ...(run.visited || [])],
+        run.seed, run.sector,
+      );
+      g.routeOffers = offers;
+      const cards = offers.map((c, i) => `
+        <button class="tile route" data-action="route:${i}">
+          <span class="world" style="color:${WORLDS[PLANETS[c.planet].world].accent}">${c.name}</span>
+          <span class="name">${'▮'.repeat(c.difficulty)}${'▯'.repeat(5 - c.difficulty)} · ${c.atmosphere} atmosphere</span>
+          <span class="best">gravity ${(c.gravity / 6).toFixed(2)} m/s² · enemies ${c.enemyIntensity}</span>
+          <span class="best">hazards: ${c.hazards.join(', ') || 'none reported'}${c.incomplete ? ' <i>· forecast incomplete</i>' : ''}</span>
+          <span class="best">material: ${c.rareMaterial}</span>
+          <span class="best rec">counters: ${c.recommended.join(', ')}</span>
+        </button>`).join('');
+      const h = run.haul;
+      return `<div class="screen wide">
+        <div class="eyebrow" style="color:#4dff9f">${checkpoint ? `SECTOR ${run.sector} CHECKPOINT` : 'CHAPTER CLEARED'}</div>
+        <h2>${checkpoint ? 'CARGO BANKED · SHUTTLES RESTORED' : 'PLOT THE NEXT LEG'}</h2>
+        <table class="score">
+          <tr><td>Transmitted salvage</td><td>${formatScore(h.salvageSafe)}</td></tr>
+          <tr><td>Physical cargo ${checkpoint ? '(banking now)' : '(at risk until the next checkpoint)'}</td><td>${formatScore(h.salvageCargo)}</td></tr>
+          <tr><td>Research data</td><td>${formatScore(h.data)}</td></tr>
+          <tr class="tot"><td>SHUTTLES</td><td>${g.lives} / ${run.maxShuttles}</td></tr>
+        </table>
+        <div class="grid chapters">${cards}</div>
+        <div class="btns">${btn('abandon-run', 'END EXPEDITION')}</div>
       </div>`;
     }
 
@@ -777,12 +822,40 @@ function act(action) {
     beginExpedition(action.slice(8));
     return;
   }
+  if (action.startsWith('route:')) {
+    const card = (g.routeOffers || [])[+action.slice(6)];
+    if (!card || !g.run) return;
+    const run = g.run;
+    if (g.state === 'checkpoint') {
+      // A checkpoint banks everything and restores the expedition.
+      const settled = settleHaul(run.haul, { completed: true });
+      meta = Save.bankRun(meta, run, { completed: true, settled });
+      Save.saveMeta(meta);
+      run.haul = { salvageSafe: 0, salvageCargo: 0, data: 0, cores: 0, materials: {} };
+      run.sector++;
+      g.lives = run.maxShuttles;
+    }
+    run.chapterId = card.planet;
+    run.missionIndex = 0;
+    run.shuttles = g.lives;
+    if (!run.visited.includes(card.planet)) run.visited.push(card.planet);
+    g.chapter = chapterFor(card.planet, run.seed + run.sector * 101, run.sector);
+    g.campaign = card.planet;
+    Save.saveRun(run);
+    startLevel(0, false);
+    return;
+  }
   if (action === 'resume-run') { resumeExpedition(); return; }
   if (action === 'abandon-run') {
-    if (g.run) meta = Save.bankRun(meta, g.run, { completed: false });
+    if (g.run) {
+      const settled = settleHaul(g.run.haul, { completed: false });
+      meta = Save.bankRun(meta, g.run, { completed: false, settled });
+    }
     Save.saveMeta(meta);
     Save.clearRun();
-    g.run = null; g.level = null; g.campaign = 'classic';
+    Save.saveMeta(meta);
+    Save.clearRun();
+    g.run = null; g.chapter = null; g.level = null; g.campaign = 'classic';
     setState('menu');
     return;
   }
@@ -822,7 +895,7 @@ function act(action) {
     case 'launch': launch(); break;
     case 'next':
       if (g.state === 'victory') {
-        if (CHAPTERS[g.campaign]) { g.campaign = 'classic'; g.level = null; setState('menu'); break; }
+        if (g.chapter) { g.campaign = 'classic'; g.chapter = null; g.level = null; setState('menu'); break; }
         g.endless = true; startLevel(LEVELS.length);
       }
       else startLevel(g.levelIndex + 1);

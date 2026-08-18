@@ -270,3 +270,7 @@ table.metrics tr.m-total .m-val { color: var(--cyan); font-size: 14px; }
   background: rgba(255, 179, 71, .08); border: 1px solid rgba(255, 179, 71, .32); color: #e8d3b0;
 }
 .notice b { color: var(--amber); font-weight: 700; }
+
+.tile.route .rec { color: #7f9db0; }
+.tile.route .name { font-size: 11px; letter-spacing: .1em; }
+.tile.route i { color: var(--amber); font-style: normal; }

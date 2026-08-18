@@ -1,0 +1,84 @@
+// Resources and the rules for keeping them (roadmap section 8).
+//
+// Three global resources, each with a different relationship to risk:
+//   Salvage       half is transmitted on pickup, half rides as cargo
+//   Research Data transmitted as it is gathered, so never lost
+//   Tech Cores    only yours once the lander is down safely
+//
+// Plus one rare material per body, which is cargo like the physical half of
+// salvage. The point is that a crash costs you something specific, not that it
+// wipes the run.
+
+export const RESOURCES = ['salvage', 'data', 'cores'];
+
+export function freshHaul() {
+  return { salvageSafe: 0, salvageCargo: 0, data: 0, cores: 0, materials: {} };
+}
+
+/**
+ * What a completed mission pays. Landing quality drives it, the pad multiplier
+ * scales it, and leftover fuel is worth something because it represents a
+ * flight flown well rather than merely survived.
+ */
+export function missionReward({ grade, padMultiplier, fuelLeft, maxFuel, rareMaterial, firstClear, offPad }) {
+  const q = grade === 'PERFECT' ? 1 : grade === 'GOOD' ? 0.7 : 0.45;
+  const mult = offPad ? 1 : padMultiplier;
+  const fuelFrac = maxFuel > 0 ? Math.max(0, fuelLeft / maxFuel) : 0;
+
+  const salvage = Math.round((60 + 45 * mult) * q + fuelFrac * 40);
+  const data = Math.round((firstClear ? 24 : 10) * q + (grade === 'PERFECT' ? 6 : 0));
+  // Cores are rare on purpose: a clean landing on a small pad, nothing else.
+  const cores = grade === 'PERFECT' && mult >= 5 && !offPad ? 1 : 0;
+  const material = rareMaterial ? Math.round((8 + 6 * mult) * q) : 0;
+
+  return { salvage, data, cores, material, materialId: rareMaterial || null };
+}
+
+/** Add a mission's pay to the run's haul, splitting salvage by risk. */
+export function addReward(haul, reward) {
+  const h = { ...haul, materials: { ...haul.materials } };
+  h.salvageSafe += Math.round(reward.salvage * 0.5);
+  h.salvageCargo += reward.salvage - Math.round(reward.salvage * 0.5);
+  h.data += reward.data;
+  h.cores += reward.cores;
+  if (reward.materialId && reward.material) {
+    h.materials[reward.materialId] = (h.materials[reward.materialId] || 0) + reward.material;
+  }
+  return h;
+}
+
+/**
+ * What survives leaving the expedition. `recovered` is the fraction of physical
+ * cargo a skill or module rescues from a crash - zero until the Technician tree
+ * exists.
+ */
+export function settleHaul(haul, { completed, recovered = 0 }) {
+  const keepCargo = completed ? 1 : recovered;
+  const materials = {};
+  for (const [k, v] of Object.entries(haul.materials)) {
+    const kept = Math.round(v * keepCargo);
+    if (kept > 0) materials[k] = kept;
+  }
+  return {
+    salvage: haul.salvageSafe + Math.round(haul.salvageCargo * keepCargo),
+    data: haul.data,                                   // transmitted, always kept
+    cores: completed ? haul.cores : 0,                 // only once the lander is down
+    materials,
+    lost: {
+      salvage: Math.round(haul.salvageCargo * (1 - keepCargo)),
+      cores: completed ? 0 : haul.cores,
+    },
+  };
+}
+
+/** Fold a settlement into permanent progress. */
+export function bankHaul(banked, settled) {
+  const b = { ...banked, materials: { ...banked.materials } };
+  b.salvage += settled.salvage;
+  b.data += settled.data;
+  b.cores += settled.cores;
+  for (const [k, v] of Object.entries(settled.materials)) {
+    b.materials[k] = (b.materials[k] || 0) + v;
+  }
+  return b;
+}

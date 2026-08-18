@@ -195,7 +195,18 @@ scheduled until the MVP is stable — the spec says the same.
   - 40 save unit tests, including a storage adapter that throws on every call
   - `build.js` now derives namespace objects from module exports — the hand-listed version silently
     missed `import * as Save` and shipped a bundle that threw on load
-- [ ] M9 — route + economy
+- [x] **M9 — route and economy** (this commit)
+  - `src/route.js`: discovery tiers (A now, B after two non-Moon chapters, C after five), four
+    deterministic offers with gravity, atmosphere, hazards, enemy intensity, rare material,
+    recommended counters and difficulty — one hazard withheld, so the forecast is useful but
+    incomplete, as the spec asks
+  - `src/economy.js`: salvage split half-transmitted half-cargo, research never lost, cores only on
+    a safe landing, one rare material per body
+  - **generated survey chapters for every body without authored missions**, so every route card
+    leads somewhere real — all ten bodies validate structural 30/30 and reachable 30/30
+  - sector checkpoint every two chapters: banks the haul, restores shuttles, advances the sector
+  - the run now spans bodies: clear a chapter, choose the next leg, keep your shuttles and your haul
+- [ ] M10 — hangar
 
 ## Decisions (Tom, 2026-08-16)
 
@@ -214,10 +225,9 @@ None.
 
 ## Next task
 
-**M9 — route and economy.** Four-choice route cards with the discovery tiers, the three global
-resources plus planetary materials, banking and crash recovery rules, and the ten-mission sector
-checkpoint — which belongs here rather than in M8, because a checkpoint spanning two chapters needs
-routes to exist first.
+**M10 — hangar.** The close-up ship scene: four component tracks (Hull, Gear, Engine/Fuel, Sensors)
+at four levels each, material costs against what M9 now banks, before/after stats, and visible
+changes to the lander itself. The landing-gear tier already has its hook in `LANDING.gearTier`.
 
 ### Known findings
 
@@ -226,8 +236,7 @@ routes to exist first.
   become time-aware — a structural change, not content. DRIFTING PLATE ships as a fragile plate
   instead, which is honest but not the full brief.
 - **europa-4 UNDER-ICE SIGNAL** — 17/20 seeds. Geometry sound; the pilot still clips ice on three.
-- **Sector checkpoints deferred to M9.** A checkpoint every ten missions spans two chapters, which
-  needs the route system to exist. Chapters, shuttles and banking are in; the checkpoint is not.
+- **Sector checkpoints** — delivered in M9.
 - **Crosswind (missions 11-12)** — resolved in M6. The pilot now lands 18/20 and 19/20.
 
 ### Done, for reference

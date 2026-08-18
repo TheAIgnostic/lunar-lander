@@ -51,7 +51,7 @@ export const PLANETS = {
   }),
   VENUS: P({
     id: 'VENUS', displayName: 'VENUS', realGravity: 8.87, world: 'MARS',
-    feelOffset: 0.96, atmosphere: 'dense', drag: 0.34, wind: 18, gust: 26, visibility: 0.6,
+    feelOffset: 0.96, atmosphere: 'dense', drag: 0.30, wind: 18, gust: 24, visibility: 0.6,
     hazards: ['drag', 'acid', 'downdraft'],
     rareMaterial: 'Sulfur-resistant ceramic',
     terrainPalette: ['canyon', 'mesa', 'ridge'],
@@ -59,7 +59,7 @@ export const PLANETS = {
   }),
   TITAN: P({
     id: 'TITAN', displayName: 'TITAN', realGravity: 1.35, world: 'TITAN',
-    feelOffset: 1.05, atmosphere: 'thick', drag: 0.30, wind: 30, gust: 22, visibility: 0.75,
+    feelOffset: 1.05, atmosphere: 'thick', drag: 0.20, wind: 26, gust: 20, visibility: 0.75,
     hazards: ['wind', 'glide'],
     rareMaterial: 'Hydrocarbon composite',
     terrainPalette: ['dunes', 'basin', 'canyon'],

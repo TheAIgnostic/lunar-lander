@@ -121,14 +121,16 @@ console.log('save, migration and recovery');
 {
   const meta = defaultMeta();
   const run = newRun('moon', 1);
-  run.unbanked = { salvage: 120, data: 60, cores: 1 };
   run.score = 4200;
-  const lost = bankRun(meta, run, { completed: false });
+  const settled = { salvage: 120, data: 60, cores: 0, materials: { 'Ilmenite alloy stock': 30 } };
+  const lost = bankRun(meta, run, { completed: false, settled });
   check('a lost run still banks its resources', lost.banked.salvage === 120 && lost.banked.data === 60);
   check('a lost run does not mark the chapter cleared', !lost.clearedChapters.includes('moon'));
   check('a lost run still records the score', lost.stats.bestScore === 4200);
-  const won = bankRun(meta, run, { completed: true });
+  check('materials bank too', lost.banked.materials['Ilmenite alloy stock'] === 30);
+  const won = bankRun(meta, run, { completed: true, settled });
   check('a completed run marks the chapter cleared', won.clearedChapters.includes('moon'));
+  check('visiting a body discovers it', won.discoveredPlanets.includes('moon'));
   check('permanent upgrades are never touched by banking',
     won.componentLevels.hull === meta.componentLevels.hull);
 }
@@ -137,8 +139,7 @@ console.log('save, migration and recovery');
   const meta = defaultMeta();
   meta.banked.salvage = 100;
   const run = newRun('mars', 1);
-  run.unbanked = { salvage: 50, data: 0, cores: 0 };
-  const once = bankRun(meta, run, { completed: true });
+  const once = bankRun(meta, run, { completed: true, settled: { salvage: 50, data: 0, cores: 0, materials: {} } });
   check('banking does not mutate the original meta', meta.banked.salvage === 100);
   check('banking adds to the copy', once.banked.salvage === 150);
 }
