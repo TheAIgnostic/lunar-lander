@@ -250,3 +250,34 @@ Ilmenite exactly, and the next mission started with gear tier 1.25 and a 143-uni
 mission's base 124.
 
 **A refused purchase says why**: *"Needs 600 more salvage, 105 more Ilmenite alloy stock."*
+
+
+---
+
+## M11 — skills and loadout
+
+Two trees are live and one is honestly gated.
+
+| Tree | State |
+| --- | --- |
+| Technician | live — fuel efficiency, hull patching, cargo recovery, salvage yield |
+| Flight & Survival | live — reserve fuel, wider landing envelope, hazard resistance, gust damping |
+| Combat Systems | **gated**: *"Nothing out here is shooting at you yet. This tree opens with hostile systems."* |
+
+The acceptance criterion is that every node has a testable effect. Rather than ship four combat
+nodes whose effects act on enemies that do not exist until M12, the tree is defined, visible, and
+refuses purchase with that reason. The same node passes `skillCheck` the moment the feature flag
+turns on — tested both ways.
+
+**Modules** are four active and four passive, each with a consumer already in the simulation:
+Sensor Pulse (visibility, beacon), Ray Shield (hazard exposure), Magnetic Anchor and Ice Cleats
+(post-touchdown grip), Thermal Purge (status), Fuel Recycler (burn), Gyro Stabilizer (gust
+rotation), Hardened Radar (instrument noise). Weapons wait for targets.
+
+**Everything folds into one derived spec.** Components × skills × equipped passive → `deriveFull` →
+a per-run ship spec. Verified live: fuel-mix rank 2 plus a reserve tank produced burn 9 → 8.1 and a
+122-unit mission tank → 134, with ice cleats' grip reaching the ship. Applying the folded spec twice
+leaves it identical, and `SHIP` is never mutated.
+
+**The blueprint guarantee** hands over an active module on the first chapter clear, so no route can
+demand gear the player was never offered.

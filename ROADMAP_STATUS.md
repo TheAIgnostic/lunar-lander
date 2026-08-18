@@ -216,7 +216,15 @@ scheduled until the MVP is stable — the spec says the same.
   - upgrades are derived per mission from the saved levels onto a per-run ship spec, never mutated
     onto the shared constants — the "cannot stack twice after loading" criterion, with a test
   - a refused purchase names exactly what is missing
-- [ ] M11 — skills + loadout
+- [x] **M11 — skills and loadout** (this commit)
+  - Technician and Flight & Survival trees live, four nodes each with ranks, prerequisites, costs
+    and effects the simulation reads; Combat defined but gated with the reason
+  - four active and four passive modules, each with an existing consumer — weapons deliberately
+    wait for M12's targets
+  - one active and one passive slot, equipped from the OUTFIT screen
+  - components × skills × passive fold into a single derived spec, so nothing stacks twice
+  - blueprint guarantee on the first chapter clear
+- [ ] M12 — enemies
 
 ## Decisions (Tom, 2026-08-16)
 
@@ -235,9 +243,9 @@ None.
 
 ## Next task
 
-**M11 — skills and loadout.** Three trees of four nodes each spending research data, plus one active
-and one passive module slot with the first module set (Laser, Shield, Sensor Pulse; Fuel Recycler,
-Gyro Stabilizer, Ice Cleats) and the blueprint guarantee during the Moon chapter.
+**M12 — enemies.** Sentry Turret and Seeker Drone on a shared telegraph, projectile and damage
+system, wired to the hull model M10 added. Every enemy needs an evasive path that does not require
+a weapon, and turning on the `enemies` feature flag opens the Combat tree that M11 left gated.
 
 ### Known findings
 

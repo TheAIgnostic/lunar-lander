@@ -15,7 +15,7 @@ const dist = path.join(root, 'dist');
 // Dependency order: every module must appear after everything it imports.
 const MODULES = [
   'util.js', 'audio.js', 'input.js', 'levels.js',
-  'archetypes.js', 'planets.js', 'forces.js', 'missions.js', 'terrain.js', 'spawn.js', 'validate.js', 'save.js', 'economy.js', 'route.js', 'components.js', 'particles.js', 'landing.js', 'ship.js', 'debug.js', 'render.js', 'main.js',
+  'archetypes.js', 'planets.js', 'forces.js', 'missions.js', 'terrain.js', 'spawn.js', 'validate.js', 'save.js', 'economy.js', 'route.js', 'components.js', 'skills.js', 'modules.js', 'particles.js', 'landing.js', 'ship.js', 'debug.js', 'render.js', 'main.js',
 ];
 
 // A module added to src/ but not listed above would simply vanish from the

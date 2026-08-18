@@ -626,7 +626,8 @@ export function drawHUD(ctx, W, H, g) {
   ctx.fillText(`${Math.round(fuelPct * 100)}%`, bx + bw, py + 22 * s);
 
   const rad = ship.statusLevels ? ship.statusLevels.radiation : 0;
-  const noise = clamp(rad / 100, 0, 1) * (ship.env && ship.env.shielded ? 0.25 : 1);
+  const resist = (ship.loadout && ship.loadout.noiseResist) || 1;
+  const noise = clamp(rad / 100, 0, 1) * (ship.env && ship.env.shielded ? 0.25 : 1) * resist;
 
   const rowY = py + 66 * s;
   const gap = 26 * s;

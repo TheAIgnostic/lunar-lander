@@ -13,7 +13,9 @@ import { PLANETS, gravityFor } from './planets.js';
 import * as Save from './save.js';
 import { missionReward, addReward, settleHaul } from './economy.js';
 import { routeOffers, isCheckpoint } from './route.js';
-import { COMPONENTS, COMPONENT_IDS, deriveLoadout, purchaseCheck, purchase } from './components.js';
+import { COMPONENTS, COMPONENT_IDS, deriveLoadout, deriveFull, purchaseCheck, purchase } from './components.js';
+import { TREES, TREE_IDS, deriveSkills, skillCheck, buySkill, findNode } from './skills.js';
+import { ACTIVE_MODULES, PASSIVE_MODULES, derivePassive, recommendedFor, MOON_BLUEPRINTS, STARTER_PASSIVES } from './modules.js';
 import * as R from './render.js';
 import { Debug } from './debug.js';
 import { spawnFor } from './spawn.js';
@@ -30,6 +32,9 @@ const ship = new Ship();
 
 const loaded = Save.loadMeta();
 let meta = loaded.meta;
+meta.equipped = meta.equipped || { active: null, passive: STARTER_PASSIVES[0] };
+meta.unlockedBlueprints = meta.unlockedBlueprints && meta.unlockedBlueprints.length
+  ? meta.unlockedBlueprints : [...STARTER_PASSIVES];
 const saveSource = loaded.source;
 
 const store = {
@@ -148,7 +153,11 @@ function startLevel(index, freshSeed = true) {
 
   // Derived fresh from the saved component levels each time a mission starts,
   // so an upgrade can never be applied twice.
-  const loadout = deriveLoadout(meta.componentLevels);
+  const loadout = deriveFull(
+    meta.componentLevels,
+    deriveSkills(meta.purchasedSkills),
+    derivePassive(meta.equipped && meta.equipped.passive),
+  );
   ship.applyLoadout(loadout);
   g.loadout = loadout;
 
@@ -362,6 +371,8 @@ function onLand() {
       grade: q, padMultiplier: mult, fuelLeft: ship.fuel, maxFuel: ship.maxFuel,
       rareMaterial: g.level.rareMaterial, firstClear: true, offPad,
     });
+    const bonus = (g.loadout && g.loadout.salvageBonus) || 1;
+    reward.salvage = Math.round(reward.salvage * bonus);
     g.run.haul = addReward(g.run.haul, reward);
     g.lastReward = reward;
     persistRun();
@@ -379,6 +390,15 @@ function onLand() {
       if (g.run) {
         // A cleared chapter returns a shuttle, up to the expedition maximum.
         g.lives = Math.min(g.run.maxShuttles, g.lives + 1);
+        // Blueprint guarantee: finishing a first chapter hands over an active
+        // module, so no route can ever demand gear the player was never offered.
+        if (!MOON_BLUEPRINTS.some((id) => meta.unlockedBlueprints.includes(id))) {
+          const grant = MOON_BLUEPRINTS[0];
+          meta.unlockedBlueprints = [...meta.unlockedBlueprints, grant];
+          meta.equipped = { ...meta.equipped, active: meta.equipped.active || grant };
+          Save.saveMeta(meta);
+          particles.text(ship.x, ship.y - 110, 'BLUEPRINT RECOVERED', '#5ff5ff', 22);
+        }
         g.run.chaptersCleared++;
         g.run.shuttles = g.lives;
         persistRun();
@@ -411,7 +431,7 @@ function onCrash() {
     if (tok !== g.token) return;
     if (g.lives <= 0 && g.run) {
       // Expedition over: bank what was gathered, then release the run.
-      const settled = settleHaul(g.run.haul, { completed: false });
+      const settled = settleHaul(g.run.haul, { completed: false, recovered: (g.loadout && g.loadout.cargoRecovery) || 0 });
       g.lastRunSummary = { missions: g.run.missionsCleared, chapter: g.run.chapterId, settled };
       meta = Save.bankRun(meta, { ...g.run, score: g.score }, { completed: false, settled });
       Save.saveMeta(meta);
@@ -585,6 +605,7 @@ function screenHTML(s) {
           ${btn('endless', 'ENDLESS RUN')}
           ${btn('help', 'HOW TO FLY')}
           ${btn('hangar', 'HANGAR')}
+          ${btn('outfit', 'OUTFIT')}
           ${btn('settings', 'SETTINGS')}
         </div>
         <div class="foot">${audio.muted ? '🔇' : '🔊'} press M to ${audio.muted ? 'unmute' : 'mute'}</div>
@@ -744,6 +765,49 @@ function screenHTML(s) {
       </div>`;
     }
 
+    case 'outfit': {
+      const data = meta.banked.data;
+      const features = { enemies: false };
+      const trees = TREE_IDS.map((tid) => {
+        const tree = TREES[tid];
+        const nodes = tree.nodes.map((n) => {
+          const rank = meta.purchasedSkills[n.id] || 0;
+          const chk = skillCheck(n.id, meta.purchasedSkills, data, features);
+          const cls = rank >= n.ranks ? ' maxed' : chk.ok ? ' can' : '';
+          return `<button class="node${cls}" data-action="skill:${n.id}" ${chk.ok ? '' : 'disabled'}>
+            <span class="node-name">${n.name} <i>${rank}/${n.ranks}</i></span>
+            <span class="node-eff">${n.describe(Math.max(1, rank))}</span>
+            <span class="node-cost">${rank >= n.ranks ? 'complete' : chk.ok ? `${chk.cost} data` : chk.reason}</span>
+          </button>`;
+        }).join('');
+        return `<div class="tree${tree.gated ? ' gated' : ''}">
+          <div class="tree-name">${tree.name}</div>
+          <div class="tree-blurb">${tree.gated || tree.blurb}</div>
+          ${nodes}
+        </div>`;
+      }).join('');
+
+      const slot = (map, kind) => Object.values(map).map((mod) => {
+        const owned = meta.unlockedBlueprints.includes(mod.id);
+        const on = (meta.equipped[kind] === mod.id);
+        return `<button class="tile mod${on ? ' on' : ''}${owned ? '' : ' locked'}"
+            data-action="${owned ? `equip:${kind}:${mod.id}` : 'noop'}" ${owned ? '' : 'disabled'}>
+          <span class="world">${mod.name}</span>
+          <span class="best">${owned ? mod.blurb : 'Blueprint not yet recovered.'}</span>
+        </button>`;
+      }).join('');
+
+      return `<div class="screen wide">
+        <div class="eyebrow" style="color:#5ff5ff">OUTFIT</div>
+        <h2>SKILLS &amp; LOADOUT</h2>
+        <div class="stats"><span>RESEARCH DATA</span><b>${formatScore(data)}</b></div>
+        <div class="trees">${trees}</div>
+        <div class="setting"><div class="setting-name">ACTIVE MODULE</div><div class="grid comps">${slot(ACTIVE_MODULES, 'active')}</div></div>
+        <div class="setting"><div class="setting-name">PASSIVE MODULE</div><div class="grid comps">${slot(PASSIVE_MODULES, 'passive')}</div></div>
+        <div class="btns">${btn('back', 'DONE', true, 'SPACE')}</div>
+      </div>`;
+    }
+
     case 'hangar': {
       const b = meta.banked;
       const sel = g.hangarPick || 'gear';
@@ -893,6 +957,25 @@ function act(action) {
     beginExpedition(action.slice(8));
     return;
   }
+  if (action === 'noop') return;
+  if (action.startsWith('skill:')) {
+    const res = buySkill(action.slice(6), meta.purchasedSkills, meta.banked.data, { enemies: false });
+    if (res) {
+      meta.purchasedSkills = res.purchased;
+      meta.banked.data = res.researchData;
+      Save.saveMeta(meta);
+      audio.arpeggio([659.25, 880], 0.06);
+    }
+    renderOverlay();
+    return;
+  }
+  if (action.startsWith('equip:')) {
+    const [, kind, id] = action.split(':');
+    meta.equipped = { ...meta.equipped, [kind]: meta.equipped[kind] === id ? null : id };
+    Save.saveMeta(meta);
+    renderOverlay();
+    return;
+  }
   if (action.startsWith('pick:')) { g.hangarPick = action.slice(5); renderOverlay(); return; }
   if (action.startsWith('buy:')) {
     const id = action.slice(4);
@@ -974,6 +1057,7 @@ function act(action) {
       break;
     case 'select': setState('select'); break;
     case 'hangar': setState('hangar'); break;
+    case 'outfit': setState('outfit'); break;
     case 'settings': g.settingsFrom = g.state; setState('settings'); break;
     case 'help': setState('help'); break;
     case 'back': setState(g.settingsFrom === 'paused' ? 'paused' : 'menu'); g.settingsFrom = null; break;

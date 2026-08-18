@@ -309,7 +309,9 @@ export class Ship {
         this.vy = -this.vy * (this.restitution != null ? this.restitution : LANDING.restitution);
         if (Math.abs(this.vy) < 4) this.vy = 0;
       }
-      const grip = LANDING.groundFriction ** (level.surfaceFriction != null ? level.surfaceFriction : 1);
+      const surface = level.surfaceFriction != null ? level.surfaceFriction : 1;
+      const cleats = (this.loadout && this.loadout.gripBonus) || 1;
+      const grip = LANDING.groundFriction ** (surface * cleats);
       this.vx *= Math.pow(grip, dt);
       this.spin *= Math.pow(LANDING.spinDamp, dt * 60);
       if (contacts === 2) {
@@ -383,6 +385,14 @@ export class Ship {
     }
     this.pad = pad;
     this.quality = result.grade;
+
+    // Field Patching returns some hull on every landing.
+    const patch = (this.loadout && this.loadout.repairOnLanding) || 0;
+    if (patch > 0) {
+      const before = this.hull;
+      this.hull = Math.min(this.hullMax, this.hull + Math.round(this.hullMax * patch));
+      this.landingResult.hullRepaired = this.hull - before;
+    }
 
     // A hard arrival is survivable but not free: it costs hull, and a lander
     // with no hull left does not fly again.

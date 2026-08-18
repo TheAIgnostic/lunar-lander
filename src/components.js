@@ -95,7 +95,11 @@ export const COMPONENTS = {
 
 export const COMPONENT_IDS = Object.keys(COMPONENTS);
 
-/** Effective multipliers for a set of component levels. Pure - no mutation. */
+/**
+ * Effective multipliers for a set of component levels. Pure - no mutation.
+ * Skills and the equipped passive are folded in by `deriveFull` below, so the
+ * whole ship spec comes from one place and can never be applied twice.
+ */
 export function deriveLoadout(componentLevels = {}) {
   const out = {
     gearTier: 1, restitution: null, slopeGrip: 1,
@@ -108,6 +112,22 @@ export function deriveLoadout(componentLevels = {}) {
     const level = Math.max(1, Math.min(4, componentLevels[id] || 1));
     const spec = COMPONENTS[id].levels[level - 1];
     for (const [k, v] of Object.entries(spec.effect || {})) out[k] = v;
+  }
+  return out;
+}
+
+/** Components + skills + equipped passive, folded into one spec. */
+export function deriveFull(componentLevels, skillEffects = {}, passiveEffects = {}) {
+  const base = deriveLoadout(componentLevels);
+  const out = { ...base };
+  const mulKeys = ['burnMain', 'burnRcs', 'fuelCapacity', 'gearTier', 'thrust', 'rcsAccel',
+    'sideThrust', 'hullMax', 'impactResist', 'predict', 'beacon', 'hazardLead', 'noiseResist'];
+  for (const src of [skillEffects, passiveEffects]) {
+    for (const [k, v] of Object.entries(src)) {
+      if (mulKeys.includes(k)) out[k] = (out[k] != null ? out[k] : 1) * v;
+      else if (typeof v === 'number' && out[k] != null && typeof out[k] === 'number') out[k] += v;
+      else out[k] = v;
+    }
   }
   return out;
 }

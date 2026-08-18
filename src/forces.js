@@ -33,7 +33,11 @@ function atmosphere(cfg) {
   return {
     id: 'atmosphere',
     apply(ship, level, t, dt) {
-      const w = wind + Math.sin(t * 0.7) * gust + Math.sin(t * 1.9 + 1.3) * gust * 0.4;
+      // Inertial dampers and the gyro passive settle the gust component, not
+      // the steady wind - you still have to fly the weather.
+      const damp = (ship.loadout && ship.loadout.disturbanceResist) || 1;
+      const g2 = gust * damp;
+      const w = wind + Math.sin(t * 0.7) * g2 + Math.sin(t * 1.9 + 1.3) * g2 * 0.4;
       ship.windNow = w;
       if (drag) {
         ship.vx += (w - ship.vx) * drag * dt;
@@ -53,7 +57,8 @@ function thermal(cfg) {
     id: 'thermal',
     apply(ship, level, t, dt) {
       const s = ship.statusLevels;
-      s.heat = Math.max(0, Math.min(100, s.heat + (ship.thrusting ? rise : -fall) * dt));
+      const res = (ship.loadout && ship.loadout.hazardResist) || 1;
+      s.heat = Math.max(0, Math.min(100, s.heat + (ship.thrusting ? rise * res : -fall) * dt));
     },
   };
 }
@@ -65,7 +70,8 @@ function cryo(cfg) {
     id: 'cryo',
     apply(ship, level, t, dt) {
       const s = ship.statusLevels;
-      s.cold = Math.max(0, Math.min(100, s.cold + (ship.thrusting ? rate * 0.3 : rate) * dt));
+      const res = (ship.loadout && ship.loadout.hazardResist) || 1;
+      s.cold = Math.max(0, Math.min(100, s.cold + (ship.thrusting ? rate * 0.3 : rate) * res * dt));
     },
   };
 }
@@ -82,8 +88,9 @@ function plumes(cfg) {
         const dx = ship.x - v.x;
         if (Math.abs(dx) > v.radius) continue;
         const falloff = 1 - Math.abs(dx) / v.radius;
-        ship.vy -= v.force * falloff * dt;
-        ship.vx += Math.sign(dx || 1) * v.force * 0.25 * falloff * dt;
+        const damp = (ship.loadout && ship.loadout.disturbanceResist) || 1;
+        ship.vy -= v.force * falloff * damp * dt;
+        ship.vx += Math.sign(dx || 1) * v.force * 0.25 * falloff * damp * dt;
       }
     },
   };
@@ -161,7 +168,8 @@ function radiation(cfg) {
         }
       }
       ship.env.shielded = shielded;
-      const take = shielded ? rate * 0.15 : rate;
+      const res = (ship.loadout && ship.loadout.hazardResist) || 1;
+      const take = (shielded ? rate * 0.15 : rate) * res;
       ship.statusLevels.radiation = Math.min(100, ship.statusLevels.radiation + take * dt);
     },
   };
