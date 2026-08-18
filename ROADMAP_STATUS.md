@@ -103,7 +103,22 @@ scheduled until the MVP is stable — the spec says the same.
   - borderline results promoted one band when the ship settles stable
   - post-landing panel: every metric, its weighted contribution, and what cost the better grade
   - 28 unit tests (`node test/landing-tests.js`), fuel identical to baseline on all 12 missions
-- [ ] M2 — terrain grammar
+- [x] **M2 — terrain grammar** (this commit)
+  - `src/archetypes.js`: 7 macro silhouettes — crater, canyon, ridge, mesa, caldera, dunes, basin —
+    each supplying an elevation profile, a noise-damping mask and landing-zone anchors
+  - the existing midpoint noise now rides *on top of* the silhouette, damped where the shape must
+    stay readable (0.25 inside a canyon, 0.35 inside a crater bowl)
+  - relief is scaled to fit the world, so a canyon deeper than the level bends instead of clipping
+    flat against the floor
+  - pads are placed at shape anchors (inner shelf, canyon floor, ridge terrace) and support slope;
+    extra pads beyond the available anchors go to the flattest free ground, never on top of another
+  - layer-4 micro detail: boulders scattered on the surface, off the pads and off cliffs
+  - `_assertSane()` refuses to return a NaN world — a pad spec without a width used to produce one
+    silently, which would have been brutal to debug across 50 authored missions
+  - 147 structural tests (`node test/terrain-tests.js`)
+  - **classic 12 missions are byte-identical**: they stay on the `legacy` path, fuel and grades
+    match `test/BASELINE.md` exactly
+- [ ] M3 — terrain validation
 
 ## Decisions (Tom, 2026-08-16)
 
@@ -122,9 +137,10 @@ None.
 
 ## Next task
 
-**M2 — terrain grammar.** Extend the midpoint-displacement generator with macro archetypes
-(crater, canyon, ridge, basin, shelf), approach constraints, and landing-zone geometry with slope
-and centre bonus. Highest-risk milestone; may split into shaping and validation.
+**M3 — terrain validation.** Prove every generated mission is winnable before a player sees it:
+autopilot-driven reachability from the spawn state, at least two viable approach paths unless the
+mission intends one, no lethal terrain hidden until avoidance is impossible, and a seeded
+validation sweep that can run over hundreds of maps in seconds using the headless harness.
 
 ### Done, for reference
 

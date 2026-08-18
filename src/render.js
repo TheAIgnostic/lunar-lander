@@ -164,6 +164,27 @@ export function drawTerrain(ctx, cam, W, H, terrain, level, time) {
     ctx.restore();
   }
 
+  // Micro detail: boulders and debris sitting on the surface.
+  if (terrain.rocks && terrain.rocks.length) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(4,7,14,0.92)';
+    ctx.strokeStyle = shade(w.hill, 0.55);
+    ctx.lineWidth = 1.1 / cam.scale + 0.3;
+    for (const r of terrain.rocks) {
+      if (r.x < x0 - 40 || r.x > x1 + 40) continue;
+      ctx.save();
+      ctx.translate(r.x, r.y - r.r * 0.42);
+      ctx.rotate(r.tilt);
+      ctx.beginPath();
+      r.pts.forEach((pt, i) => (i ? ctx.lineTo(pt[0], pt[1]) : ctx.moveTo(pt[0], pt[1])));
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
   // Pads
   for (const p of terrain.pads) {
     if (p.x2 < x0 - 200 || p.x1 > x1 + 200) continue;
@@ -173,20 +194,22 @@ export function drawTerrain(ctx, cam, W, H, terrain, level, time) {
     ctx.shadowColor = p.used ? '#4dff9f' : MAG;
     ctx.shadowBlur = 18 * pulse;
     ctx.lineWidth = 4 / cam.scale + 1.4;
+    const py1 = p.y1 != null ? p.y1 : p.y;
+    const py2 = p.y2 != null ? p.y2 : p.y;
     ctx.beginPath();
-    ctx.moveTo(p.x1, p.y);
-    ctx.lineTo(p.x2, p.y);
+    ctx.moveTo(p.x1, py1);
+    ctx.lineTo(p.x2, py2);
     ctx.stroke();
 
     // Approach markers
     ctx.lineWidth = 1.5 / cam.scale + 0.5;
     ctx.globalAlpha = 0.35 + 0.35 * pulse;
-    for (const ex of [p.x1, p.x2]) {
+    [[p.x1, py1], [p.x2, py2]].forEach(([ex, ey]) => {
       ctx.beginPath();
-      ctx.moveTo(ex, p.y);
-      ctx.lineTo(ex, p.y - 30 - 14 * pulse);
+      ctx.moveTo(ex, ey);
+      ctx.lineTo(ex, ey - 30 - 14 * pulse);
       ctx.stroke();
-    }
+    });
     ctx.globalAlpha = 1;
     ctx.shadowBlur = 10;
     ctx.fillStyle = p.used ? '#4dff9f' : MAG;

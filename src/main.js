@@ -730,6 +730,21 @@ window.__act = act;
 window.__input = input;
 window.__settings = settings;
 window.__debug = Debug;
+/** Dev: rebuild the current mission with a given terrain archetype. */
+window.__preview = (archetype, relief = 260, detail = 1) => {
+  const lvl = g.level || LEVELS[0];
+  g.level = { ...lvl, terrain: { archetype, relief, detail } };
+  g.terrain = new Terrain(g.level, g.seed ^ (g.level.id * 2654435761));
+  g.backdrop = R.buildBackdrop(g.level, g.terrain, g.seed);
+  particles.clear();
+  const best = g.terrain.pads.reduce((a, b) => (b.mult > a.mult ? b : a), g.terrain.pads[0]);
+  const mid = (best.x1 + best.x2) / 2;
+  ship.reset(clamp(mid - g.level.width * 0.18, 140, g.level.width - 140), g.level.height * 0.14, g.level.fuel);
+  g.cam.x = ship.x; g.cam.y = ship.y; g.cam.scale = 0.62;
+  setState('play');
+  return { archetype, pads: g.terrain.pads.map((p) => [Math.round(p.x1), Math.round(p.x2), Math.round(p.y), p.kind, +p.slope.toFixed(3)]), rocks: g.terrain.rocks.length };
+};
+
 window.__setSeed = (n) => { g.forcedSeed = n == null ? null : (n | 0); return g.forcedSeed; };
 window.__advance = advance;
 
