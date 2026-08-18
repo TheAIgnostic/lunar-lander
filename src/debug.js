@@ -5,7 +5,7 @@
 import { clamp, TAU } from './util.js';
 import { ENVELOPE, normalizeAngle } from './ship.js';
 
-const FONT = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+const DEBUG_FONT = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const PX_PER_M = 6;
 
 export const Debug = {
@@ -90,7 +90,7 @@ export const Debug = {
     ctx.fill();
     ctx.stroke();
 
-    ctx.font = `500 11px ${FONT}`;
+    ctx.font = `500 11px ${DEBUG_FONT}`;
     ctx.textBaseline = 'top';
     rows.forEach((r, i) => {
       ctx.fillStyle = 'rgba(150,180,205,0.9)';
@@ -122,7 +122,7 @@ export const Debug = {
     const x = W - w - 16;
     let y = H - 96;
     ctx.save();
-    ctx.font = `600 10px ${FONT}`;
+    ctx.font = `600 10px ${DEBUG_FONT}`;
     for (const [name, value, p, gd, hard] of bars) {
       const frac = clamp(value / (hard * 1.25), 0, 1);
       ctx.fillStyle = 'rgba(2,6,12,0.8)';

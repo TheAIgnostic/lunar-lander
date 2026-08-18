@@ -43,6 +43,24 @@ const parts = MODULES.map((name) => {
   return `${banner}\n${body}`;
 });
 
+// Concatenating modules into one scope means two files cannot declare the same
+// top-level name. Catch that here with a clear message rather than as a blank
+// page at runtime.
+const seen = new Map();
+const DECL = /^(?:export\s+)?(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/gm;
+MODULES.forEach((name, i) => {
+  const src = fs.readFileSync(path.join(root, 'src', name), 'utf8');
+  for (const m of src.matchAll(DECL)) {
+    const sym = m[1];
+    if (seen.has(sym)) {
+      console.error(`\nBUILD FAILED: '${sym}' is declared at top level in both ` +
+        `src/${seen.get(sym)} and src/${name}.\nThe bundle puts every module in one scope - rename one of them.\n`);
+      process.exit(1);
+    }
+    seen.set(sym, name);
+  }
+});
+
 const css = fs.readFileSync(path.join(root, 'style.css'), 'utf8');
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 
