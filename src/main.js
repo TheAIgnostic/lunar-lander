@@ -5,6 +5,7 @@ import { Audio } from './audio.js';
 import { Input } from './input.js';
 import { Terrain } from './terrain.js';
 import { LEVELS, endlessLevel, WORLDS } from './levels.js';
+import { MOON_LEVELS } from './missions.js';
 import { Particles } from './particles.js';
 import { Ship, ENVELOPE, normalizeAngle, DEFAULT_SETTINGS } from './ship.js';
 import { LANDING, capsFor } from './landing.js';
@@ -49,6 +50,7 @@ const g = {
   levelIndex: 0,
   endless: false,
   endlessN: 0,
+  campaign: 'classic',      // 'classic' = the original 12 | 'moon' = the new chapter
   terrain: null,
   backdrop: null,
   cam: { x: 0, y: 0, scale: 1, trauma: 0, tx: 0, ty: 0 },
@@ -92,7 +94,23 @@ resize();
 
 // ------------------------------------------------------------------ level setup
 
+/** The mission list the current campaign draws from. */
+function activeLevels() {
+  return g.campaign === 'moon' ? MOON_LEVELS : LEVELS;
+}
+
+/** Stable per-level salt, for numeric ids and string mission ids alike. */
+function levelSeedSalt(level) {
+  if (typeof level.id === 'number') return level.id * 2654435761;
+  let h = 2166136261;
+  for (const ch of String(level.id)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
+  return h;
+}
+
 function levelFor(index) {
+  if (g.campaign === 'moon') {
+    return MOON_LEVELS[clamp(index, 0, MOON_LEVELS.length - 1)];
+  }
   if (index < LEVELS.length) return LEVELS[index];
   g.endless = true;
   g.endlessN = index - LEVELS.length + 1;
@@ -111,7 +129,7 @@ function startLevel(index, freshSeed = true) {
   else if (freshSeed) g.seed = (Math.random() * 1e9) | 0;
   const level = levelFor(index);
   g.level = level;
-  g.terrain = new Terrain(level, g.seed ^ (level.id * 2654435761));
+  g.terrain = new Terrain(level, g.seed ^ (levelSeedSalt(level) | 0));
   g.backdrop = R.buildBackdrop(level, g.terrain, g.seed);
   particles.clear();
 
@@ -277,13 +295,13 @@ function onLand() {
   };
   store.setBest(g.level.id, total);
   if (g.score > store.high) { g.newRecord = true; store.high = g.score; }
-  if (!g.endless) store.unlocked = g.levelIndex + 2;
+  if (!g.endless && g.campaign === 'classic') store.unlocked = g.levelIndex + 2;
 
   g.freeze = 0.75;
   const tok = g.token;
   setTimeout(() => {
     if (tok !== g.token) return;
-    if (!g.endless && g.levelIndex === LEVELS.length - 1) setState('victory');
+    if (!g.endless && g.levelIndex >= activeLevels().length - 1) setState('victory');
     else setState('result');
   }, 950);
 }
@@ -432,7 +450,8 @@ function screenHTML(s) {
         <p class="tag">A vector lander. Finite fuel. One shot at the pad.</p>
         <div class="stats"><span>HIGH SCORE</span><b>${formatScore(store.high)}</b></div>
         <div class="btns">
-          ${btn('campaign', 'FLY CAMPAIGN', true, 'SPACE')}
+          ${btn('moon', 'MOON EXPEDITION', true, 'SPACE')}
+          ${btn('campaign', 'CLASSIC CAMPAIGN')}
           ${btn('select', 'MISSIONS')}
           ${btn('endless', 'ENDLESS RUN')}
           ${btn('help', 'HOW TO FLY')}
@@ -499,6 +518,7 @@ function screenHTML(s) {
           <div><span>PADS</span><b>${padList}</b></div>
           <div><span>HAZARD</span><b>${l.cave ? 'ICE CEILING' : l.wind ? 'WIND ' + Math.abs(l.wind / 6).toFixed(0) : 'NONE'}</b></div>
         </div>
+        ${l.optionalObjective ? `<div class="objective"><span>OPTIONAL</span> ${l.optionalObjective.text}</div>` : ''}
         <div class="btns">${btn('launch', 'LAUNCH', true, 'SPACE')}${btn('menu', 'ABORT')}</div>
       </div>`;
     }
@@ -540,8 +560,10 @@ function screenHTML(s) {
 
     case 'victory':
       return `<div class="screen">
-        <div class="verdict" style="color:#4dff9f;text-shadow:0 0 30px #4dff9f">PROGRAM COMPLETE</div>
-        <p class="body">All twelve missions flown. The unsurveyed sectors are open — they do not end.</p>
+        <div class="verdict" style="color:#4dff9f;text-shadow:0 0 30px #4dff9f">${g.campaign === 'moon' ? 'CHAPTER COMPLETE' : 'PROGRAM COMPLETE'}</div>
+        <p class="body">${g.campaign === 'moon'
+          ? 'The Moon is surveyed. Five landings, and the lander still flies.'
+          : 'All twelve missions flown. The unsurveyed sectors are open — they do not end.'}</p>
         <div class="stats big"><span>SCORE</span><b>${formatScore(g.score)}</b></div>
         <div class="btns">${btn('next', 'ENTER ENDLESS', true, 'SPACE')}${btn('menu', 'MENU')}</div>
       </div>`;
@@ -633,18 +655,27 @@ function act(action) {
   }
   if (action.startsWith('go:')) {
     const i = +action.slice(3);
+    g.campaign = 'classic';
     g.endless = false;
     g.score = 0; g.lives = 3; g.combo = 0; g.newRecord = false;
     startLevel(i);
     return;
   }
   switch (action) {
+    case 'moon':
+      g.campaign = 'moon';
+      g.endless = false;
+      g.score = 0; g.lives = 3; g.combo = 0; g.newRecord = false;
+      startLevel(0);
+      break;
     case 'campaign':
+      g.campaign = 'classic';
       g.endless = false;
       g.score = 0; g.lives = 3; g.combo = 0; g.newRecord = false;
       startLevel(Math.min(store.unlocked - 1, LEVELS.length - 1));
       break;
     case 'endless':
+      g.campaign = 'classic';
       g.endless = true;
       g.score = 0; g.lives = 3; g.combo = 0; g.newRecord = false;
       startLevel(LEVELS.length);
@@ -655,7 +686,10 @@ function act(action) {
     case 'back': setState(g.settingsFrom === 'paused' ? 'paused' : 'menu'); g.settingsFrom = null; break;
     case 'launch': launch(); break;
     case 'next':
-      if (g.state === 'victory') { g.endless = true; startLevel(LEVELS.length); }
+      if (g.state === 'victory') {
+        if (g.campaign === 'moon') { g.campaign = 'classic'; g.level = null; setState('menu'); break; }
+        g.endless = true; startLevel(LEVELS.length);
+      }
       else startLevel(g.levelIndex + 1);
       break;
     case 'retry': startLevel(g.levelIndex, true); break;
@@ -676,7 +710,7 @@ overlay.addEventListener('click', (e) => {
 // keyboard shortcuts per screen
 input.bind(' ', () => {
   const s = g.state;
-  if (s === 'menu') act('campaign');
+  if (s === 'menu') act('moon');
   else if (s === 'brief') act('launch');
   else if (s === 'result' || s === 'victory') act('next');
   else if (s === 'crash') act('retry');

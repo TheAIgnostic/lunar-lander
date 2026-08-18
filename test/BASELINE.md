@@ -71,3 +71,22 @@ Re-run after replacing the first-contact cutoffs with the combined severity scor
 
 The impact figure is the median of the last five pre-contact samples, so one or two anomalous
 frames cannot manufacture a crash while a real descent rate still does.
+
+
+---
+
+## M4 — Moon chapter baseline
+
+Authored missions, validated over 20 seeds each (`node test/validate-missions.js 20`):
+
+| Mission | Archetype | Pads | Fuel | Structural | Reachable | Landed | Fuel left |
+| --- | --- | --- | ---: | :---: | :---: | :---: | ---: |
+| FIRST SCAR | crater | ×3 shelf, ×2 floor | 124 | 20/20 | 20/20 | 20/20 | 48% |
+| RILLE RUN | canyon | ×3 floor | 116 | 20/20 | 20/20 | 20/20 | 44% |
+| FAR-SIDE RELAY | ridge | ×3 terrace, ×2 | 112 | 20/20 | 20/20 | 20/20 | 49% |
+| SILENT BATTERY | mesa | ×3, ×2 | 108 | 20/20 | 20/20 | 20/20 | 45% |
+| TYCHO DESCENT | caldera | ×5 shelf, ×2 | 104 | 20/20 | 20/20 | 20/20 | 41% |
+
+Every mission is landable on every seed with at least two viable approaches (single-path count 0),
+and a competent flight ends with 41–49% of the tank — the same margin the classic campaign targets.
+The classic 12 remain byte-identical alongside it.

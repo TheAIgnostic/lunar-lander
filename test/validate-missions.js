@@ -6,6 +6,7 @@ import { validateTerrain } from '../src/validate.js';
 import { flyMission } from './pilot.js';
 import { LEVELS } from '../src/levels.js';
 import { ARCHETYPE_NAMES } from '../src/archetypes.js';
+import { MOON_LEVELS } from '../src/missions.js';
 
 const SEEDS = +(process.argv[2] || 12);
 let hardFail = 0;
@@ -92,6 +93,11 @@ for (const name of ['canyon', 'crater', 'basin']) {
     ...base, cave: true, clearance: 280, fuel: 124,
     terrain: { archetype: name, relief: 240, detail: 1 }, pads: [{ mult: 3, width: 150 }],
   }, seedList);
+}
+
+console.log(`\nvalidating the Moon chapter\n`);
+for (const level of MOON_LEVELS) {
+  assess(`${level.id} ${level.title}`, level, seedList);
 }
 
 console.log(`\nvalidating the classic campaign (legacy terrain)\n`);

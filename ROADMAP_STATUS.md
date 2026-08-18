@@ -136,7 +136,18 @@ scheduled until the MVP is stable — the spec says the same.
     classic 1-10 clean; 11-12 reachable on every seed but pilot-limited under crosswind;
     one warning — ICE CORRIDOR seed 1274, where geometry is sound (603 px corridor, 609 px
     headroom) but the pilot strikes the ceiling
-- [ ] M4 — Moon chapter
+- [x] **M4 — Moon chapter** (this commit)
+  - `src/planets.js`: PlanetDefinition shape with the agreed gravity mapping —
+    `gravityPx = 28 × √(g_real/1.62) × feelOffset`, Moon at 28.0 px/s²
+  - `src/missions.js`: Moon 1-5 authored as data (MissionDefinition), with an adapter that turns a
+    mission into the level config the generator already consumes — content never touches engine shape
+  - FIRST SCAR (crater), RILLE RUN (canyon), FAR-SIDE RELAY (ridge), SILENT BATTERY (mesa),
+    TYCHO DESCENT (caldera, ×5 sliver beside the central peak)
+  - optional objectives and enemy budgets carried as data now, so M12 does not rewrite the content
+  - playable from the menu as MOON EXPEDITION, beside CLASSIC CAMPAIGN and ENDLESS
+  - validated 20/20 on every mission: structural, reachable, landed, zero single-path;
+    41-49% fuel left on a competent flight
+- [ ] M5 — planet data model
 
 ## Decisions (Tom, 2026-08-16)
 
@@ -155,10 +166,10 @@ None.
 
 ## Next task
 
-**M4 — Moon chapter.** Author Moon 1-5 on the new grammar as data (`MissionDefinition`), using the
-crater/canyon/ridge archetypes: First Scar, Rille Run, Far-Side Relay, Silent Battery, Tycho
-Descent. Every mission must clear `test/validate-missions.js` on many seeds before it ships, and
-the classic campaign must stay untouched beside it.
+**M5 — planet data model.** Generalise `src/planets.js` into the full PlanetDefinition (atmosphere,
+temperature, visibility, wind and friction models, hazard sets), and move the existing wind, drag
+and cave-ceiling behaviour behind a shared force/status interface so Mars and Europa become data
+rather than code.
 
 ### Known findings
 
