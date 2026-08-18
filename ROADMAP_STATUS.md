@@ -29,8 +29,10 @@ Literal m/s^2 values break the game — real Moon gravity (1.62) at this scale i
 thrust-to-weight of 13, and Enceladus (0.11) would be 0.7 px/s^2, effectively weightless. That
 violates pillar 1 (preserve the flight feel).
 
-Recommendation: compress with `g_px = 28 * sqrt(g_real / 1.62)`, anchored on the Moon. This
-preserves ordering and relative character while landing almost exactly on the existing tuning:
+Adopted: compress with `g_px = 28 * sqrt(g_real / 1.62)`, anchored on the Moon, then apply a
+per-body `feelOffset` (hand-tuned, roughly +/-12%) so neighbouring bodies are distinguishable in
+the hand rather than only on paper. The compressed value preserves ordering and relative
+character while landing almost exactly on the existing tuning:
 
 | Body | Real m/s^2 | Mapped px/s^2 | Note |
 | --- | ---: | ---: | --- |
@@ -82,10 +84,20 @@ scheduled until the MVP is stable — the spec says the same.
 
 - [ ] M0 — not started
 
+## Decisions (Tom, 2026-08-16)
+
+1. **Gravity** — compressed mapping is the *baseline*, then a per-body hand-tuned offset so each
+   body has a slight but noticeable difference in feel. Both the compressed value and the tuning
+   offset live in `PlanetDefinition`; nothing is hardcoded in the loop.
+2. **Old content stays** — the new roguelite campaign runs *side by side* with the existing
+   12-mission campaign (kept as CLASSIC) and ENDLESS. Two progression systems must both keep
+   working; the classic save keys stay readable.
+3. **Terrain** — extend the existing midpoint-displacement generator with an archetype shaping
+   pass rather than replacing it.
+
 ## Blockers / open questions
 
-1. Gravity mapping — recommendation above, awaiting confirmation.
-2. Fate of the current TITAN chapter and endless mode under the new structure.
+None.
 
 ## Next task
 

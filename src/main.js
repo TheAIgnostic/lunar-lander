@@ -8,6 +8,7 @@ import { LEVELS, endlessLevel, WORLDS } from './levels.js';
 import { Particles } from './particles.js';
 import { Ship, ENVELOPE, normalizeAngle, DEFAULT_SETTINGS } from './ship.js';
 import * as R from './render.js';
+import { Debug } from './debug.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -40,6 +41,7 @@ function saveSettings() {
 }
 
 const g = {
+  settings,
   state: 'menu',           // menu | select | brief | play | result | crash | gameover | victory | paused | help | settings
   level: null,
   levelIndex: 0,
@@ -59,6 +61,7 @@ const g = {
   newRecord: false,
   freeze: 0,
   seed: 1,
+  forcedSeed: null,   // pinned by ?seed= or __setSeed() so runs are reproducible
   warn: { low: false, crit: false, dry: false },
   token: 0,          // invalidates pending outcome timers when the level changes
 };
@@ -94,10 +97,16 @@ function levelFor(index) {
   return endlessLevel(g.endlessN, makeRng(g.seed + index));
 }
 
+const FORCED_SEED = (() => {
+  const m = /[?&]seed=(\d+)/.exec(location.search);
+  return m ? (+m[1] | 0) : null;
+})();
+
 function startLevel(index, freshSeed = true) {
   g.token++;
   g.levelIndex = index;
-  if (freshSeed) g.seed = (Math.random() * 1e9) | 0;
+  if (g.forcedSeed != null) g.seed = g.forcedSeed;
+  else if (freshSeed) g.seed = (Math.random() * 1e9) | 0;
   const level = levelFor(index);
   g.level = level;
   g.terrain = new Terrain(level, g.seed ^ (level.id * 2654435761));
@@ -235,6 +244,10 @@ function camera(dt) {
 
 function onLand() {
   const q = ship.quality;
+  Debug.recordTouchdown({
+    result: 'LAND', quality: q, vy: ship.vy, vx: ship.vx,
+    tiltDeg: normalizeAngle(ship.angle) * 57.2958, onPad: !ship.offPad, seed: g.seed,
+  });
   const pad = ship.pad;
   const offPad = ship.offPad;
   const surfaceY = pad ? pad.y : g.terrain.heightAt(ship.x);
@@ -277,6 +290,10 @@ function onLand() {
 }
 
 function onCrash() {
+  Debug.recordTouchdown({
+    result: 'CRASH', quality: null, vy: ship.vy, vx: ship.vx,
+    tiltDeg: normalizeAngle(ship.angle) * 57.2958, onPad: false, seed: g.seed,
+  });
   const c = ship.contact || { x: ship.x, y: ship.y };
   particles.explode(c.x, c.y, ship.vx, ship.vy, ship.shards());
   g.cam.trauma = 1;
@@ -295,14 +312,14 @@ function onCrash() {
 
 // ------------------------------------------------------------------ loop
 
-let last = performance.now();
-function frame(now) {
-  let dt = (now - last) / 1000;
-  last = now;
-  dt = Math.min(dt, 0.05);
+/**
+ * One simulation step, independent of rendering and of the clock. Split out of
+ * the frame loop so tests can drive the game headlessly - requestAnimationFrame
+ * does not fire in a hidden tab, and a tight loop runs a mission in
+ * milliseconds instead of half a minute.
+ */
+function advance(dt) {
   g.time += dt;
-  syncSize();
-
   if (g.state === 'play') {
     if (g.freeze > 0) g.freeze = Math.max(0, g.freeze - dt);
     else simulate(dt);
@@ -314,7 +331,16 @@ function frame(now) {
     particles.update(dt, g.terrain);
     if (g.state !== 'paused') camera(dt);
   }
+}
 
+let last = performance.now();
+function frame(now) {
+  let dt = (now - last) / 1000;
+  last = now;
+  dt = Math.min(dt, 0.05);
+  Debug.sample(dt);
+  syncSize();
+  advance(dt);
   draw();
   requestAnimationFrame(frame);
 }
@@ -349,6 +375,7 @@ function draw() {
   if (g.state === 'play' || g.state === 'paused') {
     R.drawHUD(ctx, W, H, g);
   }
+  Debug.draw(ctx, W, H, g);
   // Dim the world behind any overlay screen.
   if (g.state !== 'play') {
     ctx.fillStyle = 'rgba(3,5,10,0.62)';
@@ -641,6 +668,9 @@ input.bind('escape', () => {
   if (g.state === 'play' || g.state === 'paused') pause();
   else if (g.state !== 'menu') act('menu');
 });
+input.bind('f3', () => { Debug.toggle(); });
+input.bind('`', () => { Debug.toggle(); });
+input.bind('f4', () => { Debug.showEnvelope = !Debug.showEnvelope; });
 input.bind('m', () => {
   audio.unlock();
   audio.setMuted(!audio.muted);
@@ -655,6 +685,7 @@ document.getElementById('t-hold') && input.bindTouchButton(document.getElementBy
 
 window.addEventListener('pointerdown', () => audio.unlock(), { once: true });
 
+if (FORCED_SEED != null) g.forcedSeed = FORCED_SEED;
 setState('menu');
 requestAnimationFrame(frame);
 
@@ -664,6 +695,16 @@ window.__ship = ship;
 window.__act = act;
 window.__input = input;
 window.__settings = settings;
+window.__debug = Debug;
+window.__setSeed = (n) => { g.forcedSeed = n == null ? null : (n | 0); return g.forcedSeed; };
+window.__advance = advance;
+
+/** Resolve a pending landing/crash immediately, for headless tests. */
+window.__settleNow = () => {
+  if (ship.landed) { setState(!g.endless && g.levelIndex === LEVELS.length - 1 ? 'victory' : 'result'); return g.state; }
+  if (!ship.alive) { setState(g.lives <= 0 ? 'gameover' : 'crash'); return g.state; }
+  return g.state;
+};
 
 /** Opened by the macOS app's Settings menu item (Cmd-,). */
 window.__openSettings = () => {

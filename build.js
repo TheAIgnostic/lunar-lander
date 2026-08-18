@@ -15,7 +15,7 @@ const dist = path.join(root, 'dist');
 // Dependency order: every module must appear after everything it imports.
 const MODULES = [
   'util.js', 'audio.js', 'input.js', 'levels.js',
-  'terrain.js', 'particles.js', 'ship.js', 'render.js', 'main.js',
+  'terrain.js', 'particles.js', 'ship.js', 'debug.js', 'render.js', 'main.js',
 ];
 
 // main.js uses `import * as R from './render.js'`, so the namespace object has
