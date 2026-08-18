@@ -183,7 +183,19 @@ scheduled until the MVP is stable — the spec says the same.
   - **radiation**: cyclic sweeps, shielded by terrain, with instrument noise as the consequence
     until the damage model lands
   - ceiling guard now scales with climb rate — closes the ICE CORRIDOR warning open since M3
-- [ ] M8 — run loop + save v2
+- [x] **M8 — run loop and save v2** (this commit)
+  - `src/save.js`: versioned MetaSave (permanent) and RunState (disposable), each behind a storage
+    adapter so neither can throw into the game
+  - migration from the five legacy `tv_*` keys, verified live: an existing player keeps high score,
+    unlocks, per-mission bests, mute and steering choice; the legacy keys are left intact
+  - three-shuttle expeditions, a crash replaying the same mission on the same seed, a cleared
+    chapter returning a shuttle, and banking on both success and failure
+  - an interrupted expedition survives a full reload and offers RESUME from the menu
+  - corrupt saves are set aside under `tv_save_corrupt` and reported, never a blank screen
+  - 40 save unit tests, including a storage adapter that throws on every call
+  - `build.js` now derives namespace objects from module exports — the hand-listed version silently
+    missed `import * as Save` and shipped a bundle that threw on load
+- [ ] M9 — route + economy
 
 ## Decisions (Tom, 2026-08-16)
 
@@ -202,10 +214,10 @@ None.
 
 ## Next task
 
-**M8 — run loop and save v2.** Three shuttles, a crash restarting the mission on the same seed,
-five-mission chapters with sector checkpoints, and a versioned save with migration from the five
-existing `tv_*` keys. This is the first milestone that touches persistence, so migration comes
-before any field changes shape.
+**M9 — route and economy.** Four-choice route cards with the discovery tiers, the three global
+resources plus planetary materials, banking and crash recovery rules, and the ten-mission sector
+checkpoint — which belongs here rather than in M8, because a checkpoint spanning two chapters needs
+routes to exist first.
 
 ### Known findings
 
@@ -214,6 +226,8 @@ before any field changes shape.
   become time-aware — a structural change, not content. DRIFTING PLATE ships as a fragile plate
   instead, which is honest but not the full brief.
 - **europa-4 UNDER-ICE SIGNAL** — 17/20 seeds. Geometry sound; the pilot still clips ice on three.
+- **Sector checkpoints deferred to M9.** A checkpoint every ten missions spans two chapters, which
+  needs the route system to exist. Chapters, shuttles and banking are in; the checkpoint is not.
 - **Crosswind (missions 11-12)** — resolved in M6. The pilot now lands 18/20 and 19/20.
 
 ### Done, for reference

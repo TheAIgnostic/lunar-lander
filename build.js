@@ -15,7 +15,7 @@ const dist = path.join(root, 'dist');
 // Dependency order: every module must appear after everything it imports.
 const MODULES = [
   'util.js', 'audio.js', 'input.js', 'levels.js',
-  'archetypes.js', 'planets.js', 'forces.js', 'missions.js', 'terrain.js', 'spawn.js', 'validate.js', 'particles.js', 'landing.js', 'ship.js', 'debug.js', 'render.js', 'main.js',
+  'archetypes.js', 'planets.js', 'forces.js', 'missions.js', 'terrain.js', 'spawn.js', 'validate.js', 'save.js', 'particles.js', 'landing.js', 'ship.js', 'debug.js', 'render.js', 'main.js',
 ];
 
 // A module added to src/ but not listed above would simply vanish from the
@@ -28,9 +28,27 @@ if (missing.length) {
   process.exit(1);
 }
 
-// main.js uses `import * as R from './render.js'`, so the namespace object has
-// to be rebuilt by hand once render's declarations are in scope.
-const R_NAMESPACE = ['buildBackdrop', 'drawBackground', 'drawTerrain', 'drawShip', 'drawTrajectory', 'drawHUD', 'drawDust', 'drawPadBeacons'];
+// `import * as X from './y.js'` has no meaning once every module shares one
+// scope, so each namespace object is rebuilt from that module's exports. This
+// is derived rather than hand-listed: a hand-listed version silently missed
+// `import * as Save` and shipped a bundle that threw on load.
+const EXPORT_RE = /^export\s+(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/gm;
+const NAMESPACE_RE = /import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+['"]\.\/([\w-]+)\.js['"]/g;
+
+const exportsOf = {};
+for (const name of MODULES) {
+  const src = fs.readFileSync(path.join(root, 'src', name), 'utf8');
+  exportsOf[name] = [...src.matchAll(EXPORT_RE)].map((m) => m[1]);
+}
+
+const namespaces = {};   // module file -> [alias, ...]
+for (const name of MODULES) {
+  const src = fs.readFileSync(path.join(root, 'src', name), 'utf8');
+  for (const m of src.matchAll(NAMESPACE_RE)) {
+    const file = `${m[2]}.js`;
+    (namespaces[file] ||= []).push(m[1]);
+  }
+}
 
 function stripModuleSyntax(src) {
   return src
@@ -47,10 +65,12 @@ const parts = MODULES.map((name) => {
   const src = fs.readFileSync(path.join(root, 'src', name), 'utf8');
   const body = stripModuleSyntax(src).trim();
   const banner = `/* ---------- src/${name} ---------- */`;
-  if (name === 'render.js') {
-    return `${banner}\n${body}\n\nconst R = { ${R_NAMESPACE.join(', ')} };`;
-  }
-  return `${banner}\n${body}`;
+  const aliases = namespaces[name] || [];
+  if (!aliases.length) return `${banner}\n${body}`;
+  const rebuilt = aliases
+    .map((alias) => `const ${alias} = { ${exportsOf[name].join(', ')} };`)
+    .join('\n');
+  return `${banner}\n${body}\n\n${rebuilt}`;
 });
 
 // Concatenating modules into one scope means two files cannot declare the same

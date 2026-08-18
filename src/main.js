@@ -10,6 +10,7 @@ import { Particles } from './particles.js';
 import { Ship, ENVELOPE, normalizeAngle, DEFAULT_SETTINGS } from './ship.js';
 import { LANDING, capsFor } from './landing.js';
 import { PLANETS, gravityFor } from './planets.js';
+import * as Save from './save.js';
 import * as R from './render.js';
 import { Debug } from './debug.js';
 import { spawnFor } from './spawn.js';
@@ -24,24 +25,28 @@ const input = new Input();
 const particles = new Particles();
 const ship = new Ship();
 
+const loaded = Save.loadMeta();
+let meta = loaded.meta;
+const saveSource = loaded.source;
+
 const store = {
-  get high() { return +(safeStore.get('tv_high') || 0); },
-  set high(v) { safeStore.set('tv_high', String(v)); },
-  get unlocked() { return +(safeStore.get('tv_unlocked') || 1); },
-  set unlocked(v) { safeStore.set('tv_unlocked', String(Math.max(v, this.unlocked))); },
-  get bests() { try { return JSON.parse(safeStore.get('tv_bests') || '{}'); } catch { return {}; } },
+  get high() { return meta.classic.high; },
+  set high(v) { meta.classic.high = v; Save.saveMeta(meta); },
+  get unlocked() { return meta.classic.unlocked; },
+  set unlocked(v) { meta.classic.unlocked = Math.max(v, meta.classic.unlocked); Save.saveMeta(meta); },
+  get bests() { return meta.classic.bests; },
   setBest(id, v) {
-    const b = this.bests;
-    if (!b[id] || v > b[id]) { b[id] = v; safeStore.set('tv_bests', JSON.stringify(b)); }
+    if (!meta.classic.bests[id] || v > meta.classic.bests[id]) {
+      meta.classic.bests[id] = v;
+      Save.saveMeta(meta);
+    }
   },
 };
 
-const settings = {
-  ...DEFAULT_SETTINGS,
-  ...(() => { try { return JSON.parse(safeStore.get('tv_settings') || '{}'); } catch { return {}; } })(),
-};
+const settings = { ...DEFAULT_SETTINGS, ...meta.settings };
 function saveSettings() {
-  safeStore.set('tv_settings', JSON.stringify(settings));
+  meta.settings = { ...meta.settings, ...settings };
+  Save.saveMeta(meta);
 }
 
 const g = {
@@ -51,7 +56,8 @@ const g = {
   levelIndex: 0,
   endless: false,
   endlessN: 0,
-  campaign: 'classic',      // 'classic' = the original 12 | 'moon' = the new chapter
+  campaign: 'classic',      // 'classic' = the original 12 | a chapter id = expedition
+  run: null,                // active expedition, persisted between sessions
   terrain: null,
   backdrop: null,
   cam: { x: 0, y: 0, scale: 1, trauma: 0, tx: 0, ty: 0 },
@@ -126,7 +132,8 @@ const FORCED_SEED = (() => {
 function startLevel(index, freshSeed = true) {
   g.token++;
   g.levelIndex = index;
-  if (g.forcedSeed != null) g.seed = g.forcedSeed;
+  if (g.run) g.seed = g.run.seed;                 // an expedition keeps one seed
+  else if (g.forcedSeed != null) g.seed = g.forcedSeed;
   else if (freshSeed) g.seed = (Math.random() * 1e9) | 0;
   const level = levelFor(index);
   g.level = level;
@@ -149,6 +156,44 @@ function startLevel(index, freshSeed = true) {
   g.cam.trauma = 0;
   g.freeze = 0;
   setState('brief');
+}
+
+/** Start a fresh expedition: three shuttles, one seed, five missions. */
+function beginExpedition(chapterId) {
+  const seed = g.forcedSeed != null ? g.forcedSeed : (Math.random() * 1e9) | 0;
+  g.run = Save.newRun(chapterId, seed);
+  g.campaign = chapterId;
+  g.endless = false;
+  g.score = 0; g.combo = 0; g.newRecord = false;
+  g.lives = g.run.shuttles;
+  Save.saveRun(g.run);
+  startLevel(0, false);
+}
+
+/** Pick an interrupted expedition back up exactly where it stopped. */
+function resumeExpedition() {
+  const run = Save.loadRun();
+  if (!run || !CHAPTERS[run.chapterId]) { setState('chapters'); return; }
+  g.run = run;
+  g.campaign = run.chapterId;
+  g.endless = false;
+  g.score = run.score;
+  g.combo = run.combo;
+  g.lives = run.shuttles;
+  g.forcedSeed = run.seed;
+  startLevel(run.missionIndex, false);
+}
+
+function persistRun() {
+  // Stats belong to permanent progress, so they are written whether or not an
+  // expedition is in flight - otherwise a reload loses them.
+  Save.saveMeta(meta);
+  if (!g.run) return;
+  g.run.score = g.score;
+  g.run.combo = g.combo;
+  g.run.shuttles = g.lives;
+  g.run.missionIndex = g.levelIndex;
+  Save.saveRun(g.run);
 }
 
 function launch() {
@@ -298,12 +343,32 @@ function onLand() {
   if (g.score > store.high) { g.newRecord = true; store.high = g.score; }
   if (!g.endless && g.campaign === 'classic') store.unlocked = g.levelIndex + 2;
 
+  if (g.run) {
+    g.run.missionsCleared++;
+    g.run.unbanked.salvage += Math.round(total * 0.05);
+    g.run.unbanked.data += q === 'PERFECT' ? 12 : q === 'GOOD' ? 8 : 4;
+    persistRun();
+  }
+  meta.stats.landings++;
+  if (q === 'PERFECT') meta.stats.perfect++;
+  if (!g.run) Save.saveMeta(meta);
+
   g.freeze = 0.75;
   const tok = g.token;
   setTimeout(() => {
     if (tok !== g.token) return;
-    if (!g.endless && g.levelIndex >= activeLevels().length - 1) setState('victory');
-    else setState('result');
+    const last = g.levelIndex >= activeLevels().length - 1;
+    if (!g.endless && last) {
+      if (g.run) {
+        // A cleared chapter returns a shuttle, up to the expedition maximum.
+        g.lives = Math.min(g.run.maxShuttles, g.lives + 1);
+        meta = Save.bankRun(meta, { ...g.run, score: g.score }, { completed: true });
+        Save.saveMeta(meta);
+        Save.clearRun();
+        g.run = null;
+      }
+      setState('victory');
+    } else setState('result');
   }, 950);
 }
 
@@ -320,10 +385,22 @@ function onCrash() {
   audio.silence();
   audio.explosion();
   g.lives--;
+  meta.stats.crashes++;
+  if (g.run) persistRun(); else Save.saveMeta(meta);
   g.freeze = 0.12;
   const tok = g.token;
   setTimeout(() => {
     if (tok !== g.token) return;
+    if (g.lives <= 0 && g.run) {
+      // Expedition over: bank what was gathered, then release the run.
+      g.lastRunSummary = { missions: g.run.missionsCleared, chapter: g.run.chapterId };
+      meta = Save.bankRun(meta, { ...g.run, score: g.score }, { completed: false });
+      Save.saveMeta(meta);
+      Save.clearRun();
+      g.run = null;
+      setState('expedition-over');
+      return;
+    }
     setState(g.lives <= 0 ? 'gameover' : 'crash');
   }, 1400);
 }
@@ -453,12 +530,18 @@ function renderOverlay() {
 function screenHTML(s) {
   switch (s) {
     case 'menu':
+      const pending = Save.loadRun();
+      const chapterName = pending && CHAPTERS[pending.chapterId] ? CHAPTERS[pending.chapterId].title : null;
       return `<div class="screen menu">
         <h1 class="title">TERMINAL<span>VELOCITY</span></h1>
         <p class="tag">A vector lander. Finite fuel. One shot at the pad.</p>
+        ${saveSource === 'corrupt' ? '<div class="notice">A damaged save was set aside and progress reset. The old data is kept under <b>tv_save_corrupt</b>.</div>' : ''}
+        ${saveSource === 'newer' ? '<div class="notice">This save was written by a newer build, so it was left untouched.</div>' : ''}
         <div class="stats"><span>HIGH SCORE</span><b>${formatScore(store.high)}</b></div>
+        ${chapterName ? `<div class="stats"><span>IN PROGRESS</span><b>${chapterName} · mission ${pending.missionIndex + 1} · ${pending.shuttles} left</b></div>` : ''}
         <div class="btns">
-          ${btn('chapters', 'EXPEDITION', true, 'SPACE')}
+          ${chapterName ? btn('resume-run', 'RESUME EXPEDITION', true, 'SPACE') : ''}
+          ${btn('chapters', 'EXPEDITION', !chapterName, chapterName ? '' : 'SPACE')}
           ${btn('campaign', 'CLASSIC CAMPAIGN')}
           ${btn('select', 'MISSIONS')}
           ${btn('endless', 'ENDLESS RUN')}
@@ -554,8 +637,9 @@ function screenHTML(s) {
       return `<div class="screen">
         <div class="verdict bad">LANDER LOST</div>
         <p class="body">${crashReason()}</p>
-        <div class="stats"><span>LANDERS LEFT</span><b>${g.lives}</b></div>
-        <div class="btns">${btn('retry', 'TRY AGAIN', true, 'SPACE')}${btn('menu', 'MENU')}</div>
+        <div class="stats"><span>SHUTTLES LEFT</span><b>${g.lives}</b></div>
+        ${g.run ? '<p class="body">The same ground, the same seed. Fly it again knowing what it does.</p>' : ''}
+        <div class="btns">${btn('retry', 'TRY AGAIN', true, 'SPACE')}${btn(g.run ? 'abandon-run' : 'menu', g.run ? 'ABANDON' : 'MENU')}</div>
       </div>`;
 
     case 'gameover':
@@ -621,6 +705,22 @@ function screenHTML(s) {
       </div>`;
     }
 
+    case 'expedition-over': {
+      const b = meta.banked;
+      return `<div class="screen">
+        <div class="verdict bad">EXPEDITION LOST</div>
+        <p class="body">All three shuttles are gone. What was transmitted stays transmitted —
+        the expedition ends, the programme does not.</p>
+        <table class="score">
+          <tr><td>Missions cleared</td><td>${g.lastRunSummary ? g.lastRunSummary.missions : 0}</td></tr>
+          <tr><td>Run score</td><td>${formatScore(g.score)}</td></tr>
+          <tr class="tot"><td>BANKED SALVAGE</td><td>${formatScore(b.salvage)}</td></tr>
+          <tr class="run"><td>BANKED RESEARCH</td><td>${formatScore(b.data)}</td></tr>
+        </table>
+        <div class="btns">${btn('chapters', 'NEW EXPEDITION', true, 'SPACE')}${btn('menu', 'MENU')}</div>
+      </div>`;
+    }
+
     case 'paused':
       return `<div class="screen">
         <h2>PAUSED</h2>
@@ -674,10 +774,16 @@ function act(action) {
   audio.unlock();
   audio.ui();
   if (action.startsWith('chapter:')) {
-    g.campaign = action.slice(8);
-    g.endless = false;
-    g.score = 0; g.lives = 3; g.combo = 0; g.newRecord = false;
-    startLevel(0);
+    beginExpedition(action.slice(8));
+    return;
+  }
+  if (action === 'resume-run') { resumeExpedition(); return; }
+  if (action === 'abandon-run') {
+    if (g.run) meta = Save.bankRun(meta, g.run, { completed: false });
+    Save.saveMeta(meta);
+    Save.clearRun();
+    g.run = null; g.level = null; g.campaign = 'classic';
+    setState('menu');
     return;
   }
   if (action.startsWith('set:')) {
@@ -721,7 +827,7 @@ function act(action) {
       }
       else startLevel(g.levelIndex + 1);
       break;
-    case 'retry': startLevel(g.levelIndex, true); break;
+    case 'retry': startLevel(g.levelIndex, !g.run); break;
     case 'menu': g.level = null; setState('menu'); break;
     case 'restart':
       g.score = 0; g.lives = 3; g.combo = 0; g.newRecord = false;
@@ -739,10 +845,11 @@ overlay.addEventListener('click', (e) => {
 // keyboard shortcuts per screen
 input.bind(' ', () => {
   const s = g.state;
-  if (s === 'menu') act('chapters');
+  if (s === 'menu') act(Save.loadRun() ? 'resume-run' : 'chapters');
   else if (s === 'brief') act('launch');
   else if (s === 'result' || s === 'victory') act('next');
   else if (s === 'crash') act('retry');
+  else if (s === 'expedition-over') act('chapters');
   else if (s === 'gameover') act('restart');
   else if (s === 'help' || s === 'select' || s === 'chapters') act('back');
 });

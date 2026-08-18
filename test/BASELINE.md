@@ -165,3 +165,26 @@ flying into ice inside corridors 700–800 px wide. The guard now scales with cl
 
 **ICE CORRIDOR seed 1274 is resolved** — open since M3, and the validator was right all along that
 the geometry was sound and the pilot was at fault.
+
+
+---
+
+## M8 — run loop and save v2
+
+Verified in the running game, not just in unit tests:
+
+| Claim | How it was checked | Result |
+| --- | --- | --- |
+| An existing player keeps everything | seeded the five legacy `tv_*` keys, reloaded | high score 5,312, unlock 7, per-mission bests, mute and DIRECT steering all carried over; legacy keys left intact |
+| A crash costs one shuttle | crashed on purpose mid-mission | 3 → 2 |
+| A retry replays the same ground | compared the heightmap across a retry | identical, same seed held |
+| An expedition survives being closed | full page reload mid-run | menu offered RESUME, Space resumed the same chapter, mission and seed with 2 shuttles |
+| Losing all shuttles ends the expedition | crashed three times | expedition-over screen, run record released, permanent progress untouched |
+| A finished chapter banks its haul | flew all five Moon missions | 614 salvage, 72 research banked, `clearedChapters: ["moon"]` |
+
+Unit coverage is `node test/save-tests.js` — 40 assertions over migration, round trips, corrupt
+saves, saves from a newer build, saves missing fields, malformed run records, banking arithmetic,
+and a storage adapter that throws on every call.
+
+**A corrupt save never blanks the game.** The bad bytes are moved to `tv_save_corrupt`, defaults
+load, and the menu says so.
