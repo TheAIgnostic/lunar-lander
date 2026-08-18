@@ -173,7 +173,17 @@ scheduled until the MVP is stable — the spec says the same.
     method, so the HUD had been throwing since then. Fixed, with a test that makes the class of
     shadowing bug impossible to reintroduce
   - `test/physics-fixture.js` added: a pilot-independent physics regression
-- [ ] M7 — Europa chapter
+- [x] **M7 — Europa chapter** (this commit)
+  - GLASS LANDING, BLUE FRACTURE, RADIATION PASS, UNDER-ICE SIGNAL, DRIFTING PLATE
+  - **ice that slides**: friction was applied per frame and decayed to nothing regardless of planet;
+    it is retention per second now, so Europa slides 90 px at 30 px/s drift where the Moon slides 10
+  - control returns to the player during a slide — arresting it is the mechanic, not a cutscene
+  - **fragile pads**: a fracture limit printed on the approach, drawn as a broken line, and a
+    distinct failure when exceeded
+  - **radiation**: cyclic sweeps, shielded by terrain, with instrument noise as the consequence
+    until the damage model lands
+  - ceiling guard now scales with climb rate — closes the ICE CORRIDOR warning open since M3
+- [ ] M8 — run loop + save v2
 
 ## Decisions (Tom, 2026-08-16)
 
@@ -192,14 +202,18 @@ None.
 
 ## Next task
 
-**M7 — Europa chapter.** Ice: low surface friction (already planet data), cracking ice bridges,
-radiation sweeps that terrain can shield, and cave corridors. Mission 1 teaches that touchdown is
-only half the landing.
+**M8 — run loop and save v2.** Three shuttles, a crash restarting the mission on the same seed,
+five-mission chapters with sector checkpoints, and a versioned save with migration from the five
+existing `tv_*` keys. This is the first milestone that touches persistence, so migration comes
+before any field changes shape.
 
 ### Known findings
 
-- **ICE CORRIDOR seed 1274** — structurally sound but the test pilot cannot fly it. Worth a human
-  attempt before M7 reworks Europa; if a person lands it, the pilot needs the fix, not the mission.
+- **Moving landing platforms are deferred.** Europa 5 and Io 5 call for a pad that translates or
+  rotates. Pads are static geometry in the heightmap, so this needs `padAt` and the landing check to
+  become time-aware — a structural change, not content. DRIFTING PLATE ships as a fragile plate
+  instead, which is honest but not the full brief.
+- **europa-4 UNDER-ICE SIGNAL** — 17/20 seeds. Geometry sound; the pilot still clips ice on three.
 - **Crosswind (missions 11-12)** — resolved in M6. The pilot now lands 18/20 and 19/20.
 
 ### Done, for reference

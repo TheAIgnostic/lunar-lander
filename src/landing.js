@@ -29,7 +29,10 @@ export const LANDING = {
 
   // Gear response during that window.
   restitution: 0.22,         // vertical bounce retained per contact
-  groundFriction: 0.55,      // lateral speed retained per contact
+  // Lateral speed retained *per second* on bare rock. A planet's
+  // surfaceFriction is the exponent: 1 is rock, lower is slipperier, so ice
+  // keeps most of its speed and the lander goes on travelling after contact.
+  groundFriction: 0.02,
   spinDamp: 0.30,            // spin retained per contact
   levelAssist: 3.2,          // rad/s^2 righting torque while both feet touch
 

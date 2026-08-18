@@ -59,9 +59,14 @@ export function makeControl(ship, terrain, level, opts = {}) {
       if (terrain.heightAt(fx) < ship.y + 30) { wallAhead = true; break; }
     }
 
+    // Ceiling guard scaled by how fast the ship is rising. A fixed 120 px is
+    // under a second of climb at full thrust, which is not enough time to stop
+    // - the pilot was flying into ice in corridors 700 px wide.
     const roofGap = terrain.ceiling ? ship.y - terrain.ceilingAt(ship.x) : Infinity;
-    const roofPush = roofGap < 120;
-    const roofNear = roofGap < 220;
+    const climbing = Math.max(0, -ship.vy);
+    const roofMargin = 90 + climbing * 1.5;
+    const roofPush = roofGap < roofMargin;
+    const roofNear = roofGap < roofMargin + 140;
 
     const wAcc = level.drag ? ((ship.windNow || 0) - ship.vx) * level.drag : 0;
     const ff = Math.asin(clamp(-wAcc / THRUST, -0.3, 0.3));

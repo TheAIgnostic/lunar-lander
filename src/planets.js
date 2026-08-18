@@ -67,14 +67,14 @@ export const PLANETS = {
   }),
   EUROPA: P({
     id: 'EUROPA', displayName: 'EUROPA', realGravity: 1.31, world: 'EUROPA',
-    feelOffset: 0.98, surfaceFriction: 0.25, hazards: ['ice', 'radiation'],
+    feelOffset: 0.98, surfaceFriction: 0.07, hazards: ['ice', 'radiation'],
     rareMaterial: 'Conductive ice salts',
     terrainPalette: ['basin', 'canyon', 'mesa'],
     summary: 'Ice. Touchdown is only the first half of the landing.',
   }),
   ENCELADUS: P({
     id: 'ENCELADUS', displayName: 'ENCELADUS', realGravity: 0.11, world: 'EUROPA',
-    feelOffset: 1.15, surfaceFriction: 0.5, hazards: ['plume'],
+    feelOffset: 1.15, surfaceFriction: 0.3, hazards: ['plume'],
     rareMaterial: 'Silica nanograins',
     terrainPalette: ['canyon', 'ridge', 'crater'],
     summary: 'Almost no gravity. Every correction lasts far too long.',

@@ -99,6 +99,7 @@ export class Ship {
   /** One fixed physics step. Returns an event string or null. */
   step(dt, input, level, terrain, t, settings = DEFAULT_SETTINGS) {
     if (!this.alive || this.landed) return null;
+    this.input = input;
     if (this.touchdown) return this.settle(dt, level, terrain);
 
     const hasFuel = this.fuel > 0;
@@ -147,7 +148,7 @@ export class Ship {
     }
     this.vy += level.gravity * dt;
 
-    applyForces(this, level, t, dt);
+    applyForces(this, level, t, dt, terrain);
 
     // Short history of approach velocity, sampled before contact. The impact is
     // graded on the median of these, so a single anomalous frame - a collision
@@ -215,12 +216,34 @@ export class Ship {
     const td = this.touchdown;
     td.t += dt;
 
-    // Controls are handed to the gear for the duration.
-    this.thrusting = false;
-    this.rcsLeft = false;
-    this.rcsRight = false;
-    this.holding = false;
-    this.throttle *= Math.pow(0.02, dt);
+    // The gear owns the first moments of contact. After that, if the lander is
+    // still travelling - which on ice it will be - control comes back, because
+    // arresting a slide is the whole point of the surface.
+    const sliding = td.t > LANDING.aggregationWindow &&
+      Math.hypot(this.vx, this.vy) > LANDING.restSpeed;
+    if (!sliding) {
+      this.thrusting = false;
+      this.rcsLeft = false;
+      this.rcsRight = false;
+      this.holding = false;
+      this.throttle *= Math.pow(0.02, dt);
+    } else if (this.input) {
+      const hasFuel = this.fuel > 0;
+      this.thrusting = this.input.thrust && hasFuel;
+      this.rcsLeft = this.input.left && hasFuel;
+      this.rcsRight = this.input.right && hasFuel;
+      let burn = 0;
+      if (this.thrusting) burn += SHIP.burnMain;
+      if (this.rcsLeft || this.rcsRight) burn += SHIP.burnRcs;
+      this.fuel = Math.max(0, this.fuel - burn * dt);
+      this.throttle += ((this.thrusting ? 1 : 0) - this.throttle) * Math.min(1, dt * 14);
+      if (this.thrusting) {
+        this.vx += this.noseX * SHIP.thrust * dt;
+        this.vy += this.noseY * SHIP.thrust * dt;
+      }
+      if (this.rcsLeft) this.spin -= SHIP.rcsAccel * 0.5 * dt;
+      if (this.rcsRight) this.spin += SHIP.rcsAccel * 0.5 * dt;
+    }
 
     this.vy += level.gravity * dt;
     if (level.drag) this.vx += ((this.windNow || 0) - this.vx) * level.drag * dt;
@@ -265,7 +288,7 @@ export class Ship {
         if (Math.abs(this.vy) < 4) this.vy = 0;
       }
       const grip = LANDING.groundFriction ** (level.surfaceFriction != null ? level.surfaceFriction : 1);
-      this.vx *= Math.pow(grip, dt * 60);
+      this.vx *= Math.pow(grip, dt);
       this.spin *= Math.pow(LANDING.spinDamp, dt * 60);
       if (contacts === 2) {
         // Both feet down: the gear rights the hull.
@@ -280,7 +303,8 @@ export class Ship {
 
     const speed = Math.hypot(this.vx, this.vy);
     const resting = contacts > 0 && speed < LANDING.restSpeed && Math.abs(this.spin) < 0.5;
-    if ((td.t >= LANDING.aggregationWindow && resting) || td.t >= LANDING.maxSettle) {
+    const maxSettle = LANDING.maxSettle / Math.max(0.2, level.surfaceFriction != null ? level.surfaceFriction : 1);
+    if ((td.t >= LANDING.aggregationWindow && resting) || td.t >= maxSettle) {
       return this.finishTouchdown(terrain);
     }
     return null;
@@ -312,6 +336,14 @@ export class Ship {
     };
 
     if (result.grade === 'CRASH') return 'crash';
+
+    if (pad && pad.fragile && td.vy > pad.fragile) {
+      this.landingResult.grade = 'CRASH';
+      this.landingResult.brokePad = true;
+      this.landingResult.blocker =
+        `The ice took ${(td.vy / 6).toFixed(1)} m/s and split — it holds ${(pad.fragile / 6).toFixed(1)}.`;
+      return 'crash';
+    }
 
     if (!onPad) {
       const slope = Math.abs(terrain.slopeAt(this.x));

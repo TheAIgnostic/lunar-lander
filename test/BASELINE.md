@@ -126,3 +126,42 @@ The long-standing "pilot-limited" caveat on the Titan missions is effectively cl
 
 The M6 pilot work moved the flight fixture and left the physics fixture untouched, which is exactly
 the separation the two are for.
+
+
+---
+
+## M7 — Europa
+
+Three mechanics, and one measurement that mattered.
+
+**Ice actually slides now.** The friction constant was applied per *frame*, so it decayed to nothing
+within a fraction of a second regardless of the planet — Europa slid 5 px where the Moon slid 4.
+Friction is now retention *per second* with the planet's `surfaceFriction` as the exponent:
+
+| Arrival drift | Moon slide | Europa slide |
+| ---: | ---: | ---: |
+| 8 px/s | 2 px | 8 px |
+| 18 px/s | 5 px | 45 px |
+| 30 px/s | 10 px | **90 px** |
+
+90 px is most of a pad. Arriving with drift on Europa now carries you out of the zone, which is the
+whole point of the body — and control returns during the slide, so arresting it is the player's job.
+
+**Fragile ice.** A pad can declare a fracture limit; the approach prints it (`ICE · max 2.7 m/s`)
+and the pad is drawn as a broken line. Exceed it and the bridge splits instead of holding.
+
+**Radiation.** Sweeps on a cycle, shielded by terrain higher than the lander within 220 px. With no
+damage model yet, the consequence is instrument noise: the readouts start lying as exposure climbs.
+
+## The ceiling guard, and a warning that closes
+
+The pilot reacted to ice ceilings at a fixed 120 px, which at climb speed is under a second — it was
+flying into ice inside corridors 700–800 px wide. The guard now scales with climb rate. Effect:
+
+| | before | after |
+| --- | --- | --- |
+| Classic 7 ICE CORRIDOR | 17/20 | **20/20** |
+| europa-4 UNDER-ICE SIGNAL | 9/20 | 17/20 |
+
+**ICE CORRIDOR seed 1274 is resolved** — open since M3, and the validator was right all along that
+the geometry was sound and the pilot was at fault.

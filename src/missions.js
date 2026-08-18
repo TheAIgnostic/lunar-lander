@@ -158,7 +158,61 @@ export const MARS_MISSIONS = [
 
 export const MARS_LEVELS = MARS_MISSIONS.map(missionToLevel);
 
+export const EUROPA_MISSIONS = [
+  {
+    id: 'europa-1', planet: 'EUROPA', index: 1, name: 'GLASS LANDING',
+    brief: 'Smooth ice, and almost nothing to hold you. Touchdown is only half the landing here — you will keep moving after the legs are down, so arrive slow and arrive straight.',
+    width: 2900, relief: 200, detail: 0.8, rough: 150, fuel: 122,
+    terrain: { archetype: 'basin' },
+    pads: [{ mult: 2, width: 200 }, { mult: 3, width: 130 }],
+    optionalObjective: { id: 'centre', text: 'Come to rest inside the central bonus area', reward: { data: 30 } },
+    enemyBudget: 0,
+  },
+  {
+    id: 'europa-2', planet: 'EUROPA', index: 2, name: 'BLUE FRACTURE',
+    brief: 'The pad is an ice bridge over a crevasse. It will hold a gentle lander and nothing heavier — the fracture limit is printed on the approach.',
+    width: 3000, relief: 300, detail: 1.2, rough: 190, fuel: 118,
+    terrain: { archetype: 'canyon' },
+    pads: [{ mult: 5, width: 120, fragile: 16 }],
+    optionalObjective: { id: 'perfect', text: 'Set down without cracking the bridge', reward: { cores: 1 } },
+    enemyBudget: 0,
+  },
+  {
+    id: 'europa-3', planet: 'EUROPA', index: 3, name: 'RADIATION PASS',
+    brief: 'Jupiter sweeps this face on a cycle. Ice blades throw a long shadow — the sheltered route is slower, and it is the one that keeps your instruments honest.',
+    width: 3100, relief: 320, detail: 1.4, rough: 220, fuel: 116,
+    terrain: { archetype: 'ridge' },
+    pads: [{ mult: 3, width: 125 }, { mult: 2, width: 175 }],
+    hazards: [{ type: 'radiation', period: 15, duty: 0.45, rate: 30 }],
+    optionalObjective: { id: 'low-rads', text: 'Land with radiation exposure under 30%', reward: { data: 45 } },
+    enemyBudget: 0, fuelCells: 2,
+  },
+  {
+    id: 'europa-4', planet: 'EUROPA', index: 4, name: 'UNDER-ICE SIGNAL',
+    brief: 'A fractured shelf with something buried under it. The corridor is tight, the ceiling is ice, and neither forgives a fast approach.',
+    width: 3200, relief: 260, detail: 1.6, rough: 200, fuel: 126,
+    terrain: { archetype: 'canyon' }, cave: true, clearance: 290,
+    pads: [{ mult: 3, width: 130 }],
+    hazards: [{ type: 'radiation', period: 18, duty: 0.35, rate: 22 }],
+    optionalObjective: { id: 'no-ability', text: 'Complete without using the active ability', reward: { cores: 1 } },
+    enemyBudget: 2, enemySets: ['magnetic-mine'], fuelCells: 2,
+  },
+  {
+    id: 'europa-5', planet: 'EUROPA', index: 5, name: 'DRIFTING PLATE',
+    brief: 'Separated floes, a fragile plate at the centre of them, and Jupiter overhead. Everything Europa has taught you, on ice that will not hold a mistake.',
+    width: 3300, relief: 300, detail: 1.5, rough: 230, fuel: 124,
+    terrain: { archetype: 'caldera' },
+    pads: [{ mult: 5, width: 96, fragile: 14 }, { mult: 2, width: 180 }],
+    hazards: [{ type: 'radiation', period: 13, duty: 0.5, rate: 32 }],
+    optionalObjective: { id: 'perfect', text: 'Set down on the plate without cracking it', reward: { cores: 2 } },
+    enemyBudget: 1, enemySets: ['magnetic-mine'], fuelCells: 3,
+  },
+];
+
+export const EUROPA_LEVELS = EUROPA_MISSIONS.map(missionToLevel);
+
 export const CHAPTERS = {
   moon: { id: 'moon', planet: 'LUNA', title: 'THE MOON', levels: MOON_LEVELS },
   mars: { id: 'mars', planet: 'MARS', title: 'MARS', levels: MARS_LEVELS },
+  europa: { id: 'europa', planet: 'EUROPA', title: 'EUROPA', levels: EUROPA_LEVELS },
 };

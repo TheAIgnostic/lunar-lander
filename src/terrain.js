@@ -205,6 +205,7 @@ export class Terrain {
         x1: i1 * this.step, x2: i2 * this.step,
         y, y1: this.h[i1], y2: this.h[i2], slope,
         mult: specPad.mult, kind: anchor ? anchor.kind : 'flat', used: false, i1, i2,
+        fragile: specPad.fragile || 0,
       });
     });
     return pads;

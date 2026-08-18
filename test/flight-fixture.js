@@ -8,14 +8,14 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { Terrain } from '../src/terrain.js';
 import { flyMission } from './pilot.js';
 import { LEVELS } from '../src/levels.js';
-import { MOON_LEVELS, MARS_LEVELS } from '../src/missions.js';
+import { MOON_LEVELS, MARS_LEVELS, EUROPA_LEVELS } from '../src/missions.js';
 
 const FIXTURE = new URL('./flight-fixture.json', import.meta.url);
 const SEEDS = [12345, 777, 2024];
 
 function measure() {
   const out = {};
-  for (const lvl of [...LEVELS, ...MOON_LEVELS, ...MARS_LEVELS]) {
+  for (const lvl of [...LEVELS, ...MOON_LEVELS, ...MARS_LEVELS, ...EUROPA_LEVELS]) {
     out[lvl.id] = SEEDS.map((seed) => {
       const r = flyMission(lvl, new Terrain(lvl, seed), {});
       return `${r.outcome}/${r.grade}/${r.fuelLeft}/${r.simSecs}`;

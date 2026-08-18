@@ -17,7 +17,7 @@ export function freshStatus() {
 
 /** Environment readings a force can write and the renderer/HUD can read. */
 export function freshEnv() {
-  return { visibility: 1, dust: 0 };
+  return { visibility: 1, dust: 0, radiationSweep: 0, shielded: false };
 }
 
 /**
@@ -133,7 +133,41 @@ function windChannels(cfg) {
   };
 }
 
-const BUILDERS = { atmosphere, thermal, cryo, plumes, dust, windChannels };
+/**
+ * Radiation sweeps. Jupiter floods the surface on a cycle; terrain shields it.
+ * The check is deliberately simple and readable from the cockpit: if there is
+ * ground higher than you within a short distance, you are in its lee.
+ */
+function radiation(cfg) {
+  const period = cfg.period || 16;
+  const duty = cfg.duty != null ? cfg.duty : 0.4;
+  const rate = cfg.rate || 26;
+  const shieldReach = cfg.shieldReach || 220;
+  return {
+    id: 'radiation',
+    apply(ship, level, t, dt, terrain) {
+      const phase = (t / period + (cfg.offset || 0)) % 1;
+      const active = phase < duty;
+      ship.env.radiationSweep = active ? 1 - Math.abs(phase / duty - 0.5) * 2 : 0;
+      if (!active) {
+        ship.statusLevels.radiation = Math.max(0, ship.statusLevels.radiation - rate * 0.5 * dt);
+        ship.env.shielded = false;
+        return;
+      }
+      let shielded = false;
+      if (terrain) {
+        for (const dx of [-shieldReach, -shieldReach / 2, shieldReach / 2, shieldReach]) {
+          if (terrain.heightAt(ship.x + dx) < ship.y - 40) { shielded = true; break; }
+        }
+      }
+      ship.env.shielded = shielded;
+      const take = shielded ? rate * 0.15 : rate;
+      ship.statusLevels.radiation = Math.min(100, ship.statusLevels.radiation + take * dt);
+    },
+  };
+}
+
+const BUILDERS = { atmosphere, thermal, cryo, plumes, dust, windChannels, radiation };
 
 /**
  * Force list for a level, built once and cached on it. Legacy levels declare
@@ -153,12 +187,12 @@ export function forcesFor(level) {
 }
 
 /** Apply every force for one step. */
-export function applyForces(ship, level, t, dt) {
+export function applyForces(ship, level, t, dt, terrain) {
   const list = forcesFor(level);
   if (!ship.env) ship.env = freshEnv();
   if (!ship.statusLevels) ship.statusLevels = freshStatus();
   ship.env.visibility = level.visibility != null ? level.visibility : 1;
   ship.env.dust = 0;
   if (!list.length) { ship.windNow = 0; return; }
-  for (const f of list) f.apply(ship, level, t, dt);
+  for (const f of list) f.apply(ship, level, t, dt, terrain);
 }

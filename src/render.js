@@ -201,6 +201,8 @@ export function drawTerrain(ctx, cam, W, H, terrain, level, time) {
     ctx.lineTo(p.x2, py2);
     ctx.stroke();
 
+    ctx.setLineDash([]);
+
     // Approach markers
     ctx.lineWidth = 1.5 / cam.scale + 0.5;
     ctx.globalAlpha = 0.35 + 0.35 * pulse;
@@ -216,6 +218,10 @@ export function drawTerrain(ctx, cam, W, H, terrain, level, time) {
     ctx.font = `700 ${18}px ${FONT}`;
     ctx.textAlign = 'center';
     ctx.fillText(p.used ? 'SECURED' : `x${p.mult}`, (p.x1 + p.x2) / 2, p.y - 44);
+    if (p.fragile && !p.used) {
+      ctx.font = `600 11px ${FONT}`;
+      ctx.fillText(`ICE · max ${(p.fragile / 6).toFixed(1)} m/s`, (p.x1 + p.x2) / 2, p.y - 28);
+    }
     ctx.restore();
   }
 
@@ -500,12 +506,20 @@ export function drawHUD(ctx, W, H, g) {
   ctx.textAlign = 'right';
   ctx.fillText(`${Math.round(fuelPct * 100)}%`, bx + bw, py + 22 * s);
 
+  const rad = ship.statusLevels ? ship.statusLevels.radiation : 0;
+  const noise = clamp(rad / 100, 0, 1) * (ship.env && ship.env.shielded ? 0.25 : 1);
+
   const rowY = py + 66 * s;
   const gap = 26 * s;
-  readout(ctx, 'ALT', `${alt.toFixed(0)}m`, px + 14, rowY, s, '#dff6ff');
-  readout(ctx, 'V-SPD', `${Math.abs(ship.vy / 6).toFixed(1)}`, px + 14, rowY + gap, s, st.vy ? GREEN : RED,
+  // Radiation scrambles the instruments long before it does anything else -
+  // a consequence the player can read without a damage model.
+  const fuzz = (v, d = 1) => (noise > 0.25
+    ? (v + (Math.random() - 0.5) * noise * (d === 0 ? 14 : 4)).toFixed(d)
+    : v.toFixed(d));
+  readout(ctx, 'ALT', `${fuzz(alt, 0)}m`, px + 14, rowY, s, '#dff6ff');
+  readout(ctx, 'V-SPD', `${fuzz(Math.abs(ship.vy / 6))}`, px + 14, rowY + gap, s, st.vy ? GREEN : RED,
     ship.vy < 0 ? '↑' : '↓');
-  readout(ctx, 'H-SPD', `${Math.abs(ship.vx / 6).toFixed(1)}`, px + 14, rowY + gap * 2, s, st.vx ? GREEN : RED,
+  readout(ctx, 'H-SPD', `${fuzz(Math.abs(ship.vx / 6))}`, px + 14, rowY + gap * 2, s, st.vx ? GREEN : RED,
     ship.vx < 0 ? '←' : '→');
 
   // tilt bubble on the right of the stack
@@ -580,6 +594,26 @@ export function drawHUD(ctx, W, H, g) {
     ctx.moveTo(wx + dir * len * 0.5, wy + 8);
     ctx.lineTo(wx + dir * len * 0.5 - dir * 8, wy + 13);
     ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  // ---- radiation state
+  if (ship.env && (ship.env.radiationSweep > 0.02 || rad > 1)) {
+    const rx = W / 2 - 80;
+    const ry = py + (level.wind || level.gust ? 104 * s : 60 * s);
+    panel(ctx, rx, ry - 22, 160, 44, 'rgba(126,242,208,0.35)');
+    ctx.textAlign = 'center';
+    ctx.font = `600 10px ${FONT}`;
+    ctx.fillStyle = 'rgba(160,190,215,0.75)';
+    ctx.fillText(ship.env.shielded ? 'RADIATION · SHIELDED' : 'RADIATION', W / 2, ry - 8);
+    const bw = 132;
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(W / 2 - bw / 2, ry + 2, bw, 8);
+    const col = ship.env.shielded ? '#7ef2d0' : rad > 60 ? RED : AMBER;
+    ctx.fillStyle = col;
+    ctx.shadowColor = col;
+    ctx.shadowBlur = ship.env.radiationSweep > 0.4 && !ship.env.shielded ? 14 : 4;
+    ctx.fillRect(W / 2 - bw / 2, ry + 2, bw * clamp(rad / 100, 0, 1), 8);
     ctx.shadowBlur = 0;
   }
 

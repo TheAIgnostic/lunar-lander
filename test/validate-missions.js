@@ -6,7 +6,7 @@ import { validateTerrain } from '../src/validate.js';
 import { flyMission } from './pilot.js';
 import { LEVELS } from '../src/levels.js';
 import { ARCHETYPE_NAMES } from '../src/archetypes.js';
-import { MOON_LEVELS, MARS_LEVELS } from '../src/missions.js';
+import { MOON_LEVELS, MARS_LEVELS, EUROPA_LEVELS } from '../src/missions.js';
 
 const SEEDS = +(process.argv[2] || 12);
 let hardFail = 0;
@@ -102,6 +102,11 @@ for (const level of MOON_LEVELS) {
 
 console.log(`\nvalidating the Mars chapter\n`);
 for (const level of MARS_LEVELS) {
+  assess(`${level.id} ${level.title}`, level, seedList);
+}
+
+console.log(`\nvalidating the Europa chapter\n`);
+for (const level of EUROPA_LEVELS) {
   assess(`${level.id} ${level.title}`, level, seedList);
 }
 
