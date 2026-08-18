@@ -219,3 +219,34 @@ pays for hovering, fighting the air, and hazards. Titan's planet drag also sat a
 **The risk split works as specified:** half of salvage is transmitted on pickup and half rides as
 cargo; research data is never lost; tech cores need the lander down safely. A lost expedition keeps
 the transmitted half and the research, and loses the cargo — 34 assertions cover it.
+
+
+---
+
+## M10 — hangar and permanent components
+
+Five tracks at four levels, each wired to something the simulation already reads — no cosmetic
+percentages:
+
+| Track | What it actually changes |
+| --- | --- |
+| Landing Gear | `LANDING.gearTier` (the whole landing envelope), rebound, slope hold |
+| Engine & Tanks | fuel capacity, burn per second, thrust |
+| Attitude Thrusters | RCS authority, RCS burn, direct-mode side thrust |
+| Hull | integrity, and how much a hard landing takes off it |
+| Sensors | prediction length, beacon strength, hazard lead, instrument noise resistance |
+
+**Hull damage is now real.** A HARD or off-pad landing costs integrity scaled by how far past the
+safe descent rate it arrived; run it to zero and the lander is lost on touchdown. That gives the
+Hull track a consumer and makes a hard landing cost something beyond a smaller payout.
+
+**Upgrades cannot stack twice**, which is the acceptance criterion that matters for a save system.
+The loadout is *derived* from the stored levels each time a mission starts and applied to a per-run
+ship spec; the shared `SHIP` constants are never mutated. Verified: applying the same loadout twice
+leaves `spec.thrust` identical, and `SHIP.thrust` is untouched after a level-4 install.
+
+Verified in the game: two gear installs plus one engine install spent 1,400 salvage and 165
+Ilmenite exactly, and the next mission started with gear tier 1.25 and a 143-unit tank against the
+mission's base 124.
+
+**A refused purchase says why**: *"Needs 600 more salvage, 105 more Ilmenite alloy stock."*

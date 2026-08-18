@@ -13,6 +13,7 @@ import { PLANETS, gravityFor } from './planets.js';
 import * as Save from './save.js';
 import { missionReward, addReward, settleHaul } from './economy.js';
 import { routeOffers, isCheckpoint } from './route.js';
+import { COMPONENTS, COMPONENT_IDS, deriveLoadout, purchaseCheck, purchase } from './components.js';
 import * as R from './render.js';
 import { Debug } from './debug.js';
 import { spawnFor } from './spawn.js';
@@ -145,10 +146,16 @@ function startLevel(index, freshSeed = true) {
   g.backdrop = R.buildBackdrop(level, g.terrain, g.seed);
   particles.clear();
 
+  // Derived fresh from the saved component levels each time a mission starts,
+  // so an upgrade can never be applied twice.
+  const loadout = deriveLoadout(meta.componentLevels);
+  ship.applyLoadout(loadout);
+  g.loadout = loadout;
+
   const start = spawnFor(level, g.terrain);
   const sx = start.x;
   const sy = start.y;
-  ship.reset(sx, sy, level.fuel);
+  ship.reset(sx, sy, Math.round(level.fuel * (loadout.fuelCapacity || 1)));
   ship.vx = start.vx;
   ship.vy = start.vy;
 
@@ -537,6 +544,25 @@ function renderOverlay() {
   }
   overlay.className = '';
   overlay.innerHTML = screenHTML(s);
+  if (s === 'hangar') drawHangarPreview();
+}
+
+/** The large lander in the hangar, redrawn whenever the selection changes. */
+function drawHangarPreview() {
+  const c = document.getElementById('hangar-view');
+  if (!c) return;
+  const cx = c.getContext('2d');
+  const grd = cx.createLinearGradient(0, 0, 0, c.height);
+  grd.addColorStop(0, '#070d1a');
+  grd.addColorStop(1, '#05060c');
+  cx.fillStyle = grd;
+  cx.fillRect(0, 0, c.width, c.height);
+  cx.strokeStyle = 'rgba(95,245,255,0.10)';
+  cx.lineWidth = 1;
+  for (let y = 40; y < c.height; y += 40) {
+    cx.beginPath(); cx.moveTo(0, y); cx.lineTo(c.width, y); cx.stroke();
+  }
+  R.drawHangarShip(cx, c.width / 2, c.height / 2 + 10, 4.2, meta.componentLevels, g.hangarPick || 'gear', g.time);
 }
 
 function screenHTML(s) {
@@ -558,6 +584,7 @@ function screenHTML(s) {
           ${btn('select', 'MISSIONS')}
           ${btn('endless', 'ENDLESS RUN')}
           ${btn('help', 'HOW TO FLY')}
+          ${btn('hangar', 'HANGAR')}
           ${btn('settings', 'SETTINGS')}
         </div>
         <div class="foot">${audio.muted ? '🔇' : '🔊'} press M to ${audio.muted ? 'unmute' : 'mute'}</div>
@@ -717,6 +744,50 @@ function screenHTML(s) {
       </div>`;
     }
 
+    case 'hangar': {
+      const b = meta.banked;
+      const sel = g.hangarPick || 'gear';
+      const comp = COMPONENTS[sel];
+      const level = Math.max(1, meta.componentLevels[sel] || 1);
+      const check = purchaseCheck(sel, meta.componentLevels, b);
+      const cur = comp.levels[level - 1];
+      const next = level < 4 ? comp.levels[level] : null;
+      const mats = Object.entries(b.materials || {}).filter(([, v]) => v > 0);
+
+      const tabs = COMPONENT_IDS.map((id) => {
+        const lv = Math.max(1, meta.componentLevels[id] || 1);
+        return `<button class="tile comp${id === sel ? ' on' : ''}" data-action="pick:${id}">
+          <span class="world">${COMPONENTS[id].name}</span>
+          <span class="pips">${'▮'.repeat(lv)}${'▯'.repeat(4 - lv)}</span>
+        </button>`;
+      }).join('');
+
+      return `<div class="screen wide hangar">
+        <div class="eyebrow" style="color:#5ff5ff">HANGAR</div>
+        <h2>${comp.name} · LEVEL ${level}</h2>
+        <div class="hangar-grid">
+          <canvas id="hangar-view" width="340" height="300"></canvas>
+          <div class="hangar-detail">
+            <p class="body">${comp.blurb}</p>
+            <table class="score">
+              <tr><td>Now</td><td>${cur.describe}</td></tr>
+              ${next ? `<tr class="tot"><td>Next</td><td>${next.describe}</td></tr>` : '<tr class="tot"><td>Next</td><td>—</td></tr>'}
+            </table>
+            ${next ? `<div class="cost">
+              <span>COST</span> ${next.cost.salvage} salvage${Object.entries(next.cost.materials || {}).map(([m, v]) => ` · ${v} ${m}`).join('')}
+            </div>` : ''}
+            ${check.ok
+              ? btn(`buy:${sel}`, 'INSTALL', true)
+              : `<div class="notice">${check.reason}</div>`}
+          </div>
+        </div>
+        <div class="grid comps">${tabs}</div>
+        <div class="stats"><span>BANKED</span><b>${formatScore(b.salvage)} salvage · ${formatScore(b.data)} data · ${b.cores} cores</b></div>
+        ${mats.length ? `<div class="mats">${mats.map(([m, v]) => `<span>${v} <i>${m}</i></span>`).join('')}</div>` : ''}
+        <div class="btns">${btn('back', 'LEAVE HANGAR', true, 'SPACE')}</div>
+      </div>`;
+    }
+
     case 'route':
     case 'checkpoint': {
       const run = g.run;
@@ -822,6 +893,19 @@ function act(action) {
     beginExpedition(action.slice(8));
     return;
   }
+  if (action.startsWith('pick:')) { g.hangarPick = action.slice(5); renderOverlay(); return; }
+  if (action.startsWith('buy:')) {
+    const id = action.slice(4);
+    const result = purchase(id, meta.componentLevels, meta.banked);
+    if (result) {
+      meta.banked = result.banked;
+      meta.componentLevels = result.componentLevels;
+      Save.saveMeta(meta);
+      audio.arpeggio([523.25, 659.25, 880], 0.07);
+    }
+    renderOverlay();
+    return;
+  }
   if (action.startsWith('route:')) {
     const card = (g.routeOffers || [])[+action.slice(6)];
     if (!card || !g.run) return;
@@ -889,6 +973,7 @@ function act(action) {
       startLevel(LEVELS.length);
       break;
     case 'select': setState('select'); break;
+    case 'hangar': setState('hangar'); break;
     case 'settings': g.settingsFrom = g.state; setState('settings'); break;
     case 'help': setState('help'); break;
     case 'back': setState(g.settingsFrom === 'paused' ? 'paused' : 'menu'); g.settingsFrom = null; break;

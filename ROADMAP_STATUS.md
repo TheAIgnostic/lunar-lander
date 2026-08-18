@@ -206,7 +206,17 @@ scheduled until the MVP is stable — the spec says the same.
     leads somewhere real — all ten bodies validate structural 30/30 and reachable 30/30
   - sector checkpoint every two chapters: banks the haul, restores shuttles, advances the sector
   - the run now spans bodies: clear a chapter, choose the next leg, keep your shuttles and your haul
-- [ ] M10 — hangar
+- [x] **M10 — hangar and components** (this commit)
+  - five four-level tracks — gear, engine, RCS, hull, sensors — each changing a value the
+    simulation reads, with salvage and planetary-material costs
+  - the lander drawn at scale in the hangar, with the selected component highlighted **on the ship**:
+    struts thicken, tanks multiply, nozzles appear, plating layers, the sensor mast grows a dish
+  - hull damage implemented, so the Hull track has a consumer and a hard landing costs something
+    that persists
+  - upgrades are derived per mission from the saved levels onto a per-run ship spec, never mutated
+    onto the shared constants — the "cannot stack twice after loading" criterion, with a test
+  - a refused purchase names exactly what is missing
+- [ ] M11 — skills + loadout
 
 ## Decisions (Tom, 2026-08-16)
 
@@ -225,9 +235,9 @@ None.
 
 ## Next task
 
-**M10 — hangar.** The close-up ship scene: four component tracks (Hull, Gear, Engine/Fuel, Sensors)
-at four levels each, material costs against what M9 now banks, before/after stats, and visible
-changes to the lander itself. The landing-gear tier already has its hook in `LANDING.gearTier`.
+**M11 — skills and loadout.** Three trees of four nodes each spending research data, plus one active
+and one passive module slot with the first module set (Laser, Shield, Sensor Pulse; Fuel Recycler,
+Gyro Stabilizer, Ice Cleats) and the blueprint guarantee during the Moon chapter.
 
 ### Known findings
 

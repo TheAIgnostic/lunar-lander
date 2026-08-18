@@ -6,6 +6,7 @@ echo "=== unit: landing grader ==="   && node test/landing-tests.js  | tail -2
 echo "=== unit: forces + planets ===" && node test/forces-tests.js   | tail -2
 echo "=== unit: save + migration ===" && node test/save-tests.js | tail -2
 echo "=== unit: route + economy ===" && node test/route-tests.js | tail -2
+echo "=== unit: components ===" && node test/components-tests.js | tail -2
 echo "=== unit: terrain grammar ===" && node test/terrain-tests.js  | tail -2
 echo "=== regression: physics (no pilot) ===" && node test/physics-fixture.js | tail -2
 echo "=== regression: flight outcomes ===" && node test/flight-fixture.js | tail -2

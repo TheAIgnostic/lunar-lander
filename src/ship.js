@@ -46,6 +46,26 @@ export class Ship {
     this.reset(0, 0, 100);
   }
 
+  /** Apply a loadout: a derived spec, so a reloaded save cannot stack it twice. */
+  applyLoadout(loadout) {
+    const l = loadout || {};
+    this.spec = {
+      ...SHIP,
+      thrust: SHIP.thrust * (l.thrust || 1),
+      rcsAccel: SHIP.rcsAccel * (l.rcsAccel || 1),
+      sideThrust: SHIP.sideThrust * (l.sideThrust || 1),
+      burnMain: SHIP.burnMain * (l.burnMain || 1),
+      burnRcs: SHIP.burnRcs * (l.burnRcs || 1),
+      burnSide: SHIP.burnSide * (l.burnRcs || 1),
+    };
+    this.gearTier = l.gearTier || 1;
+    this.restitution = l.restitution;
+    this.impactResist = l.impactResist || 1;
+    this.hullMax = Math.round(100 * (l.hullMax || 1));
+    this.loadout = l;
+    return this.spec;
+  }
+
   reset(x, y, fuel) {
     this.x = x;
     this.y = y;
@@ -73,6 +93,8 @@ export class Ship {
     this.vxHistory = [];
     this.statusLevels = freshStatus();
     this.env = freshEnv();
+    if (!this.spec) this.applyLoadout(null);
+    this.hull = this.hullMax;
   }
 
   /** Median of the recent samples, so one freak frame cannot define an impact. */
@@ -110,17 +132,17 @@ export class Ship {
     this.direct = settings.steering === 'direct';
 
     let burn = 0;
-    if (this.thrusting) burn += SHIP.burnMain;
-    if (this.rcsLeft) burn += this.direct ? SHIP.burnSide : SHIP.burnRcs;
-    if (this.rcsRight) burn += this.direct ? SHIP.burnSide : SHIP.burnRcs;
-    if (this.holding && !this.direct) burn += SHIP.burnHold;
+    if (this.thrusting) burn += this.spec.burnMain;
+    if (this.rcsLeft) burn += this.direct ? this.spec.burnSide : this.spec.burnRcs;
+    if (this.rcsRight) burn += this.direct ? this.spec.burnSide : this.spec.burnRcs;
+    if (this.holding && !this.direct) burn += this.spec.burnHold;
     this.fuel = Math.max(0, this.fuel - burn * dt);
 
     if (this.direct) {
       // DIRECT mode: the side thrusters translate instead of rotating, and the
       // hull holds itself upright. Left means left, with no attitude to fly.
-      if (this.rcsLeft) this.vx -= SHIP.sideThrust * dt;
-      if (this.rcsRight) this.vx += SHIP.sideThrust * dt;
+      if (this.rcsLeft) this.vx -= this.spec.sideThrust * dt;
+      if (this.rcsRight) this.vx += this.spec.sideThrust * dt;
       this.spin *= Math.pow(0.86, dt * 60);
       this.angle += this.spin * dt;
       this.angle -= this.angle * Math.min(1, dt * 7);   // ease back to level
@@ -128,14 +150,14 @@ export class Ship {
     } else {
       // CLASSIC mode: side burners are attitude control.
       const dir = settings.invertRotation ? -1 : 1;
-      if (this.rcsLeft) this.spin -= SHIP.rcsAccel * dir * dt;
-      if (this.rcsRight) this.spin += SHIP.rcsAccel * dir * dt;
+      if (this.rcsLeft) this.spin -= this.spec.rcsAccel * dir * dt;
+      if (this.rcsRight) this.spin += this.spec.rcsAccel * dir * dt;
       if (this.holding) {
         const damp = Math.sign(this.spin) * Math.min(Math.abs(this.spin), 6 * dt);
         this.spin -= damp;
       }
-      this.spin = clamp(this.spin, -SHIP.maxSpin, SHIP.maxSpin);
-      this.spin *= Math.pow(SHIP.spinDamp, dt * 60);
+      this.spin = clamp(this.spin, -this.spec.maxSpin, this.spec.maxSpin);
+      this.spin *= Math.pow(this.spec.spinDamp, dt * 60);
       this.angle += this.spin * dt;
     }
 
@@ -143,8 +165,8 @@ export class Ship {
     const throttleTarget = this.thrusting ? 1 : 0;
     this.throttle += (throttleTarget - this.throttle) * Math.min(1, dt * 14);
     if (this.thrusting) {
-      this.vx += this.noseX * SHIP.thrust * dt;
-      this.vy += this.noseY * SHIP.thrust * dt;
+      this.vx += this.noseX * this.spec.thrust * dt;
+      this.vy += this.noseY * this.spec.thrust * dt;
     }
     this.vy += level.gravity * dt;
 
@@ -233,16 +255,16 @@ export class Ship {
       this.rcsLeft = this.input.left && hasFuel;
       this.rcsRight = this.input.right && hasFuel;
       let burn = 0;
-      if (this.thrusting) burn += SHIP.burnMain;
-      if (this.rcsLeft || this.rcsRight) burn += SHIP.burnRcs;
+      if (this.thrusting) burn += this.spec.burnMain;
+      if (this.rcsLeft || this.rcsRight) burn += this.spec.burnRcs;
       this.fuel = Math.max(0, this.fuel - burn * dt);
       this.throttle += ((this.thrusting ? 1 : 0) - this.throttle) * Math.min(1, dt * 14);
       if (this.thrusting) {
-        this.vx += this.noseX * SHIP.thrust * dt;
-        this.vy += this.noseY * SHIP.thrust * dt;
+        this.vx += this.noseX * this.spec.thrust * dt;
+        this.vy += this.noseY * this.spec.thrust * dt;
       }
-      if (this.rcsLeft) this.spin -= SHIP.rcsAccel * 0.5 * dt;
-      if (this.rcsRight) this.spin += SHIP.rcsAccel * 0.5 * dt;
+      if (this.rcsLeft) this.spin -= this.spec.rcsAccel * 0.5 * dt;
+      if (this.rcsRight) this.spin += this.spec.rcsAccel * 0.5 * dt;
     }
 
     this.vy += level.gravity * dt;
@@ -284,7 +306,7 @@ export class Ship {
         td.peakVy = Math.max(td.peakVy, this.vy);
         // Only a real rebound counts as a bounce; micro-settling does not.
         if (this.vy > LANDING.restSpeed) td.bounces++;
-        this.vy = -this.vy * LANDING.restitution;
+        this.vy = -this.vy * (this.restitution != null ? this.restitution : LANDING.restitution);
         if (Math.abs(this.vy) < 4) this.vy = 0;
       }
       const grip = LANDING.groundFriction ** (level.surfaceFriction != null ? level.surfaceFriction : 1);
@@ -326,10 +348,11 @@ export class Ship {
     const speed = Math.hypot(this.vx, this.vy);
     const stable = speed < LANDING.restSpeed && Math.abs(normalizeAngle(this.angle)) < capsFor('tilt').safe;
 
+    const cfg = this.gearTier !== 1 ? { ...LANDING, gearTier: this.gearTier } : LANDING;
     const result = evaluateLanding({
       vy: td.vy, vx: td.vx, tilt: td.tilt,
       centerFrac, onPad, hullContact: td.hull, stable,
-    });
+    }, cfg);
     this.landingResult = {
       ...result, onPad, centerFrac, bounces: td.bounces, settleTime: td.t,
       instantVy: td.instantVy, peakVy: td.peakVy,
@@ -360,6 +383,21 @@ export class Ship {
     }
     this.pad = pad;
     this.quality = result.grade;
+
+    // A hard arrival is survivable but not free: it costs hull, and a lander
+    // with no hull left does not fly again.
+    if (result.grade === 'HARD' || this.offPad) {
+      const over = Math.max(0, td.vy - capsFor('vy', cfg).safe);
+      const damage = Math.round((8 + over * 0.9) * this.impactResist);
+      this.hull = Math.max(0, this.hull - damage);
+      this.landingResult.hullDamage = damage;
+      this.landingResult.hullLeft = this.hull;
+      if (this.hull <= 0) {
+        this.landingResult.grade = 'CRASH';
+        this.landingResult.blocker = 'The hull gave out on touchdown — nothing left to absorb it.';
+        return 'crash';
+      }
+    }
     return 'land';
   }
 

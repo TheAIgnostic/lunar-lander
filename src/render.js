@@ -441,6 +441,125 @@ export function drawTrajectory(ctx, ship, level, terrain, cam) {
   ctx.restore();
 }
 
+/**
+ * The lander drawn large, with the upgrades visible on the hull. Selecting a
+ * component highlights the physical part it is - the roadmap's requirement that
+ * an upgrade shows on the ship, not only in a number.
+ */
+export function drawHangarShip(ctx, cx, cy, scale, levels, highlight, time) {
+  const L = (id) => Math.max(1, Math.min(4, (levels || {})[id] || 1));
+  const lit = (id) => (highlight === id ? '#ffffff' : null);
+  const pulse = 0.65 + 0.35 * Math.sin(time * 3);
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(scale, scale);
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+
+  const glow = (color, blur) => { ctx.shadowColor = color; ctx.shadowBlur = blur; };
+
+  // --- engine bell and tanks grow with the engine track
+  const eng = L('engine');
+  glow(highlight === 'engine' ? '#ffffff' : AMBER, highlight === 'engine' ? 26 * pulse : 12);
+  ctx.strokeStyle = lit('engine') || AMBER;
+  ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  ctx.moveTo(-5, 5); ctx.lineTo(-7 - eng, 11 + eng * 1.6);
+  ctx.lineTo(7 + eng, 11 + eng * 1.6); ctx.lineTo(5, 5);
+  ctx.stroke();
+  for (let i = 0; i < eng - 1; i++) {
+    const side = i % 2 === 0 ? -1 : 1;
+    const row = Math.floor(i / 2);
+    ctx.beginPath();
+    ctx.ellipse(side * (13 + row * 4), 0 + row * 2, 3.4, 7, 0, 0, TAU);
+    ctx.stroke();
+  }
+
+  // --- gear: struts thicken, footpads widen
+  const gear = L('gear');
+  glow(highlight === 'gear' ? '#ffffff' : '#9fe8ff', highlight === 'gear' ? 26 * pulse : 10);
+  ctx.strokeStyle = lit('gear') || '#9fe8ff';
+  ctx.lineWidth = 1.6 + gear * 0.5;
+  const spread = 16 + gear * 1.6;
+  const foot = 8 + gear * 2;
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(side * 9, 5);
+    ctx.lineTo(side * spread, 16);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(side * (spread - foot / 2), 16);
+    ctx.lineTo(side * (spread + foot / 2), 16);
+    ctx.stroke();
+    if (gear >= 3) {   // damper strut
+      ctx.beginPath();
+      ctx.moveTo(side * 11, -1);
+      ctx.lineTo(side * (spread - 2), 12);
+      ctx.stroke();
+    }
+  }
+
+  // --- hull: plating layers
+  const hull = L('hull');
+  glow(highlight === 'hull' ? '#ffffff' : CYAN, highlight === 'hull' ? 30 * pulse : 16);
+  ctx.beginPath();
+  HULL.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(10,26,40,0.95)';
+  ctx.fill();
+  ctx.strokeStyle = lit('hull') || CYAN;
+  ctx.lineWidth = 1.6 + hull * 0.45;
+  ctx.stroke();
+  for (let i = 1; i < hull; i++) {
+    ctx.beginPath();
+    ctx.moveTo(-11 + i * 1.5, -1 + i * 1.6);
+    ctx.lineTo(11 - i * 1.5, -1 + i * 1.6);
+    ctx.stroke();
+  }
+
+  // --- rcs nozzles
+  const rcs = L('rcs');
+  glow(highlight === 'rcs' ? '#ffffff' : '#bff8ff', highlight === 'rcs' ? 26 * pulse : 8);
+  ctx.strokeStyle = lit('rcs') || '#bff8ff';
+  ctx.lineWidth = 1.6;
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < rcs; i++) {
+      ctx.beginPath();
+      ctx.moveTo(side * 11, -6 + i * 3.5);
+      ctx.lineTo(side * (14 + rcs), -7 + i * 3.5);
+      ctx.stroke();
+    }
+  }
+
+  // --- sensors: antenna and dish
+  const sen = L('sensors');
+  glow(highlight === 'sensors' ? '#ffffff' : '#7ef2d0', highlight === 'sensors' ? 26 * pulse : 10);
+  ctx.strokeStyle = lit('sensors') || '#7ef2d0';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(0, -15);
+  ctx.lineTo(0, -18 - sen * 3);
+  ctx.stroke();
+  if (sen >= 2) {
+    ctx.beginPath();
+    ctx.arc(0, -19 - sen * 3, 2 + sen * 0.7, Math.PI, 0);
+    ctx.stroke();
+  }
+  if (sen >= 4) {
+    ctx.beginPath();
+    ctx.arc(0, -19 - sen * 3, 5 + sen, Math.PI * 1.15, Math.PI * 1.85);
+    ctx.stroke();
+  }
+
+  ctx.shadowBlur = 0;
+  ctx.beginPath();
+  ctx.arc(0, -6, 3.4, 0, TAU);
+  ctx.fillStyle = '#bff8ff';
+  ctx.fill();
+  ctx.restore();
+}
+
 // ---------------------------------------------------------------- HUD
 
 function panel(ctx, x, y, w, h, accent = 'rgba(95,245,255,0.25)') {
