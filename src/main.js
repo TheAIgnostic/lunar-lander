@@ -10,6 +10,7 @@ import { Ship, ENVELOPE, normalizeAngle, DEFAULT_SETTINGS } from './ship.js';
 import { LANDING, capsFor } from './landing.js';
 import * as R from './render.js';
 import { Debug } from './debug.js';
+import { spawnFor } from './spawn.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -114,19 +115,12 @@ function startLevel(index, freshSeed = true) {
   g.backdrop = R.buildBackdrop(level, g.terrain, g.seed);
   particles.clear();
 
-  // Spawn a real flight away from the best-paying pad, but not so far that the
-  // transit alone empties the tanks: about a third of the map, roomier side.
-  const best = g.terrain.pads.reduce((a, b) => (b.mult > a.mult ? b : a), g.terrain.pads[0]);
-  const bestMid = (best.x1 + best.x2) / 2;
-  const dir = bestMid > level.width / 2 ? -1 : 1;
-  const sx = clamp(bestMid + dir * level.width * 0.3, 140, level.width - 140);
-  let sy = level.height * 0.14;
-  if (g.terrain.ceiling) {
-    sy = clamp((g.terrain.ceilingAt(sx) + g.terrain.heightAt(sx)) / 2, 0, level.height);
-  }
+  const start = spawnFor(level, g.terrain);
+  const sx = start.x;
+  const sy = start.y;
   ship.reset(sx, sy, level.fuel);
-  ship.vx = bestMid > sx ? 22 : -22;
-  ship.vy = 6;
+  ship.vx = start.vx;
+  ship.vy = start.vy;
 
   g.levelTime = 0;
   g.warn = { low: false, crit: false, dry: false };

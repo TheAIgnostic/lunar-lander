@@ -118,7 +118,25 @@ scheduled until the MVP is stable — the spec says the same.
   - 147 structural tests (`node test/terrain-tests.js`)
   - **classic 12 missions are byte-identical**: they stay on the `legacy` path, fuel and grades
     match `test/BASELINE.md` exactly
-- [ ] M3 — terrain validation
+- [x] **M3 — terrain validation** (this commit)
+  - `src/spawn.js`: the spawn rule extracted from the game loop, so validation tests the *real*
+    starting position and momentum rather than an assumed one
+  - `src/validate.js`: structural checks — spawn clearance, pad width and slope, a clear approach
+    corridor above every pad, cave corridor pinch points, unavoidable overhangs, and a delta-v
+    lower bound against the fuel budget
+  - `test/pilot.js`: the control law as a pure module, so missions fly in node with no browser
+  - `test/validate-missions.js`: structural + three real flights (direct, from the left, from the
+    right) across N seeds for every archetype, cave variant and classic mission
+  - the sweep separates what it can prove from what it can only evidence: structural problems fail
+    the run, flight failures are reported as warnings, because a failed flight may be the test
+    pilot's fault rather than the mission's
+  - pilot improvements found by the sweep: position-hold trim instead of velocity-hold, hold
+    altitude while off-target, and a wall-ahead guard gated to transit
+  - result: **all 7 archetypes and 3 cave variants 10/10 structurally valid and 10/10 landed**;
+    classic 1-10 clean; 11-12 reachable on every seed but pilot-limited under crosswind;
+    one warning — ICE CORRIDOR seed 1274, where geometry is sound (603 px corridor, 609 px
+    headroom) but the pilot strikes the ceiling
+- [ ] M4 — Moon chapter
 
 ## Decisions (Tom, 2026-08-16)
 
@@ -137,10 +155,17 @@ None.
 
 ## Next task
 
-**M3 — terrain validation.** Prove every generated mission is winnable before a player sees it:
-autopilot-driven reachability from the spawn state, at least two viable approach paths unless the
-mission intends one, no lethal terrain hidden until avoidance is impossible, and a seeded
-validation sweep that can run over hundreds of maps in seconds using the headless harness.
+**M4 — Moon chapter.** Author Moon 1-5 on the new grammar as data (`MissionDefinition`), using the
+crater/canyon/ridge archetypes: First Scar, Rille Run, Far-Side Relay, Silent Battery, Tycho
+Descent. Every mission must clear `test/validate-missions.js` on many seeds before it ships, and
+the classic campaign must stay untouched beside it.
+
+### Known findings
+
+- **ICE CORRIDOR seed 1274** — structurally sound but the test pilot cannot fly it. Worth a human
+  attempt before M7 reworks Europa; if a person lands it, the pilot needs the fix, not the mission.
+- **Crosswind (missions 11-12)** — the pilot reaches the pad on every seed but lands on 1/10 and
+  3/10. Human verification confirmed these are landable in earlier sessions.
 
 ### Done, for reference
 
