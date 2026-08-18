@@ -45,3 +45,29 @@ At seed 777 the same sweep also lands 10/12, so the result is not a property of 
 
 See `docs/ARCHITECTURE.md`. In short: thrust 130 px/s², RCS 5.0 rad/s², burn 9/3.2/5 per second,
 gravity 28–66 px/s², fixed 1/120 s timestep, envelope 11/7/3.5° · 20/13/8° · 34/22/15°.
+
+
+---
+
+## M1 verification (landing grade rework)
+
+Re-run after replacing the first-contact cutoffs with the combined severity score:
+
+- **Fuel left is identical to the baseline on all 12 missions** (checked to 0.05), and outcomes and
+  grades are unchanged. The grader changed; the flight model did not.
+- Unit tests: `node test/landing-tests.js` — 28 assertions covering every band boundary exactly on,
+  just under and just over, per-axis crash caps, the centre rule, the stable-settle promotion and
+  the gear-tier multiplier.
+- Anti-spike, measured in the running game by injecting a velocity spike one frame before contact:
+
+| Case | Instantaneous vy at contact | Graded on | Result |
+| --- | ---: | ---: | --- |
+| clean approach | 9.6 | 9.3 | PERFECT |
+| one-frame spike | **220.2** | 8.0 | **PERFECT** — spike rejected |
+| two-frame spike | **220.2** | 8.0 | **PERFECT** — spike rejected |
+| sustained fast descent | 60.2 | 60.0 | CRASH — genuine speed still kills |
+| off-centre at pad edge | 9.6 | 9.3 | completes (centre never fails a landing) |
+| 17° tilt | 8.2 | 8.0 | HARD |
+
+The impact figure is the median of the last five pre-contact samples, so one or two anomalous
+frames cannot manufacture a crash while a real descent rate still does.

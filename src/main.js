@@ -7,6 +7,7 @@ import { Terrain } from './terrain.js';
 import { LEVELS, endlessLevel, WORLDS } from './levels.js';
 import { Particles } from './particles.js';
 import { Ship, ENVELOPE, normalizeAngle, DEFAULT_SETTINGS } from './ship.js';
+import { LANDING, capsFor } from './landing.js';
 import * as R from './render.js';
 import { Debug } from './debug.js';
 
@@ -258,12 +259,12 @@ function onLand() {
   particles.ring(ship.x, surfaceY, 220, 0.45, '#5ff5ff');
   if (q === 'HARD') particles.sparks(ship.x, surfaceY, 16, 0);
   g.cam.trauma = Math.min(1, g.cam.trauma + (q === 'HARD' ? 0.6 : 0.28));
-  ship.settle(g.terrain);
+  ship.restOnPad(g.terrain);
   if (pad) pad.used = true;
   audio.silence();
   audio.touchdown(offPad ? 'HARD' : q);
 
-  const qf = ENVELOPE[q].q;
+  const qf = LANDING.quality[q];
   const landing = Math.round(100 * mult * qf);
   const fuelPts = Math.floor(ship.fuel) * 2;
   // Only a clean pad landing extends the streak.
@@ -275,7 +276,11 @@ function onLand() {
   particles.text(ship.x, surfaceY - 70, `${offPad ? 'OFF PAD' : q}  +${formatScore(total)}`,
     offPad ? '#ffb347' : q === 'PERFECT' ? '#4dff9f' : q === 'GOOD' ? '#5ff5ff' : '#ffb347', 26);
 
-  g.lastResult = { q, offPad, mult, qf, landing, fuelPts, comboMult, total, fuel: ship.fuel, time: g.levelTime };
+  g.lastResult = {
+    q, offPad, mult, qf, landing, fuelPts, comboMult, total,
+    fuel: ship.fuel, time: g.levelTime,
+    detail: ship.landingResult || null,
+  };
   store.setBest(g.level.id, total);
   if (g.score > store.high) { g.newRecord = true; store.high = g.score; }
   if (!g.endless) store.unlocked = g.levelIndex + 2;
@@ -511,6 +516,7 @@ function screenHTML(s) {
       return `<div class="screen">
         <div class="verdict" style="color:${color};text-shadow:0 0 30px ${color}">${head}</div>
         ${r.offPad ? '<p class="body">Level ground held the legs, but there is no bonus off the pad — and the streak resets.</p>' : ''}
+        ${r.detail ? metricsTable(r.detail) : ''}
         <table class="score">
           <tr><td>${r.offPad ? 'Open ground x1' : `Pad x${r.mult}`} · quality x${r.qf.toFixed(1)}</td><td>${formatScore(r.landing)}</td></tr>
           <tr><td>Fuel remaining ${r.fuel.toFixed(0)}</td><td>${formatScore(r.fuelPts)}</td></tr>
@@ -581,7 +587,35 @@ function screenHTML(s) {
   return '';
 }
 
+/** Post-landing breakdown: every number the grade was made of. */
+function metricsTable(d) {
+  const rows = [
+    ['DESCENT', `${(d.parts.vy.value / 6).toFixed(2)} m/s`, d.parts.vy, 'vy'],
+    ['DRIFT', `${(d.parts.vx.value / 6).toFixed(2)} m/s`, d.parts.vx, 'vx'],
+    ['TILT', `${(d.parts.tilt.value / DEG).toFixed(1)}°`, d.parts.tilt, 'tilt'],
+    ['PAD CENTRE', d.onPad ? `${Math.round(d.parts.center.value * 100)}% off` : 'off pad', d.parts.center, 'center'],
+  ].map(([name, shown, part, axis]) => {
+    const caps = capsFor(axis);
+    const band = part.value <= caps.perfect ? 'perfect' : part.value <= caps.safe ? 'good' : 'hard';
+    const pct = Math.min(100, (part.value / (caps.crash || 1)) * 100);
+    return `<tr class="m-${band}">
+      <td>${name}</td>
+      <td class="m-val">${shown}</td>
+      <td class="m-bar"><span style="width:${pct.toFixed(0)}%"></span></td>
+      <td class="m-w">+${part.weighted.toFixed(2)}</td>
+    </tr>`;
+  }).join('');
+  return `<table class="metrics">
+    ${rows}
+    <tr class="m-total"><td>SEVERITY</td><td class="m-val">${d.score.toFixed(2)}</td><td colspan="2">
+      ${d.blocker ? d.blocker : 'Textbook.'}${d.bounces > 1 ? ` ${d.bounces} bounces.` : ''}</td></tr>
+  </table>`;
+}
+
 function crashReason() {
+  if (ship.landingResult && ship.landingResult.blocker && ship.landingResult.grade === 'CRASH') {
+    return ship.landingResult.blocker;
+  }
   const tilt = Math.abs(normalizeAngle(ship.angle)) / DEG;
   if (g.terrain.ceiling && ship.contact && ship.contact.y < g.terrain.height * 0.5) return 'Struck the ice ceiling.';
   if (ship.fuel <= 0) return 'Tanks dry on final approach.';

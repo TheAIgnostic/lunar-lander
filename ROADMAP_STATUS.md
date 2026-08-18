@@ -90,7 +90,20 @@ scheduled until the MVP is stable — the spec says the same.
     (rAF does not fire in a hidden tab, which had been stalling every test sweep)
   - `test/BASELINE.md`: reference sweep at seed 12345 — 10/12 landed, 9 PERFECT
   - acceptance: controls untouched, no new errors, macOS self-test passes
-- [ ] M1 — landing grade rework
+- [x] **M1 — landing grade rework** (this commit)
+  - `src/landing.js`: every threshold, weight and band in one config object
+  - combined severity score, vy 45 / vx 25 / tilt 20 / centre 10, normalised against each body's
+    safe envelope and multiplied by the landing-gear tier (ready for M10)
+  - per-axis crash caps so one bad axis cannot hide inside a good average; centre gates PERFECT
+    only and can never fail a landing
+  - 150-250 ms aggregation window with real gear response: compression, bounce, friction, spin
+    damping, self-righting on two feet, pivoting on one
+  - impacts graded on the median of the last five pre-contact samples — a one- or two-frame spike
+    of 220 px/s is rejected, a sustained 60 px/s still crashes
+  - borderline results promoted one band when the ship settles stable
+  - post-landing panel: every metric, its weighted contribution, and what cost the better grade
+  - 28 unit tests (`node test/landing-tests.js`), fuel identical to baseline on all 12 missions
+- [ ] M2 — terrain grammar
 
 ## Decisions (Tom, 2026-08-16)
 
@@ -108,6 +121,12 @@ scheduled until the MVP is stable — the spec says the same.
 None.
 
 ## Next task
+
+**M2 — terrain grammar.** Extend the midpoint-displacement generator with macro archetypes
+(crater, canyon, ridge, basin, shelf), approach constraints, and landing-zone geometry with slope
+and centre bonus. Highest-risk milestone; may split into shaping and validation.
+
+### Done, for reference
 
 **M1 — landing grade rework.** Combined severity score (vy 45 / vx 25 / angle 20 / centre 10)
 normalised against the body envelope, thresholds in config, 150-250 ms touchdown aggregation

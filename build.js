@@ -15,8 +15,18 @@ const dist = path.join(root, 'dist');
 // Dependency order: every module must appear after everything it imports.
 const MODULES = [
   'util.js', 'audio.js', 'input.js', 'levels.js',
-  'terrain.js', 'particles.js', 'ship.js', 'debug.js', 'render.js', 'main.js',
+  'terrain.js', 'particles.js', 'landing.js', 'ship.js', 'debug.js', 'render.js', 'main.js',
 ];
+
+// A module added to src/ but not listed above would simply vanish from the
+// bundle, so refuse to build instead.
+const onDisk = fs.readdirSync(path.join(root, 'src')).filter((f) => f.endsWith('.js')).sort();
+const missing = onDisk.filter((f) => !MODULES.includes(f));
+if (missing.length) {
+  console.error(`\nBUILD FAILED: src/${missing.join(', src/')} not listed in MODULES.\n` +
+    `Add it in dependency order (after everything it imports).\n`);
+  process.exit(1);
+}
 
 // main.js uses `import * as R from './render.js'`, so the namespace object has
 // to be rebuilt by hand once render's declarations are in scope.

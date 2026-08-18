@@ -237,3 +237,19 @@ kbd {
 .opt.on .opt-title::after { content: " ✓"; color: var(--cyan); }
 .opt-title { font-size: 12px; font-weight: 700; letter-spacing: .14em; }
 .opt-blurb { font-size: 11.5px; line-height: 1.5; color: #a9c6d8; }
+
+/* ------------------------------------------------------------ landing metrics */
+
+table.metrics { width: 100%; border-collapse: collapse; margin: 6px 0 14px; font-size: 12px; }
+table.metrics td { padding: 5px 4px; color: #a9c6d8; }
+table.metrics .m-val { text-align: right; font-weight: 700; color: #dff6ff; white-space: nowrap; }
+table.metrics .m-w { text-align: right; font-size: 10.5px; color: #7f9db0; width: 46px; }
+table.metrics .m-bar { width: 40%; padding: 5px 8px; }
+table.metrics .m-bar span {
+  display: block; height: 5px; border-radius: 3px; background: var(--cyan); min-width: 2px;
+}
+table.metrics tr.m-perfect .m-bar span { background: var(--green); }
+table.metrics tr.m-good .m-bar span { background: var(--cyan); }
+table.metrics tr.m-hard .m-bar span { background: var(--amber); }
+table.metrics tr.m-total td { border-top: 1px solid rgba(255,255,255,.1); padding-top: 9px; color: #8fb0c4; font-size: 11.5px; }
+table.metrics tr.m-total .m-val { color: var(--cyan); font-size: 14px; }

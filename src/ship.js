@@ -1,6 +1,7 @@
 // The lander: geometry, integration, collision and the landing verdict.
 
 import { clamp, DEG } from './util.js';
+import { LANDING, evaluateLanding, capsFor } from './landing.js';
 
 export const SHIP = {
   thrust: 130,        // px/s^2 along the nose vector
@@ -20,11 +21,12 @@ export const DEFAULT_SETTINGS = {
   invertRotation: false,  // classic only: swap which burner spins which way
 };
 
-// Landing envelope, loosest-first check order matters in verdict().
+// Derived from the landing config so the HUD, the tilt gauge and the debug
+// overlay always describe the same thresholds the grader actually uses.
 export const ENVELOPE = {
-  PERFECT: { vy: 11, vx: 7, tilt: 3.5 * DEG, q: 3.0 },
-  GOOD: { vy: 20, vx: 13, tilt: 8 * DEG, q: 2.0 },
-  HARD: { vy: 34, vx: 22, tilt: 15 * DEG, q: 1.0 },
+  PERFECT: { vy: capsFor('vy').perfect, vx: capsFor('vx').perfect, tilt: capsFor('tilt').perfect, q: LANDING.quality.PERFECT },
+  GOOD: { vy: capsFor('vy').safe, vx: capsFor('vx').safe, tilt: capsFor('tilt').safe, q: LANDING.quality.GOOD },
+  HARD: { vy: capsFor('vy').crash, vx: capsFor('vx').crash, tilt: capsFor('tilt').crash, q: LANDING.quality.HARD },
 };
 
 // Hull outline in local space (nose toward -y).
@@ -64,6 +66,18 @@ export class Ship {
     this.offPad = false;
     this.quality = null;
     this.windNow = 0;
+    this.touchdown = null;
+    this.landingResult = null;
+    this.vyHistory = [];
+    this.vxHistory = [];
+  }
+
+  /** Median of the recent samples, so one freak frame cannot define an impact. */
+  static median(a) {
+    if (!a.length) return 0;
+    const b = [...a].sort((x, y) => x - y);
+    const m = b.length >> 1;
+    return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2;
   }
 
   /** Local point -> world point. */
@@ -82,6 +96,7 @@ export class Ship {
   /** One fixed physics step. Returns an event string or null. */
   step(dt, input, level, terrain, t, settings = DEFAULT_SETTINGS) {
     if (!this.alive || this.landed) return null;
+    if (this.touchdown) return this.settle(dt, level, terrain);
 
     const hasFuel = this.fuel > 0;
     this.thrusting = input.thrust && hasFuel;
@@ -142,6 +157,13 @@ export class Ship {
       this.windNow = 0;
     }
 
+    // Short history of approach velocity, sampled before contact. The impact is
+    // graded on the median of these, so a single anomalous frame - a collision
+    // spike, a one-frame integration artefact - cannot manufacture a crash.
+    this.vyHistory.push(this.vy);
+    this.vxHistory.push(this.vx);
+    if (this.vyHistory.length > 5) { this.vyHistory.shift(); this.vxHistory.shift(); }
+
     this.x += this.vx * dt;
     this.y += this.vy * dt;
 
@@ -177,53 +199,165 @@ export class Ship {
     if (hullHit) return 'crash';
     if (!footHit) return null;
 
+    // First contact opens an aggregation window rather than deciding now.
     this.contact = { x: this.x, y: this.y };
-    const padL = terrain.padAt(feet[0].x);
-    const padR = terrain.padAt(feet[1].x);
-    const onPad = padL && padR && padL === padR;
-    const v = this.verdict();
-    if (!v) return 'crash';
-
-    if (onPad) {
-      this.pad = padL;
-      this.offPad = false;
-      this.quality = v;
-      return 'land';
-    }
-    // Off the pad, a textbook touchdown on near-level ground survives - it just
-    // pays the base rate and breaks the streak. Anything rougher is a crash.
-    const slope = Math.abs(terrain.slopeAt(this.x));
-    if (v === 'HARD' || slope > 10 * DEG) return 'crash';
-    this.pad = null;
-    this.offPad = true;
-    this.quality = v;
-    return 'land';
+    this.touchdown = {
+      t: 0,
+      vy: Ship.median(this.vyHistory.concat(this.vy)),
+      vx: Ship.median(this.vxHistory.concat(this.vx)),
+      tilt: normalizeAngle(this.angle),
+      instantVy: this.vy,
+      peakVy: Math.max(0, this.vy),
+      bounces: 0,
+      hull: false,
+    };
+    return null;
   }
 
-  /** Which envelope band this touchdown falls in, or null for a crash. */
-  verdict() {
-    const tilt = Math.abs(normalizeAngle(this.angle));
-    const vy = this.vy;
-    const vx = Math.abs(this.vx);
-    for (const name of ['PERFECT', 'GOOD', 'HARD']) {
-      const e = ENVELOPE[name];
-      if (vy <= e.vy && vx <= e.vx && tilt <= e.tilt) return name;
+  /**
+   * The 150-250 ms after first contact. The gear compresses, the ship bounces,
+   * slides and rights itself, and only then is the landing graded - so a single
+   * physics spike cannot turn a good landing into a wreck.
+   */
+  settle(dt, level, terrain) {
+    const td = this.touchdown;
+    td.t += dt;
+
+    // Controls are handed to the gear for the duration.
+    this.thrusting = false;
+    this.rcsLeft = false;
+    this.rcsRight = false;
+    this.holding = false;
+    this.throttle *= Math.pow(0.02, dt);
+
+    this.vy += level.gravity * dt;
+    if (level.drag) this.vx += ((this.windNow || 0) - this.vx) * level.drag * dt;
+    else if (level.wind) this.vx += (this.windNow || 0) * dt;
+
+    this.angle += this.spin * dt;
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+
+    if (terrain.ceiling) {
+      for (const pt of HULL_POINTS.concat(FEET)) {
+        const w = this.toWorld(pt[0], pt[1]);
+        if (w.y < terrain.ceilingAt(w.x)) { td.hull = true; return this.finishTouchdown(terrain); }
+      }
+    }
+    for (const pt of HULL_POINTS) {
+      const w = this.toWorld(pt[0], pt[1]);
+      if (w.y >= terrain.heightAt(w.x)) { td.hull = true; this.contact = w; return this.finishTouchdown(terrain); }
+    }
+
+    // Gear contact response, per foot.
+    const feet = this.feet();
+    let contacts = 0;
+    let deepest = 0;
+    let contactLocalX = 0;
+    feet.forEach((f, i) => {
+      const g = terrain.heightAt(f.x);
+      if (f.y >= g) {
+        contacts++;
+        deepest = Math.max(deepest, f.y - g);
+        contactLocalX = FEET[i][0];
+      }
+    });
+
+    if (contacts > 0) {
+      this.y -= deepest;
+      if (this.vy > 0) {
+        td.peakVy = Math.max(td.peakVy, this.vy);
+        // Only a real rebound counts as a bounce; micro-settling does not.
+        if (this.vy > LANDING.restSpeed) td.bounces++;
+        this.vy = -this.vy * LANDING.restitution;
+        if (Math.abs(this.vy) < 4) this.vy = 0;
+      }
+      this.vx *= Math.pow(LANDING.groundFriction, dt * 60);
+      this.spin *= Math.pow(LANDING.spinDamp, dt * 60);
+      if (contacts === 2) {
+        // Both feet down: the gear rights the hull.
+        const a = normalizeAngle(this.angle);
+        this.angle -= a * Math.min(1, dt * 6);
+        this.spin -= Math.sign(a) * Math.min(Math.abs(a) * LANDING.levelAssist, 4) * dt;
+      } else {
+        // One foot down: the ship pivots about it, as it would on a slope.
+        this.spin -= Math.sign(contactLocalX) * level.gravity * 0.02 * dt;
+      }
+    }
+
+    const speed = Math.hypot(this.vx, this.vy);
+    const resting = contacts > 0 && speed < LANDING.restSpeed && Math.abs(this.spin) < 0.5;
+    if ((td.t >= LANDING.aggregationWindow && resting) || td.t >= LANDING.maxSettle) {
+      return this.finishTouchdown(terrain);
     }
     return null;
   }
 
+  /** Grade the completed touchdown and decide land or crash. */
+  finishTouchdown(terrain) {
+    const td = this.touchdown;
+    this.touchdown = null;
+
+    const feet = this.feet();
+    const padL = terrain.padAt(feet[0].x);
+    const padR = terrain.padAt(feet[1].x);
+    const onPad = !!(padL && padR && padL === padR);
+    const pad = onPad ? padL : null;
+    const centerFrac = pad
+      ? Math.abs(this.x - (pad.x1 + pad.x2) / 2) / Math.max(1, (pad.x2 - pad.x1) / 2)
+      : 1;
+    const speed = Math.hypot(this.vx, this.vy);
+    const stable = speed < LANDING.restSpeed && Math.abs(normalizeAngle(this.angle)) < capsFor('tilt').safe;
+
+    const result = evaluateLanding({
+      vy: td.vy, vx: td.vx, tilt: td.tilt,
+      centerFrac, onPad, hullContact: td.hull, stable,
+    });
+    this.landingResult = {
+      ...result, onPad, centerFrac, bounces: td.bounces, settleTime: td.t,
+      instantVy: td.instantVy, peakVy: td.peakVy,
+    };
+
+    if (result.grade === 'CRASH') return 'crash';
+
+    if (!onPad) {
+      const slope = Math.abs(terrain.slopeAt(this.x));
+      if (result.grade === 'HARD' || slope > LANDING.offPadMaxSlope) {
+        this.landingResult.grade = 'CRASH';
+        this.landingResult.blocker = slope > LANDING.offPadMaxSlope
+          ? `Ground sloped ${(slope / DEG).toFixed(0)}° — too steep to hold the legs.`
+          : 'Too hard an arrival to survive off the pad.';
+        return 'crash';
+      }
+      this.offPad = true;
+    } else {
+      this.offPad = false;
+    }
+    this.pad = pad;
+    this.quality = result.grade;
+    return 'land';
+  }
+
+  /** Live grade if the ship touched down right now - for the debug overlay. */
+  verdict() {
+    const r = evaluateLanding({
+      vy: this.vy, vx: this.vx, tilt: normalizeAngle(this.angle),
+      centerFrac: 0, onPad: true, hullContact: false, stable: false,
+    });
+    return r.grade === 'CRASH' ? null : r.grade;
+  }
+
   /** Live envelope check for the HUD: which readouts are currently green. */
   status() {
-    const e = ENVELOPE.GOOD;
     return {
-      vy: this.vy <= e.vy,
-      vx: Math.abs(this.vx) <= e.vx,
-      tilt: Math.abs(normalizeAngle(this.angle)) <= e.tilt,
+      vy: this.vy <= capsFor('vy').safe,
+      vx: Math.abs(this.vx) <= capsFor('vx').safe,
+      tilt: Math.abs(normalizeAngle(this.angle)) <= capsFor('tilt').safe,
     };
   }
 
-  settle(terrain) {
-    // Snap neatly onto the pad surface for the results pose.
+  /** Snap neatly onto the surface for the results pose. */
+  restOnPad(terrain) {
     const pad = terrain.padAt(this.x);
     const y = pad ? pad.y : terrain.heightAt(this.x);
     this.y = y - 16;
