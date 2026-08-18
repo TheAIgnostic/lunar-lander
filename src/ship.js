@@ -2,6 +2,7 @@
 
 import { clamp, DEG } from './util.js';
 import { LANDING, evaluateLanding, capsFor } from './landing.js';
+import { applyForces, freshStatus } from './forces.js';
 
 export const SHIP = {
   thrust: 130,        // px/s^2 along the nose vector
@@ -70,6 +71,7 @@ export class Ship {
     this.landingResult = null;
     this.vyHistory = [];
     this.vxHistory = [];
+    this.status = freshStatus();
   }
 
   /** Median of the recent samples, so one freak frame cannot define an impact. */
@@ -144,18 +146,7 @@ export class Ship {
     }
     this.vy += level.gravity * dt;
 
-    if (level.wind || level.drag) {
-      const w = level.wind + Math.sin(t * 0.7) * level.gust + Math.sin(t * 1.9 + 1.3) * level.gust * 0.4;
-      this.windNow = w;
-      if (level.drag) {
-        this.vx += (w - this.vx) * level.drag * dt;
-        this.vy += (0 - this.vy) * level.drag * 0.5 * dt;
-      } else {
-        this.vx += w * dt;
-      }
-    } else {
-      this.windNow = 0;
-    }
+    applyForces(this, level, t, dt);
 
     // Short history of approach velocity, sampled before contact. The impact is
     // graded on the median of these, so a single anomalous frame - a collision
@@ -272,7 +263,8 @@ export class Ship {
         this.vy = -this.vy * LANDING.restitution;
         if (Math.abs(this.vy) < 4) this.vy = 0;
       }
-      this.vx *= Math.pow(LANDING.groundFriction, dt * 60);
+      const grip = LANDING.groundFriction ** (level.surfaceFriction != null ? level.surfaceFriction : 1);
+      this.vx *= Math.pow(grip, dt * 60);
       this.spin *= Math.pow(LANDING.spinDamp, dt * 60);
       if (contacts === 2) {
         // Both feet down: the gear rights the hull.

@@ -78,7 +78,13 @@ export function missionToLevel(mission) {
     rough: mission.rough,
     fuel: mission.fuel,
 
-    wind: planet.wind, gust: planet.gust, drag: planet.drag,
+    wind: mission.wind != null ? mission.wind : planet.wind,
+    gust: mission.gust != null ? mission.gust : planet.gust,
+    drag: mission.drag != null ? mission.drag : planet.drag,
+    surfaceFriction: planet.surfaceFriction,
+    visibility: planet.visibility,
+    hazards: mission.hazards || planet.hazards,
+    rareMaterial: planet.rareMaterial,
     cave: !!mission.cave, clearance: mission.clearance || 0,
     fuelCells: mission.fuelCells || 0,
 

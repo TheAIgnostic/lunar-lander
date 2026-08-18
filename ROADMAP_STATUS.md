@@ -147,7 +147,19 @@ scheduled until the MVP is stable — the spec says the same.
   - playable from the menu as MOON EXPEDITION, beside CLASSIC CAMPAIGN and ENDLESS
   - validated 20/20 on every mission: structural, reachable, landed, zero single-path;
     41-49% fuel left on a competent flight
-- [ ] M5 — planet data model
+- [x] **M5 — planet data model** (this commit)
+  - `src/planets.js`: all ten bodies as PlanetDefinitions — real gravity, mapped gravity,
+    atmosphere, drag, wind, surface friction, visibility, hazards, rare material, terrain palette
+  - `src/forces.js`: the shared force/status interface. Wind and drag moved behind it **unchanged**;
+    thermal, cryo and plume forces added; five status channels (heat, cold, corrosion, radiation,
+    charge) ready for the damage model
+  - missions inherit their planet's environment, so a MissionDefinition stays pure content
+  - surface friction is planet data now, which is what Europa's ice will use in M7
+  - `test/flight-fixture.js`: a durable flight regression — 17 missions × 3 seeds recorded, so any
+    future change that alters how the lander flies shows up as a diff
+  - `test/run-all.sh`: one command for every check
+  - verified physics-neutral by diffing flight results across the refactor: **identical**
+- [ ] M6 — Mars chapter
 
 ## Decisions (Tom, 2026-08-16)
 
@@ -166,10 +178,10 @@ None.
 
 ## Next task
 
-**M5 — planet data model.** Generalise `src/planets.js` into the full PlanetDefinition (atmosphere,
-temperature, visibility, wind and friction models, hazard sets), and move the existing wind, drag
-and cave-ceiling behaviour behind a shared force/status interface so Mars and Europa become data
-rather than code.
+**M6 — Mars chapter.** Author Mars 1-5 as data on the existing systems: drag and gusts from the
+planet definition, dust that cuts visibility, and terrain from the basin/canyon/dunes/mesa palette.
+Should be mostly content now that M5 made the environment data — that is the acceptance test for
+whether the data model actually works.
 
 ### Known findings
 
