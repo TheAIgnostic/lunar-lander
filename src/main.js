@@ -5,10 +5,11 @@ import { Audio } from './audio.js';
 import { Input } from './input.js';
 import { Terrain } from './terrain.js';
 import { LEVELS, endlessLevel, WORLDS } from './levels.js';
-import { MOON_LEVELS } from './missions.js';
+import { CHAPTERS } from './missions.js';
 import { Particles } from './particles.js';
 import { Ship, ENVELOPE, normalizeAngle, DEFAULT_SETTINGS } from './ship.js';
 import { LANDING, capsFor } from './landing.js';
+import { PLANETS, gravityFor } from './planets.js';
 import * as R from './render.js';
 import { Debug } from './debug.js';
 import { spawnFor } from './spawn.js';
@@ -96,7 +97,8 @@ resize();
 
 /** The mission list the current campaign draws from. */
 function activeLevels() {
-  return g.campaign === 'moon' ? MOON_LEVELS : LEVELS;
+  const ch = CHAPTERS[g.campaign];
+  return ch ? ch.levels : LEVELS;
 }
 
 /** Stable per-level salt, for numeric ids and string mission ids alike. */
@@ -108,9 +110,8 @@ function levelSeedSalt(level) {
 }
 
 function levelFor(index) {
-  if (g.campaign === 'moon') {
-    return MOON_LEVELS[clamp(index, 0, MOON_LEVELS.length - 1)];
-  }
+  const chapter = CHAPTERS[g.campaign];
+  if (chapter) return chapter.levels[clamp(index, 0, chapter.levels.length - 1)];
   if (index < LEVELS.length) return LEVELS[index];
   g.endless = true;
   g.endlessN = index - LEVELS.length + 1;
@@ -389,6 +390,13 @@ function draw() {
   particles.drawTexts(ctx);
   ctx.restore();
 
+  // Dust sits over the world but under the pad beacons and the HUD.
+  const vis = ship.env ? ship.env.visibility : 1;
+  if (vis < 0.985) {
+    R.drawDust(ctx, W, H, g.level, vis, g.time);
+    R.drawPadBeacons(ctx, cam, W, H, g.terrain, g.level, g.time, 1 - vis);
+  }
+
   if (g.state === 'play' || g.state === 'paused') {
     R.drawHUD(ctx, W, H, g);
   }
@@ -450,7 +458,7 @@ function screenHTML(s) {
         <p class="tag">A vector lander. Finite fuel. One shot at the pad.</p>
         <div class="stats"><span>HIGH SCORE</span><b>${formatScore(store.high)}</b></div>
         <div class="btns">
-          ${btn('moon', 'MOON EXPEDITION', true, 'SPACE')}
+          ${btn('chapters', 'EXPEDITION', true, 'SPACE')}
           ${btn('campaign', 'CLASSIC CAMPAIGN')}
           ${btn('select', 'MISSIONS')}
           ${btn('endless', 'ENDLESS RUN')}
@@ -560,13 +568,32 @@ function screenHTML(s) {
 
     case 'victory':
       return `<div class="screen">
-        <div class="verdict" style="color:#4dff9f;text-shadow:0 0 30px #4dff9f">${g.campaign === 'moon' ? 'CHAPTER COMPLETE' : 'PROGRAM COMPLETE'}</div>
-        <p class="body">${g.campaign === 'moon'
-          ? 'The Moon is surveyed. Five landings, and the lander still flies.'
+        <div class="verdict" style="color:#4dff9f;text-shadow:0 0 30px #4dff9f">${CHAPTERS[g.campaign] ? 'CHAPTER COMPLETE' : 'PROGRAM COMPLETE'}</div>
+        <p class="body">${CHAPTERS[g.campaign]
+          ? `${(CHAPTERS[g.campaign] || {}).title || 'The chapter'} is surveyed. Five landings, and the lander still flies.`
           : 'All twelve missions flown. The unsurveyed sectors are open — they do not end.'}</p>
         <div class="stats big"><span>SCORE</span><b>${formatScore(g.score)}</b></div>
         <div class="btns">${btn('next', 'ENTER ENDLESS', true, 'SPACE')}${btn('menu', 'MENU')}</div>
       </div>`;
+
+    case 'chapters': {
+      const cards = Object.values(CHAPTERS).map((ch) => {
+        const p = PLANETS[ch.planet];
+        const acc = WORLDS[p.world].accent;
+        return `<button class="tile chapter" data-action="chapter:${ch.id}">
+          <span class="world" style="color:${acc}">${p.displayName}</span>
+          <span class="name">${ch.levels.length} MISSIONS</span>
+          <span class="best">${p.summary}</span>
+          <span class="best">gravity ${(gravityFor(ch.planet) / 6).toFixed(2)} m/s² · ${p.atmosphere} atmosphere${p.hazards.length ? ' · ' + p.hazards.join(', ') : ''}</span>
+        </button>`;
+      }).join('');
+      return `<div class="screen wide">
+        <h2>EXPEDITION</h2>
+        <p class="tag">Choose a body. Five missions, escalating from introduction to mastery.</p>
+        <div class="grid chapters">${cards}</div>
+        <div class="btns">${btn('back', 'BACK', true, 'SPACE')}</div>
+      </div>`;
+    }
 
     case 'settings': {
       const opt = (key, value, title, blurb) => `
@@ -646,6 +673,13 @@ function crashReason() {
 function act(action) {
   audio.unlock();
   audio.ui();
+  if (action.startsWith('chapter:')) {
+    g.campaign = action.slice(8);
+    g.endless = false;
+    g.score = 0; g.lives = 3; g.combo = 0; g.newRecord = false;
+    startLevel(0);
+    return;
+  }
   if (action.startsWith('set:')) {
     const [, key, raw] = action.split(':');
     settings[key] = raw === 'true' ? true : raw === 'false' ? false : raw;
@@ -662,12 +696,7 @@ function act(action) {
     return;
   }
   switch (action) {
-    case 'moon':
-      g.campaign = 'moon';
-      g.endless = false;
-      g.score = 0; g.lives = 3; g.combo = 0; g.newRecord = false;
-      startLevel(0);
-      break;
+    case 'chapters': setState('chapters'); break;
     case 'campaign':
       g.campaign = 'classic';
       g.endless = false;
@@ -687,7 +716,7 @@ function act(action) {
     case 'launch': launch(); break;
     case 'next':
       if (g.state === 'victory') {
-        if (g.campaign === 'moon') { g.campaign = 'classic'; g.level = null; setState('menu'); break; }
+        if (CHAPTERS[g.campaign]) { g.campaign = 'classic'; g.level = null; setState('menu'); break; }
         g.endless = true; startLevel(LEVELS.length);
       }
       else startLevel(g.levelIndex + 1);
@@ -710,12 +739,12 @@ overlay.addEventListener('click', (e) => {
 // keyboard shortcuts per screen
 input.bind(' ', () => {
   const s = g.state;
-  if (s === 'menu') act('moon');
+  if (s === 'menu') act('chapters');
   else if (s === 'brief') act('launch');
   else if (s === 'result' || s === 'victory') act('next');
   else if (s === 'crash') act('retry');
   else if (s === 'gameover') act('restart');
-  else if (s === 'help' || s === 'select') act('back');
+  else if (s === 'help' || s === 'select' || s === 'chapters') act('back');
 });
 input.bind('enter', () => input.onPress.get(' ')());
 input.bind('r', () => {
@@ -775,6 +804,7 @@ window.__preview = (archetype, relief = 260, detail = 1) => {
 
 window.__setSeed = (n) => { g.forcedSeed = n == null ? null : (n | 0); return g.forcedSeed; };
 window.__advance = advance;
+window.__draw = () => { syncSize(); draw(); return { w: W, h: H, state: g.state }; };
 
 /** Resolve a pending landing/crash immediately, for headless tests. */
 window.__settleNow = () => {

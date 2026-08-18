@@ -249,6 +249,72 @@ export function drawTerrain(ctx, cam, W, H, terrain, level, time) {
   }
 }
 
+/**
+ * Dust haze over the world. The pads are redrawn on top afterwards: the spec is
+ * explicit that the safe pad must stay visually distinct even in low
+ * visibility, so dust hides the terrain, not the target.
+ */
+export function drawDust(ctx, W, H, level, visibility, time) {
+  const v = clamp(visibility, 0, 1);
+  if (v > 0.985) return;
+  const w = WORLDS[level.world];
+  const density = 1 - v;
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, `rgba(${w.dustRGB || '150,90,60'},${(density * 0.5).toFixed(3)})`);
+  g.addColorStop(1, `rgba(${w.dustRGB || '150,90,60'},${(density * 0.78).toFixed(3)})`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  // drifting streaks, so the front reads as moving rather than as a filter
+  ctx.save();
+  ctx.globalAlpha = density * 0.5;
+  ctx.strokeStyle = `rgba(${w.dustRGB || '150,90,60'},0.8)`;
+  ctx.lineWidth = 1.4;
+  for (let i = 0; i < 26; i++) {
+    const y = ((i * 137 + time * 40 * (1 + (i % 3) * 0.4)) % (H + 60)) - 30;
+    const x = ((i * 271 + time * 130 * (1 + (i % 4) * 0.3)) % (W + 220)) - 110;
+    const len = 60 + (i % 5) * 34;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + len, y + 5);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** Pad markers only, drawn above the dust so the target never disappears. */
+export function drawPadBeacons(ctx, cam, W, H, terrain, level, time, strength) {
+  if (strength <= 0.02) return;
+  const half = W / 2 / cam.scale;
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+  ctx.scale(cam.scale, cam.scale);
+  ctx.translate(-cam.x, -cam.y);
+  for (const p of terrain.pads) {
+    if (p.x2 < cam.x - half - 200 || p.x1 > cam.x + half + 200) continue;
+    const pulse = 0.6 + 0.4 * Math.sin(time * 3.4 + p.x1 * 0.01);
+    const py1 = p.y1 != null ? p.y1 : p.y;
+    const py2 = p.y2 != null ? p.y2 : p.y;
+    ctx.globalAlpha = clamp(strength, 0, 1) * (0.65 + 0.35 * pulse);
+    ctx.strokeStyle = p.used ? '#4dff9f' : MAG;
+    ctx.shadowColor = p.used ? '#4dff9f' : MAG;
+    ctx.shadowBlur = 26 * pulse;
+    ctx.lineWidth = 4 / cam.scale + 1.4;
+    ctx.beginPath();
+    ctx.moveTo(p.x1, py1);
+    ctx.lineTo(p.x2, py2);
+    ctx.stroke();
+    ctx.lineWidth = 2 / cam.scale;
+    for (const [ex, ey] of [[p.x1, py1], [p.x2, py2]]) {
+      ctx.beginPath();
+      ctx.moveTo(ex, ey);
+      ctx.lineTo(ex, ey - 46 - 16 * pulse);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
 export function drawShip(ctx, ship, time, cam) {
   if (!ship.alive) return;
   ctx.save();

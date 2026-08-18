@@ -2,7 +2,7 @@
 
 import { clamp, DEG } from './util.js';
 import { LANDING, evaluateLanding, capsFor } from './landing.js';
-import { applyForces, freshStatus } from './forces.js';
+import { applyForces, freshStatus, freshEnv } from './forces.js';
 
 export const SHIP = {
   thrust: 130,        // px/s^2 along the nose vector
@@ -71,7 +71,8 @@ export class Ship {
     this.landingResult = null;
     this.vyHistory = [];
     this.vxHistory = [];
-    this.status = freshStatus();
+    this.statusLevels = freshStatus();
+    this.env = freshEnv();
   }
 
   /** Median of the recent samples, so one freak frame cannot define an impact. */

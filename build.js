@@ -30,7 +30,7 @@ if (missing.length) {
 
 // main.js uses `import * as R from './render.js'`, so the namespace object has
 // to be rebuilt by hand once render's declarations are in scope.
-const R_NAMESPACE = ['buildBackdrop', 'drawBackground', 'drawTerrain', 'drawShip', 'drawTrajectory', 'drawHUD'];
+const R_NAMESPACE = ['buildBackdrop', 'drawBackground', 'drawTerrain', 'drawShip', 'drawTrajectory', 'drawHUD', 'drawDust', 'drawPadBeacons'];
 
 function stripModuleSyntax(src) {
   return src

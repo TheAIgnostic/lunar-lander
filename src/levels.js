@@ -1,10 +1,10 @@
 // Mission table. 12 hand-tuned levels across 4 worlds, then a scaling endless mode.
 
 export const WORLDS = {
-  LUNA: { name: 'LUNA', sky: ['#05060c', '#0b1226'], hill: '#141c33', accent: '#5ff5ff', planet: '#1b2647' },
-  MARS: { name: 'MARS', sky: ['#0a0507', '#2a0f14'], hill: '#331520', accent: '#ff8a5f', planet: '#4a1d22' },
-  EUROPA: { name: 'EUROPA', sky: ['#03080e', '#0a2230'], hill: '#0e2b3a', accent: '#7ef2d0', planet: '#124055' },
-  TITAN: { name: 'TITAN', sky: ['#0b0703', '#2e1c05'], hill: '#3a2708', accent: '#ffd166', planet: '#5a3d0d' },
+  LUNA: { name: 'LUNA', sky: ['#05060c', '#0b1226'], hill: '#141c33', accent: '#5ff5ff', planet: '#1b2647', dustRGB: '120,140,180' },
+  MARS: { name: 'MARS', sky: ['#0a0507', '#2a0f14'], hill: '#331520', accent: '#ff8a5f', planet: '#4a1d22', dustRGB: '184,96,54' },
+  EUROPA: { name: 'EUROPA', sky: ['#03080e', '#0a2230'], hill: '#0e2b3a', accent: '#7ef2d0', planet: '#124055', dustRGB: '150,190,210' },
+  TITAN: { name: 'TITAN', sky: ['#0b0703', '#2e1c05'], hill: '#3a2708', accent: '#ffd166', planet: '#5a3d0d', dustRGB: '190,150,70' },
 };
 
 const base = {

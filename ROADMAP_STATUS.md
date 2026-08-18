@@ -159,7 +159,21 @@ scheduled until the MVP is stable — the spec says the same.
     future change that alters how the lander flies shows up as a diff
   - `test/run-all.sh`: one command for every check
   - verified physics-neutral by diffing flight results across the refactor: **identical**
-- [ ] M6 — Mars chapter
+- [x] **M6 — Mars chapter** (this commit)
+  - Mars 1-5 authored as data: RED VEIL (basin), VALLES CROSSWIND (canyon), BURIED ARRAY (dunes),
+    IRON RAIN (mesa), STORM EYE (caldera)
+  - two new forces, both data-driven: `dust` (cycling visibility, readable fronts) and
+    `windChannels` (alternating bands by altitude — the Valles mechanic)
+  - dust rendering with the pad beacons redrawn **above** the haze, per the spec's rule that the
+    safe pad must stay distinct in low visibility
+  - EXPEDITION chapter picker: Moon and Mars, showing gravity, atmosphere and hazards
+  - **acceptance test for M5 passed**: the chapter needed no flight-loop changes, only data plus
+    two force definitions
+  - caught a real regression by rendering: M5's `status` field shadowed the ship's `status()`
+    method, so the HUD had been throwing since then. Fixed, with a test that makes the class of
+    shadowing bug impossible to reintroduce
+  - `test/physics-fixture.js` added: a pilot-independent physics regression
+- [ ] M7 — Europa chapter
 
 ## Decisions (Tom, 2026-08-16)
 
@@ -178,17 +192,15 @@ None.
 
 ## Next task
 
-**M6 — Mars chapter.** Author Mars 1-5 as data on the existing systems: drag and gusts from the
-planet definition, dust that cuts visibility, and terrain from the basin/canyon/dunes/mesa palette.
-Should be mostly content now that M5 made the environment data — that is the acceptance test for
-whether the data model actually works.
+**M7 — Europa chapter.** Ice: low surface friction (already planet data), cracking ice bridges,
+radiation sweeps that terrain can shield, and cave corridors. Mission 1 teaches that touchdown is
+only half the landing.
 
 ### Known findings
 
 - **ICE CORRIDOR seed 1274** — structurally sound but the test pilot cannot fly it. Worth a human
   attempt before M7 reworks Europa; if a person lands it, the pilot needs the fix, not the mission.
-- **Crosswind (missions 11-12)** — the pilot reaches the pad on every seed but lands on 1/10 and
-  3/10. Human verification confirmed these are landable in earlier sessions.
+- **Crosswind (missions 11-12)** — resolved in M6. The pilot now lands 18/20 and 19/20.
 
 ### Done, for reference
 

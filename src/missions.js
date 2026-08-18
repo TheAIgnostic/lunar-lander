@@ -103,6 +103,62 @@ export function missionToLevel(mission) {
 
 export const MOON_LEVELS = MOON_MISSIONS.map(missionToLevel);
 
+export const MARS_MISSIONS = [
+  {
+    id: 'mars-1', planet: 'MARS', index: 1, name: 'RED VEIL',
+    brief: 'Thin air, but enough to matter: the lander answers late and drifts on the gusts. The pad sits behind a low ridge, and a dust front is crossing the basin.',
+    width: 3000, relief: 240, detail: 1.2, rough: 190, fuel: 136,
+    terrain: { archetype: 'basin' },
+    pads: [{ mult: 2, width: 190 }, { mult: 3, width: 120 }],
+    hazards: ['atmosphere', { type: 'dust', period: 22, minVisibility: 0.55, duty: 0.35 }],
+    optionalObjective: { id: 'fuel-25', text: 'Land with at least 25% fuel', reward: { salvage: 45 } },
+    enemyBudget: 0,
+  },
+  {
+    id: 'mars-2', planet: 'MARS', index: 2, name: 'VALLES CROSSWIND',
+    brief: 'The canyon stacks its wind in layers, and each layer runs the other way. Drop through them one at a time — a straight descent will be thrown into a wall.',
+    width: 3100, relief: 300, detail: 1.4, rough: 200, fuel: 132,
+    terrain: { archetype: 'canyon' },
+    pads: [{ mult: 3, width: 130 }],
+    hazards: [{ type: 'windChannels', bandHeight: 190, strength: 44 }],
+    optionalObjective: { id: 'hull-10', text: 'Keep hull damage below 10%', reward: { data: 30 } },
+    enemyBudget: 0,
+  },
+  {
+    id: 'mars-3', planet: 'MARS', index: 3, name: 'BURIED ARRAY',
+    brief: 'Dune country, with a sensor array half swallowed by it. The dust comes in hard and often; learn the ground during the clear windows.',
+    width: 3200, relief: 230, detail: 1.8, rough: 210, fuel: 128,
+    terrain: { archetype: 'dunes' },
+    pads: [{ mult: 3, width: 130 }, { mult: 2, width: 180 }],
+    hazards: ['atmosphere', { type: 'dust', period: 13, minVisibility: 0.32, duty: 0.5 }],
+    optionalObjective: { id: 'power-array', text: 'Restore a sensor tower for a stronger beacon', reward: { data: 40 } },
+    enemyBudget: 0, fuelCells: 2,
+  },
+  {
+    id: 'mars-4', planet: 'MARS', index: 4, name: 'IRON RAIN',
+    brief: 'Iron-rich mesas, old ground batteries, and salvage sitting exactly where the safe route is not. The gusts do not care that you are being shot at.',
+    width: 3300, relief: 290, detail: 1.6, rough: 230, fuel: 124,
+    terrain: { archetype: 'mesa' },
+    pads: [{ mult: 3, width: 115 }, { mult: 2, width: 175 }],
+    hazards: ['atmosphere', { type: 'dust', period: 18, minVisibility: 0.5, duty: 0.3 }],
+    optionalObjective: { id: 'salvage-iron', text: 'Recover the iron-ceramic salvage off the safe route', reward: { salvage: 70 } },
+    enemyBudget: 2, enemySets: ['sentry-turret', 'mortar-platform'], fuelCells: 2,
+  },
+  {
+    id: 'mars-5', planet: 'MARS', index: 5, name: 'STORM EYE',
+    brief: 'A storm walks the crater on a cycle. The pad is on the central mesa, and you will only see it in the gaps. Memorise the ground, then commit.',
+    width: 3400, relief: 320, detail: 1.5, rough: 240, fuel: 120,
+    terrain: { archetype: 'caldera' },
+    pads: [{ mult: 5, width: 84 }, { mult: 2, width: 175 }],
+    hazards: ['atmosphere', { type: 'dust', period: 11, minVisibility: 0.22, duty: 0.55 }],
+    optionalObjective: { id: 'centre', text: 'Touch down inside the central bonus area', reward: { cores: 1 } },
+    enemyBudget: 1, enemySets: ['sentry-turret'], fuelCells: 3,
+  },
+];
+
+export const MARS_LEVELS = MARS_MISSIONS.map(missionToLevel);
+
 export const CHAPTERS = {
   moon: { id: 'moon', planet: 'LUNA', title: 'THE MOON', levels: MOON_LEVELS },
+  mars: { id: 'mars', planet: 'MARS', title: 'MARS', levels: MARS_LEVELS },
 };

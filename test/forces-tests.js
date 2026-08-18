@@ -1,12 +1,12 @@
 // Unit tests for the force/status interface:  node test/forces-tests.js
-import { applyForces, forcesFor, freshStatus, STATUS_CHANNELS } from '../src/forces.js';
+import { applyForces, forcesFor, freshStatus, freshEnv, STATUS_CHANNELS } from '../src/forces.js';
 import { PLANETS, gravityFor, gravityPx } from '../src/planets.js';
 
 let pass = 0, fail = 0;
 const check = (name, cond, extra = '') => {
   if (cond) pass++; else { fail++; console.log(`  FAIL  ${name}  ${extra}`); }
 };
-const mkShip = (o = {}) => ({ x: 100, y: 100, vx: 0, vy: 0, thrusting: false, windNow: 0, status: freshStatus(), ...o });
+const mkShip = (o = {}) => ({ x: 100, y: 100, vx: 0, vy: 0, thrusting: false, windNow: 0, statusLevels: freshStatus(), env: freshEnv(), ...o });
 
 console.log('forces and planets');
 
@@ -53,19 +53,19 @@ console.log('forces and planets');
   const ship = mkShip({ thrusting: true });
   const level = { hazards: ['thermal'] };
   for (let i = 0; i < 120; i++) applyForces(ship, level, i / 120, 1 / 120);
-  check('burning raises heat', ship.status.heat > 0, String(ship.status.heat.toFixed(1)));
+  check('burning raises heat', ship.statusLevels.heat > 0, String(ship.statusLevels.heat.toFixed(1)));
   ship.thrusting = false;
-  const peak = ship.status.heat;
+  const peak = ship.statusLevels.heat;
   for (let i = 0; i < 120; i++) applyForces(ship, level, i / 120, 1 / 120);
-  check('coasting sheds heat', ship.status.heat < peak);
-  check('heat cannot go negative', ship.status.heat >= 0);
+  check('coasting sheds heat', ship.statusLevels.heat < peak);
+  check('heat cannot go negative', ship.statusLevels.heat >= 0);
 }
 {
   const ship = mkShip();
   const level = { hazards: ['cryo'] };
   for (let i = 0; i < 240; i++) applyForces(ship, level, i / 120, 1 / 120);
-  check('cold builds while coasting', ship.status.cold > 0);
-  check('cold is capped', ship.status.cold <= 100);
+  check('cold builds while coasting', ship.statusLevels.cold > 0);
+  check('cold is capped', ship.statusLevels.cold <= 100);
 }
 {
   const ship = mkShip({ x: 500, y: 400 });
@@ -79,6 +79,32 @@ console.log('forces and planets');
   const ship3 = mkShip({ x: 900, y: 400 });
   applyForces(ship3, level, 0.2, 1 / 60);
   check('a distant plume does nothing', ship3.vy === 0);
+}
+
+// --- dust cycles visibility and always recovers
+{
+  const level = { hazards: [{ type: 'dust', period: 10, minVisibility: 0.3, duty: 0.5 }] };
+  const ship = mkShip();
+  const samples = [];
+  for (let i = 0; i <= 100; i++) { applyForces(ship, level, i / 10, 1 / 120); samples.push(ship.env.visibility); }
+  check('dust reduces visibility at some point', Math.min(...samples) < 0.4, Math.min(...samples).toFixed(2));
+  check('dust clears completely at some point', Math.max(...samples) > 0.99);
+  check('visibility never leaves 0..1', samples.every((v) => v >= 0 && v <= 1));
+  const a = mkShip(), b = mkShip();
+  applyForces(a, level, 3.3, 1 / 120); applyForces(b, level, 3.3, 1 / 120);
+  check('dust is deterministic', a.env.visibility === b.env.visibility);
+}
+
+// --- wind channels reverse with altitude
+{
+  const level = { drag: 0.14, hazards: [{ type: 'windChannels', bandHeight: 200, strength: 50 }] };
+  const high = mkShip({ y: 100 });
+  const low = mkShip({ y: 300 });
+  applyForces(high, level, 0, 1 / 60);
+  applyForces(low, level, 0, 1 / 60);
+  check('adjacent bands push opposite ways', Math.sign(high.windNow) === -Math.sign(low.windNow),
+    `${high.windNow.toFixed(1)} vs ${low.windNow.toFixed(1)}`);
+  check('the band actually moves the ship', high.vx !== 0);
 }
 
 // --- force lists are built once and cached
@@ -103,6 +129,19 @@ check('compression keeps the extremes playable',
 check('unknown planets fail loudly', (() => { try { gravityFor('NOPE'); return false; } catch { return true; } })());
 check('difficulty cannot reach gravity',
   !JSON.stringify(PLANETS).includes('difficulty'));
+
+// --- the ship's public surface must not be shadowed by state fields. The HUD
+// calls ship.status(); a hazard field of the same name silently broke every
+// render until a screenshot caught it.
+{
+  const { Ship } = await import('../src/ship.js');
+  const s = new Ship();
+  check('ship.status() is still a method', typeof s.status === 'function');
+  check('ship.verdict() is still a method', typeof s.verdict === 'function');
+  check('hazard levels live under statusLevels', typeof s.statusLevels === 'object');
+  check('status() returns the envelope flags',
+    ['vy', 'vx', 'tilt'].every((k) => typeof s.status()[k] === 'boolean'));
+}
 
 console.log(`\n  ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -23,6 +23,7 @@ export function makeControl(ship, terrain, level, opts = {}) {
     ? pads[clamp(opts.padIndex, 0, pads.length - 1)]
     : pads.reduce((a, b) => (b.mult > a.mult ? b : a), pads[0]);
   const tx = (pad.x1 + pad.x2) / 2;
+  const halfPad = (pad.x2 - pad.x1) / 2;
   const grav = level.gravity;
   const aLat = THRUST * Math.sin(0.5) * 0.8;
   // Approach bias lets the validator try genuinely different routes.
@@ -81,7 +82,7 @@ export function makeControl(ship, terrain, level, opts = {}) {
       thrust = ship.vy > vyMax;
       const closing = ship.vx * Math.sign(dx);
       if (adx < brakeDist) phase = 'BRAKE';
-      else if (closing < 22 && adx > 120) phase = 'ACCEL';
+      else if (closing < 35 && adx > 120) phase = 'ACCEL';   // drag eats the ground track
     } else if (phase === 'BRAKE') {
       const closing = ship.vx * Math.sign(dx);
       wantAngle = ff - Math.sign(ship.vx || dx) * (roofNear ? 0.28 : 0.5);
@@ -91,14 +92,27 @@ export function makeControl(ship, terrain, level, opts = {}) {
       // Hold a position, not a velocity: under a steady crosswind a velocity
       // controller settles downwind of the pad and never returns.
       wantAngle = clamp(ff + dx * kP - ship.vx * kD, -0.4, 0.4);
-      const lined = adx < 22;
-      if (alt < 55 && lined) wantAngle = clamp(wantAngle, ff - 0.06, ff + 0.06);
-      // Never sink into the last 130 px while still off-target: under crosswind
-      // that is exactly how a descent ends short of the pad.
-      const holdAltitude = !lined && alt < 130;
+      // Lining up means "over the pad", not "within 22 px of its centre".
+      // Under crosswind the tight threshold was never satisfied, so the pilot
+      // hovered off-target until the tank was empty.
+      const lined = adx < Math.max(20, halfPad * 0.55);
+      // Level out near the ground whatever else is happening. Carrying a big
+      // correction angle into contact is how a good approach becomes a
+      // rollover, and it is the first thing a human pilot stops doing.
+      if (alt < 70) wantAngle = clamp(wantAngle, ff - 0.09, ff + 0.09);
+      if (alt < 40) wantAngle = clamp(wantAngle, ff - 0.05, ff + 0.05);
+      // Do not sink into the last stretch while off-target - but commit rather
+      // than hover to death once fuel runs short.
+      const desperate = ship.fuel < ship.maxFuel * 0.22;
+      const holdAltitude = !lined && alt < 130 && !desperate;
       thrust = ship.vy > (holdAltitude ? -8 : vyMax);
       if (adx > 60 && alt < 220) phase = 'ACCEL';
     }
+
+    // Never arrive low and short: while the pad is still far away, keep some
+    // altitude in hand whatever phase we are in. Drag makes this essential -
+    // a coast that starts fast ends slow, and without this it lands short.
+    if (adx > 150 && alt < 230 && ship.vy > -5 && Math.abs(ship.angle) < 0.7) thrust = true;
 
     if (ship.vy > vyMax * 1.25 && Math.abs(ship.angle) < 0.6) thrust = true;
     // Climb over a wall in the path - but only while in transit and with room

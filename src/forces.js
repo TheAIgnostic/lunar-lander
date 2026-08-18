@@ -15,6 +15,11 @@ export function freshStatus() {
   return s;
 }
 
+/** Environment readings a force can write and the renderer/HUD can read. */
+export function freshEnv() {
+  return { visibility: 1, dust: 0 };
+}
+
 /**
  * Atmosphere: steady wind with two gust harmonics, plus drag toward the moving
  * air mass. This is the behaviour the game already had, moved behind the
@@ -47,7 +52,7 @@ function thermal(cfg) {
   return {
     id: 'thermal',
     apply(ship, level, t, dt) {
-      const s = ship.status;
+      const s = ship.statusLevels;
       s.heat = Math.max(0, Math.min(100, s.heat + (ship.thrusting ? rise : -fall) * dt));
     },
   };
@@ -59,7 +64,7 @@ function cryo(cfg) {
   return {
     id: 'cryo',
     apply(ship, level, t, dt) {
-      const s = ship.status;
+      const s = ship.statusLevels;
       s.cold = Math.max(0, Math.min(100, s.cold + (ship.thrusting ? rate * 0.3 : rate) * dt));
     },
   };
@@ -84,7 +89,51 @@ function plumes(cfg) {
   };
 }
 
-const BUILDERS = { atmosphere, thermal, cryo, plumes };
+/**
+ * Dust: cycles visibility between clear and near-blind. Missions use it either
+ * as a passing front (long period, shallow floor) or a storm that must be
+ * waited out (short period, deep floor). Deterministic in t.
+ */
+function dust(cfg) {
+  const period = cfg.period || 14;
+  const offset = cfg.offset || 0;
+  const floor = cfg.minVisibility != null ? cfg.minVisibility : 0.35;
+  const duty = cfg.duty != null ? cfg.duty : 0.45;   // fraction of the cycle obscured
+  return {
+    id: 'dust',
+    apply(ship, level, t) {
+      const phase = ((t / period) + offset) % 1;
+      // smooth in and out so the player can read the front coming
+      const inStorm = phase < duty ? Math.sin((phase / duty) * Math.PI) : 0;
+      ship.env.visibility = 1 - (1 - floor) * inStorm;
+      ship.env.dust = inStorm;
+    },
+  };
+}
+
+/**
+ * Alternating horizontal wind bands stacked by altitude - the Valles channels.
+ * Crossing a band boundary reverses the push, so a descent has to be timed
+ * rather than flown straight down.
+ */
+function windChannels(cfg) {
+  const bandHeight = cfg.bandHeight || 180;
+  const strength = cfg.strength || 46;
+  const drift = cfg.drift || 0.25;
+  return {
+    id: 'windChannels',
+    apply(ship, level, t, dt) {
+      const band = Math.floor(ship.y / bandHeight);
+      const dir = band % 2 === 0 ? 1 : -1;
+      const w = dir * strength * (1 + Math.sin(t * 0.6 + band) * drift);
+      ship.windNow = w;
+      const d = level.drag || 0.12;
+      ship.vx += (w - ship.vx) * d * dt;
+    },
+  };
+}
+
+const BUILDERS = { atmosphere, thermal, cryo, plumes, dust, windChannels };
 
 /**
  * Force list for a level, built once and cached on it. Legacy levels declare
@@ -106,6 +155,10 @@ export function forcesFor(level) {
 /** Apply every force for one step. */
 export function applyForces(ship, level, t, dt) {
   const list = forcesFor(level);
+  if (!ship.env) ship.env = freshEnv();
+  if (!ship.statusLevels) ship.statusLevels = freshStatus();
+  ship.env.visibility = level.visibility != null ? level.visibility : 1;
+  ship.env.dust = 0;
   if (!list.length) { ship.windNow = 0; return; }
   for (const f of list) f.apply(ship, level, t, dt);
 }

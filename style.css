@@ -259,3 +259,8 @@ table.metrics tr.m-total .m-val { color: var(--cyan); font-size: 14px; }
   background: rgba(255, 179, 71, .07); border: 1px solid rgba(255, 179, 71, .3); color: #e8d3b0;
 }
 .objective span { font-size: 10px; letter-spacing: .2em; color: var(--amber); margin-right: 8px; }
+
+.grid.chapters { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.tile.chapter { gap: 5px; padding: 14px 16px; }
+.tile.chapter .name { font-size: 11px; color: #9fc0d4; letter-spacing: .14em; }
+.tile.chapter .best { font-size: 11px; line-height: 1.45; color: #8fb0c4; letter-spacing: 0; }

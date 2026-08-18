@@ -90,3 +90,39 @@ Authored missions, validated over 20 seeds each (`node test/validate-missions.js
 Every mission is landable on every seed with at least two viable approaches (single-path count 0),
 and a competent flight ends with 41–49% of the tank — the same margin the classic campaign targets.
 The classic 12 remain byte-identical alongside it.
+
+
+---
+
+## M6 — Mars chapter, and the pilot rebuild
+
+Mars exposed three real faults in the test pilot, all found by validation rather than by eye:
+
+1. It waited to be within **22 px** of the pad centre before descending. Under crosswind that never
+   happened, so it hovered until the tank was dry. The threshold now scales with the pad.
+2. It carried a large correction angle into contact, arriving at 11–16° of tilt. It now levels out
+   below 70 px whatever else is happening.
+3. Under drag a coast that starts at 103 px/s ends at 29 px/s, and the re-accelerate threshold sat
+   just below that — so it glided into the ground **360 px short**. It now keeps altitude in hand
+   while the pad is far away.
+
+Effect on the whole suite (20 seeds per mission, landed counts):
+
+| | before | after |
+| --- | --- | --- |
+| Classic 11 CROSSWIND | 1/10 | **18/20** |
+| Classic 12 TERMINAL VELOCITY | 3/10 | **19/20** |
+| Mars chapter | 0–3/20 | 10–20/20 |
+| Archetypes, cave variants, Moon | 20/20 | 20/20 |
+
+The long-standing "pilot-limited" caveat on the Titan missions is effectively closed.
+
+## Two fixtures, deliberately
+
+- `test/physics-fixture.js` replays a **fixed input script** against fixed levels and hashes the
+  trajectory. No pilot involved, so it moves only when the physics moves.
+- `test/flight-fixture.js` records mission *outcomes* flown by the autopilot. It moves when either
+  the game or the pilot changes — useful, but not proof on its own.
+
+The M6 pilot work moved the flight fixture and left the physics fixture untouched, which is exactly
+the separation the two are for.
