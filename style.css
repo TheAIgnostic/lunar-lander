@@ -282,6 +282,10 @@ table.metrics tr.m-total .m-val { color: var(--cyan); font-size: 14px; }
 }
 .objective span { font-size: 10px; letter-spacing: .2em; color: var(--amber); margin-right: 8px; }
 /* The repeated-failure assist is help, not a scolding: cyan, not warning red. */
+.objective.met {
+  background: rgba(77, 255, 159, .08); border-color: rgba(77, 255, 159, .35); color: #cdf3de;
+}
+.objective.met span { color: var(--green); }
 .objective.assist {
   background: rgba(95, 245, 255, .07); border-color: rgba(95, 245, 255, .32); color: #cfe6f2;
 }

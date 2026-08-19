@@ -4,6 +4,12 @@
 //
 // Fields that later milestones consume (enemyBudget, optionalObjective) are
 // carried now so the content does not need rewriting when those land.
+//
+// **Pads are authored prize-first.** Index 0 is placed in the deepest distance
+// band - the far end of the map, past the fuel road, worth the most material -
+// and the last pad is the near zone that can always be reached on the starting
+// tank. The terrain places them by that order, so swapping two entries in a
+// `pads` array moves them across the map.
 
 import { PLANETS, gravityFor } from './planets.js';
 import { makeRng } from './util.js';
@@ -112,7 +118,7 @@ export const MARS_MISSIONS = [
     brief: 'Thin air, but enough to matter: the lander answers late and drifts on the gusts. The pad sits behind a low ridge, and a dust front is crossing the basin.',
     width: 3000, relief: 240, detail: 1.2, rough: 190, fuel: 136,
     terrain: { archetype: 'basin' },
-    pads: [{ mult: 2, width: 190 }, { mult: 3, width: 120 }],
+    pads: [{ mult: 3, width: 120 }, { mult: 2, width: 190 }],
     hazards: ['atmosphere', { type: 'dust', period: 22, minVisibility: 0.55, duty: 0.35 }],
     optionalObjective: { id: 'fuel-25', text: 'Land with at least 25% fuel', reward: { salvage: 45 } },
     enemyBudget: 0,
@@ -167,7 +173,7 @@ export const EUROPA_MISSIONS = [
     brief: 'Smooth ice, and almost nothing to hold you. Touchdown is only half the landing here — you will keep moving after the legs are down, so arrive slow and arrive straight.',
     width: 2900, relief: 200, detail: 0.8, rough: 150, fuel: 122,
     terrain: { archetype: 'basin' },
-    pads: [{ mult: 2, width: 200 }, { mult: 3, width: 130 }],
+    pads: [{ mult: 3, width: 130 }, { mult: 2, width: 200 }],
     optionalObjective: { id: 'centre', text: 'Come to rest inside the central bonus area', reward: { data: 30 } },
     enemyBudget: 0,
   },
@@ -257,9 +263,12 @@ export function generateChapter(planetId, seed = 1, sector = 1) {
       rough: 160 + i * 18,
       fuel,
       terrain: { archetype },
+      // Pads are authored prize-first: index 0 is the deep one - narrower,
+      // richer, and past the fuel road - and the last is the wide near zone
+      // that always gets you home.
       pads: i >= 3
-        ? [{ mult, width: padWidth }, { mult: 2, width: padWidth + 70 }]
-        : [{ mult, width: padWidth }, { mult: mult + 1, width: Math.round(padWidth * 0.7) }],
+        ? [{ mult: mult + 1, width: Math.round(padWidth * 0.8) }, { mult: 2, width: padWidth + 70 }]
+        : [{ mult: mult + 1, width: Math.round(padWidth * 0.7) }, { mult, width: padWidth + 40 }],
       hazards: planet.hazards.length ? undefined : [],   // undefined = inherit the planet's
       fuelCells: i >= 2 ? 2 : 0,
       enemyBudget: planet.eligibleEnemySets.length

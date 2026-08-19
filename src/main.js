@@ -17,6 +17,7 @@ import { COMPONENTS, COMPONENT_IDS, deriveFull, purchaseCheck, purchase } from '
 import { TREES, TREE_IDS, deriveSkills, skillCheck, buySkill } from './skills.js';
 import { ACTIVE_MODULES, PASSIVE_MODULES, derivePassive, recommendedFor, MOON_BLUEPRINTS, STARTER_PASSIVES, COMBAT_BLUEPRINT, moduleById } from './modules.js';
 import { EnemyField, describeThreats } from './enemies.js';
+import { evaluateObjective, cargoFor } from './objectives.js';
 import { Abilities, ABILITY } from './abilities.js';
 import * as R from './render.js';
 import { Debug } from './debug.js';
@@ -369,18 +370,27 @@ function combatEffect(e) {
 }
 
 function pickups() {
-  for (const c of g.terrain.fuelCells) {
-    if (c.taken) continue;
-    if (Math.hypot(c.x - ship.x, c.y - ship.y) < 34) {
-      c.taken = true;
-      ship.fuel = Math.min(ship.maxFuel, ship.fuel + 22);
-      particles.sparks(c.x, c.y, 22, 1);
-      particles.ring(c.x, c.y, 140, 0.4, '#ffb347');
-      particles.text(c.x, c.y - 20, '+22 FUEL', '#ffb347', 18);
-      audio.pickup();
+  // One rule, in the terrain, shared with the test pilot - it used to live here
+  // where nothing could test it, and the fuel road depends on it being the same
+  // rule in both places.
+  for (const got of g.terrain.collect(ship.x, ship.y)) {
+    if (got.kind === 'cargo') {
+      particles.sparks(got.x, got.y, 26, 1);
+      particles.ring(got.x, got.y, 180, 0.5, '#ff4fd8');
+      particles.text(got.x, got.y - 24, `${got.label} RECOVERED`, '#ff4fd8', 19);
+      audio.arpeggio([659.25, 880, 1046.5], 0.06);
+      continue;
     }
+    ship.fuel = Math.min(ship.maxFuel, ship.fuel + FUEL_CELL);
+    particles.sparks(got.x, got.y, 22, 1);
+    particles.ring(got.x, got.y, 140, 0.4, '#ffb347');
+    particles.text(got.x, got.y - 20, `+${FUEL_CELL} FUEL`, '#ffb347', 18);
+    audio.pickup();
   }
 }
+
+/** What one cell on the fuel road is worth. */
+const FUEL_CELL = 22;
 
 function effects(dt) {
   // Exhaust + ground interaction
@@ -496,8 +506,22 @@ function onLand() {
   particles.text(ship.x, surfaceY - 70, `${offPad ? 'OFF PAD' : q}  +${formatScore(total)}`,
     offPad ? '#ffb347' : q === 'PERFECT' ? '#4dff9f' : q === 'GOOD' ? '#5ff5ff' : '#ffb347', 26);
 
+  // Judge the optional objective from a plain snapshot of the flight.
+  const objective = evaluateObjective(g.level, {
+    grade: q,
+    onPad: !offPad,
+    centreFrac: ship.landingResult ? ship.landingResult.centerFrac : 1,
+    fuelFrac: ship.maxFuel > 0 ? ship.fuel / ship.maxFuel : 0,
+    hullLost: ship.hullMax > 0 ? (ship.hullMax - ship.hull) / ship.hullMax : 0,
+    abilityUses: g.abilities ? g.abilities.used : 0,
+    radiation: ship.statusLevels ? ship.statusLevels.radiation : 0,
+    brokePad: !!(ship.landingResult && ship.landingResult.brokePad),
+    cargoTaken: g.terrain.cargoTaken,
+  });
+  g.lastObjective = objective;
+
   g.lastResult = {
-    q, offPad, mult, qf, landing, fuelPts, comboMult, total,
+    q, offPad, mult, qf, landing, fuelPts, comboMult, total, objective,
     fuel: ship.fuel, time: g.levelTime,
     detail: ship.landingResult || null,
     combat: g.field && !g.field.empty ? g.field.summary() : null,
@@ -515,11 +539,18 @@ function onLand() {
       grade: q, padMultiplier: mult, fuelLeft: ship.fuel, maxFuel: ship.maxFuel,
       rareMaterial: g.level.rareMaterial, firstClear: true, offPad,
       coreDrought: g.run.coreDrought || 0,
+      padTier: pad ? pad.tier || 0 : 0,
     });
     g.run.coreDrought = reward.cores ? 0 : (g.run.coreDrought || 0) + 1;
     if (reward.pityCore) particles.text(ship.x, ship.y - 92, 'TECH CORE RECOVERED', '#5ff5ff', 20);
     const bonus = (g.loadout && g.loadout.salvageBonus) || 1;
     reward.salvage = Math.round(reward.salvage * bonus) + (g.combatSalvage || 0);
+    // The objective pays on top, and only when it was actually met.
+    if (objective && objective.reward) {
+      reward.salvage += objective.reward.salvage || 0;
+      reward.data += objective.reward.data || 0;
+      reward.cores += objective.reward.cores || 0;
+    }
     g.run.haul = addReward(g.run.haul, reward);
     g.lastReward = reward;
     persistRun();
@@ -877,6 +908,8 @@ function screenHTML(s) {
           <div><span>PADS</span><b>${padList}</b></div>
           <div><span>HAZARD</span><b>${l.cave ? 'ICE CEILING' : l.wind ? 'WIND ' + Math.abs(l.wind / 6).toFixed(0) : 'NONE'}</b></div>
         </div>
+        ${cargoFor(l) ? `<div class="objective"><span>RECOVERY</span> The ${cargoFor(l).label.toLowerCase()}
+          is out past the far landing zone. Nothing is stopping you landing short and going home instead.</div>` : ''}
         ${threatBrief()}
         ${l.optionalObjective ? `<div class="objective"><span>OPTIONAL</span> ${l.optionalObjective.text}</div>` : ''}
         <div class="btns">${btn('launch', 'LAUNCH', true, 'SPACE')}${btn('menu', 'ABORT')}</div>
@@ -891,6 +924,10 @@ function screenHTML(s) {
         <div class="verdict" style="color:${color};text-shadow:0 0 30px ${color}">${head}</div>
         ${r.offPad ? '<p class="body">Level ground held the legs, but there is no bonus off the pad — and the streak resets.</p>' : ''}
         ${r.detail ? metricsTable(r.detail) : ''}
+        ${r.objective ? `<div class="objective${r.objective.met ? ' met' : ''}">
+          <span>${r.objective.met ? 'OBJECTIVE MET' : 'OBJECTIVE'}</span> ${r.objective.text}
+          — <b>${r.objective.progress}</b>${r.objective.met && r.objective.reward
+            ? ` · +${Object.entries(r.objective.reward).map(([k, v]) => `${v} ${k}`).join(', ')}` : ''}</div>` : ''}
         ${r.combat ? `<div class="objective"><span>THREATS</span>
           ${r.combat.total} on this ground · ${r.combat.kills} destroyed ·
           ${r.combat.hitsTaken} hit${r.combat.hitsTaken === 1 ? '' : 's'} taken ·

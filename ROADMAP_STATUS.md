@@ -280,6 +280,29 @@ scheduled until the MVP is stable — the spec says the same.
   - `serve.js`: a no-store dev server, so the module-caching gotcha that has cost time in three
     milestones is fixed rather than documented
 
+- [x] **M14 — the map as a risk gradient** (this commit)
+  - Tom playtested the MVP and reported two things: he met a turret once, and never found anything
+    to pick up. Both were true, and measuring them found a third fault
+  - **the optional objectives did not exist** — `optionalObjective` was read by the briefing screen,
+    which printed it, and by nothing else. Moon 1 asked for a titanium sample the game did not have.
+    All fifteen are implemented now in `src/objectives.js`: eleven conditions judged at touchdown,
+    four as physical cargo in the world
+  - **every mission was the same length** — `spawnFor` put the lander at exactly 30% of the map from
+    the scoring pad, on every mission and every seed; and on moon-4 and mars-4 the *safe* pad was
+    1-2 px from the spawn, so the optimal line was "descend and land" and no enemy was ever met
+  - the terrain owns the entry point now and places pads in distance bands from it. The prize sits
+    at 67-82% of the map (was a flat 30%), the safe zone at 19-30%, and reward follows distance —
+    the deep zone pays roughly triple the rare material
+  - **the fuel road**: cells are a route from the entry to the deep zone, on the glide line and a
+    little under it. Flying the road turns marginal deep runs into comfortable ones — moon-5 13/20
+    to 20/20, mars-5 1/20 to 10/20 — and it is the low, slow crossing the guns can see
+  - **guards moved to the prize**: median distance from a machine to the zone it guards fell from
+    595-1326 px to 378-413. The sanctuary rule is untouched, so the near zone stays safe
+  - the validator proves **two routes** now, because the map has two: the near zone on the starting
+    tank, and the deep zone by way of the road. 15 authored missions home 8/8 each; all ten
+    generated survey chapters home 29-30/30
+  - 114 new tests; the physics fixture is still unchanged since M0
+
 ## Decisions (Tom, 2026-08-16)
 
 1. **Gravity** — compressed mapping is the *baseline*, then a per-body hand-tuned offset so each
@@ -297,7 +320,14 @@ None.
 
 ## Next task
 
-**The MVP is complete.** M0-M13 delivers everything section 18 asks for: Moon, Mars and Europa at 15
+**Playtest the gradient.** M14 rebuilt the shape of every map from a playtest report, and it wants
+the same treatment back: does the deep run feel like a decision, is the fuel road readable in the
+air, and do the guards now show up where they matter? After that, M15 is the Titan chapter and the
+glide force it needs.
+
+### Superseded
+
+**The MVP was complete at M13.** M0-M13 delivers everything section 18 asks for: Moon, Mars and Europa at 15
 missions, improved landing grades, the terrain grammar, the three-shuttle loop, salvage and research,
 the hangar, three skill trees, five active and four passive modules, two enemies, and the four-choice
 route screen — plus accessibility, a logbook and a regression that covers all 27 missions.
@@ -311,6 +341,9 @@ owed; everything else those chapters need already exists.
 
 ### Known findings
 
+- **Mission fuel budgets predate the bigger maps.** They were authored for a 900 px traverse and are
+  now flown across 2,000-2,600 px with a fuel road in between. Everything validates, but the numbers
+  deserve a deliberate pass rather than continuing to work by accident.
 - **Six of the eight enemies are deferred.** M12 ships the two the MVP asks for (section 18). Coil
   Cannon, Patrol Drone, Mortar Platform, Magnetic Mine, Solar Sentry and Shielded Guardian are
   roster entries only. Mission data that referenced two of them was pointed at what exists —

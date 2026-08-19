@@ -460,3 +460,108 @@ at once.
 no wall guard, no scaled ceiling guard. The browser and the node validator had been flying
 differently for several milestones. There is one law now, in `test/pilot.js`, and the browser file
 only adapts it to the live game objects.
+
+---
+
+## M14 — the map as a risk gradient
+
+Tom played the MVP and reported two things: he met a turret exactly once, and he never saw any
+material to pick up. Both were true, and measuring them turned up a third fault neither of us had
+noticed.
+
+### What the measurements said
+
+**The optional objectives did not exist.** `optionalObjective` was read in exactly one place in the
+codebase — the briefing screen, which printed it. Nothing evaluated it and nothing paid it. Moon 1
+told the player to recover a titanium sample; there was no sample, no way to recover one, and no
+reward. The field had been carried as data since M4 "for a later milestone" and no milestone ever
+consumed it.
+
+**Every mission was the same length.** `spawnFor` placed the lander at `bestPad ± width × 0.3`, so
+the traverse to the scoring pad was *exactly 30% of the map* in all fifteen missions, on every seed.
+
+**On the combat missions the safe pad was under your feet.** Distance from spawn to the second pad,
+median over eight seeds: moon-4 **2 px**, mars-4 **1 px**. The optimal line on the two missions
+designed to introduce enemies was "descend 900 px and land" — which is why no turret was ever met.
+
+| | spawn → prize | spawn → safe pad |
+| --- | ---: | ---: |
+| moon-1 | 810 (30%) | 404 |
+| moon-4 | 930 (30%) | **2** |
+| mars-4 | 990 (30%) | **1** |
+
+### The gradient
+
+The terrain owns the entry point now, chosen before the pads, and pads are placed in distance bands
+measured from it — near 14–34% of the run, mid 38–62%, deep 66–94%. Content is authored prize-first:
+pad 0 goes in the deepest band, the last pad in the nearest. Reward follows distance: the deep zone
+pays roughly **triple the rare material** and 50% more salvage.
+
+| | before | after |
+| --- | ---: | ---: |
+| prize distance | 810–1020 px, always 30% | **2010–2638 px, 67–82%** |
+| safe pad distance | 1–1586 px, unpredictable | **589–1001 px, 19–30%** |
+
+### The fuel road
+
+The prize is deliberately out of range of the starting tank. Fuel cells were scattered anywhere,
+which made them a lottery; they are a *route* now — a line of them from the entry to the deep zone,
+placed on the glide line and a little under it, so taking them means committing to a lower, slower
+crossing. That is also the ground the guns can see.
+
+Measured over 20 seeds per mission, flying straight at the prize versus flying the road:
+
+| | direct | via the road |
+| --- | --- | --- |
+| moon-5 TYCHO DESCENT | 13/20, 7% fuel left | **20/20, 30%** |
+| mars-4 IRON RAIN | 5/20, 14% | **14/20, 32%** |
+| mars-5 STORM EYE | 1/20, 8% | **10/20, 36%** |
+| europa-5 DRIFTING PLATE | 14/20, 20% | **20/20, 46%** |
+
+The first attempt at this failed instructively: cells were placed low in the flyable column, and the
+pilot had to *stop and hover* to reach each one. Landings went to 0/20 — a cell you have to hover for
+costs more fuel than it carries. Putting them on the glide line and widening the pickup from 34 px to
+62 px turned the road from a tax into a route.
+
+### Two routes, proved separately
+
+The validator used to prove one thing: delta-v to the highest-multiplier pad. That pad is now
+deliberately unreachable on the tank, so the check would have failed the entire game. It proves two
+claims instead, and the mission sweep flies both:
+
+- **home** — the near zone, on the starting tank, straight in and from each side
+- **prize** — the deep zone, by way of the fuel road
+
+Across the 15 authored missions at 20 seeds: **home 8/8 on every mission**, prize 5–8/8. Across all
+ten generated survey chapters at two sectors each: home 29–30/30, prize 15–30/30, with Titan's thick
+atmosphere the hardest deep run in the game.
+
+### The guards moved to the prize
+
+Enemies were scattered uniformly across the map subject to the safety rules, which put half of them
+nowhere near anything. Median distance from a machine to the pad it was supposedly guarding:
+
+| | before | after |
+| --- | ---: | ---: |
+| moon-4 | 595 px | **386** |
+| moon-5 | 865 px (max 1989) | **378** |
+| mars-5 | 1326 px | **413** |
+
+Nine times in ten a machine is now placed around the prize or back along the fuel road. The
+sanctuary rule is untouched: the near zone and the whole column above it stay outside every
+machine's reach, which is what keeps the safe landing safe.
+
+### The objectives, finally
+
+`src/objectives.js` implements all fifteen: eleven conditions judged from a plain flight report at
+touchdown, and four that need a physical thing in the world — the titanium sample, the relay, the
+sensor array and the iron salvage. Those are objects with a position, a marker and a pickup, placed
+230–350 px past the deep landing zone at 80–130 px altitude, so recovering one is a route decision
+rather than a line of text.
+
+### What did not move
+
+The physics fixture is unchanged: **the flight model has not drifted since M0**. The classic campaign
+keeps the old spawn rule and the old pad carver, and its layout is untouched; the five classic
+entries that moved in the flight fixture moved because the test pilot now collects fuel cells the way
+the game always has — the harness got more faithful, not the game less stable.

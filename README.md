@@ -13,6 +13,11 @@ Three ways to play, side by side:
 Fifteen authored missions across the Moon, Mars and Europa, plus generated survey chapters for every
 other body, so no route card leads nowhere.
 
+Every map is a gradient. The near landing zone is always reachable on the tank you start with, and
+it always gets you home. The good material is at the far end, past a line of fuel cells you have to
+fly low and slow to collect — and that low road is the ground the guns can see. Going deep is a
+decision you make on the way out, not a whim at the end.
+
 Some of that ground is defended. Abandoned security machines track you, telegraph every shot, and
 cost you hull — but never a landing: every mission keeps one pad that nothing can reach, so a weapon
 is a choice and never a requirement.
@@ -101,7 +106,7 @@ choice persists between sessions.
 
 ## Layout
 
-25 modules under `src/`, plus `test/` and `macos/`. **`docs/ARCHITECTURE.md` is the map** — what each
+26 modules under `src/`, plus `test/` and `macos/`. **`docs/ARCHITECTURE.md` is the map** — what each
 file owns, the dev hooks on `window`, the environment gotchas, and the baseline physics constants.
 
 - `DESIGN.md` — the research the original design came from

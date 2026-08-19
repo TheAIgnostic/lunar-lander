@@ -28,6 +28,8 @@ export const COMBAT = {
   muzzleSafe: 56,          // a shot may never appear closer than this to the ship
   padGuard: 110,           // no ground enemy on or beside a pad
   minSpacing: 230,         // enemies stand apart, so threats stay countable
+  guardSpread: 560,        // how loosely machines ring the prize
+  roadReach: 500,          // and how far back up the fuel road they sit
   losSamples: 26,
   hoverMin: 170,           // drone patrol altitude above the surface
   hoverMax: 300,
@@ -92,10 +94,29 @@ export const ENEMY_IDS = Object.keys(ENEMY_TYPES);
 export function sanctuaryPad(terrain) {
   const pads = terrain.pads;
   if (!pads || !pads.length) return null;
+  // With distance tiers, the sanctuary is simply the nearest zone - the one you
+  // can always still get home to. Falling back to the lowest multiplier keeps
+  // legacy levels, which have no tiers, behaving as they did.
+  if (pads.some((p) => p.tier != null)) {
+    return pads.reduce((a, b) => {
+      if ((b.tier || 0) !== (a.tier || 0)) return (b.tier || 0) < (a.tier || 0) ? b : a;
+      return (b.x2 - b.x1) > (a.x2 - a.x1) ? b : a;
+    }, pads[0]);
+  }
   return pads.reduce((a, b) => {
     if (b.mult !== a.mult) return b.mult < a.mult ? b : a;
     return (b.x2 - b.x1) > (a.x2 - a.x1) ? b : a;
   }, pads[0]);
+}
+
+/** What the machines are here to protect: the deepest landing zone. */
+export function guardedPad(terrain) {
+  const pads = terrain.pads;
+  if (!pads || !pads.length) return null;
+  if (pads.some((p) => p.tier != null)) {
+    return pads.reduce((a, b) => ((b.tier || 0) > (a.tier || 0) ? b : a), pads[0]);
+  }
+  return pads.reduce((a, b) => (b.mult > a.mult ? b : a), pads[0]);
 }
 
 /**
@@ -159,9 +180,23 @@ export function placeEnemies(level, terrain, seed) {
   const margin = 180;
   const out = [];
 
+  // Machines guard what is worth taking. Scattering them uniformly across the
+  // map - which is what this did - put half of them at the far end of the world
+  // from anywhere the player would ever fly, so they were never met at all.
+  const prize = guardedPad(terrain);
+  // With one landing zone there is no prize distinct from the sanctuary, so the
+  // machines guard the *road* instead - the crossing, not the destination.
+  const guardAt = prize
+    ? (prize !== safe ? (prize.x1 + prize.x2) / 2 : (start.x + (prize.x1 + prize.x2) / 2) / 2)
+    : null;
+
   for (let tries = 0; tries < COMBAT.placementTries && out.length < budget; tries++) {
     const type = ENEMY_TYPES[sets[out.length % sets.length]];
-    const x = rng.range(margin, level.width - margin);
+    // Two thirds of the time, look near the prize or on the road up to it.
+    const x = guardAt != null && rng() < 0.9
+      ? clamp(guardAt + (rng() - 0.5) * COMBAT.guardSpread - Math.sign(guardAt - start.x) * rng() * COMBAT.roadReach,
+        margin, level.width - margin)
+      : rng.range(margin, level.width - margin);
     const ground = terrain.heightAt(x);
     const roof = terrain.ceiling ? terrain.ceilingAt(x) : -Infinity;
 

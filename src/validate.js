@@ -18,6 +18,7 @@ export const VALIDATION = {
   minCorridor: 150,        // ground-to-ceiling gap a lander can pass through
   maxPadSlope: 8 * DEG,
   minPadWidth: 56,         // both feet plus a margin
+  fuelCellValue: 22,       // what one cell on the road is worth, for the range bound
 };
 
 /**
@@ -86,18 +87,43 @@ export function validateTerrain(level, terrain, cfg = VALIDATION) {
     }
   }
 
-  // --- fuel must be sufficient in principle: a lower bound on the delta-v to
-  //     cancel the fall and cross to the pad, versus what the tank can deliver
-  const best = terrain.pads.reduce((a, b) => (b.mult > a.mult ? b : a), terrain.pads[0]);
-  const dx = Math.abs((best.x1 + best.x2) / 2 - start.x);
-  const fallHeight = Math.max(0, best.y - start.y);
-  const vImpact = Math.sqrt(Math.max(0, 2 * level.gravity * fallHeight));
-  const flightTime = Math.max(6, Math.sqrt(2 * fallHeight / Math.max(level.gravity, 1)));
-  const dvNeeded = vImpact + 2 * Math.sqrt(dx * level.gravity * 0.35) + level.gravity * flightTime * 0.5;
-  const dvAvailable = (level.fuel / SHIP.burnMain) * SHIP.thrust;
-  notes.deltaV = { needed: Math.round(dvNeeded), available: Math.round(dvAvailable) };
-  if (dvAvailable < dvNeeded) {
-    problems.push(`fuel budget is short: ~${Math.round(dvNeeded)} px/s of delta-v needed, ${Math.round(dvAvailable)} available`);
+  // --- fuel must be sufficient in principle, for *two* routes.
+  //
+  //     Since the map became a distance gradient there are two claims to prove,
+  //     not one. The near zone must be reachable on the starting tank, because
+  //     that is the promise that every mission can be completed with minimum
+  //     gear. The deep zone is deliberately *not* reachable on the tank alone -
+  //     that is the whole design - so it is measured against the tank plus the
+  //     fuel road, and the road is what has to make it possible.
+  const dvFor = (pad) => {
+    const dx = Math.abs((pad.x1 + pad.x2) / 2 - start.x);
+    const fallHeight = Math.max(0, pad.y - start.y);
+    const vImpact = Math.sqrt(Math.max(0, 2 * level.gravity * fallHeight));
+    const flightTime = Math.max(6, Math.sqrt(2 * fallHeight / Math.max(level.gravity, 1)));
+    return vImpact + 2 * Math.sqrt(dx * level.gravity * 0.35) + level.gravity * flightTime * 0.5;
+  };
+  const dvOf = (fuel) => (fuel / SHIP.burnMain) * SHIP.thrust;
+  const tiered = terrain.pads.some((p) => p.tier != null);
+  const nearPad = tiered
+    ? terrain.pads.reduce((a, b) => ((b.tier || 0) < (a.tier || 0) ? b : a), terrain.pads[0])
+    : terrain.pads.reduce((a, b) => (b.mult > a.mult ? b : a), terrain.pads[0]);
+  const deepPad = tiered
+    ? terrain.pads.reduce((a, b) => ((b.tier || 0) > (a.tier || 0) ? b : a), terrain.pads[0])
+    : nearPad;
+
+  const tank = dvOf(level.fuel);
+  const road = dvOf(level.fuel + terrain.fuelCells.length * cfg.fuelCellValue);
+  const nearNeed = dvFor(nearPad);
+  const deepNeed = dvFor(deepPad);
+  notes.deltaV = {
+    tank: Math.round(tank), road: Math.round(road),
+    near: Math.round(nearNeed), deep: Math.round(deepNeed),
+  };
+  if (tank < nearNeed) {
+    problems.push(`the near landing zone is out of range: ~${Math.round(nearNeed)} px/s of delta-v needed, ${Math.round(tank)} in the tank`);
+  }
+  if (deepPad !== nearPad && road < deepNeed) {
+    problems.push(`the deep landing zone is unreachable even with the fuel road: ~${Math.round(deepNeed)} needed, ${Math.round(road)} available`);
   }
 
   return { ok: problems.length === 0, problems, notes };

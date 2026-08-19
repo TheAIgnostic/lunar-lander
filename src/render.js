@@ -291,6 +291,32 @@ export function drawTerrain(ctx, cam, W, H, terrain, level, time, opts = {}) {
     ctx.fillText('F', 0, 0);
     ctx.restore();
   }
+
+  // Objective cargo: a crate that has to be flown to and taken, drawn in the
+  // pad colour so it reads as "worth something" rather than "hazard".
+  for (const c of terrain.cargo || []) {
+    if (c.taken) continue;
+    const bob = Math.sin(time * 1.6 + c.phase) * 5;
+    ctx.save();
+    ctx.translate(c.x, c.y + bob);
+    ctx.strokeStyle = MAG;
+    ctx.shadowColor = MAG;
+    ctx.shadowBlur = 16;
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.rect(-12, -12, 24, 24);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-12, -4);
+    ctx.lineTo(12, -4);
+    ctx.stroke();
+    ctx.fillStyle = MAG;
+    ctx.font = `700 9px ${FONT}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(c.label, 0, 22);
+    ctx.restore();
+  }
 }
 
 /**

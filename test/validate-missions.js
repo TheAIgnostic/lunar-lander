@@ -23,6 +23,15 @@ const base = {
 // as a pilot limitation rather than a broken mission - but it is never hidden.
 const PILOT_LIMITED = (level) => Math.abs(level.wind || 0) >= 30;
 
+/** The nearest landing zone - the one every mission promises you can reach. */
+const nearIndex = (terrain) => {
+  let best = 0;
+  terrain.pads.forEach((p, i) => {
+    if ((p.tier || 0) < (terrain.pads[best].tier || 0)) best = i;
+  });
+  return best;
+};
+
 function assess(label, level, seedList) {
   const rows = [];
   for (const seed of seedList) {
@@ -35,16 +44,21 @@ function assess(label, level, seedList) {
     }
     const v = validateTerrain(level, terrain);
 
-    // Fly it: straight in, then deliberately from each side. Two of the three
-    // succeeding is the roadmap's "at least two viable approach paths".
+    // Two routes, because the map has two. The way home is the near zone on the
+    // starting tank, flown straight in and then deliberately from each side -
+    // two of three succeeding is "at least two viable approach paths". The
+    // prize is the deep zone by way of the fuel road, and it is evidence rather
+    // than proof: a deep run the test pilot fumbles is not a broken mission.
+    const near = nearIndex(terrain);
     const runs = [
-      flyMission(level, terrain, {}),
-      flyMission(level, terrain, { approach: 'left' }),
-      flyMission(level, terrain, { approach: 'right' }),
+      flyMission(level, terrain, { padIndex: near }),
+      flyMission(level, terrain, { padIndex: near, approach: 'left' }),
+      flyMission(level, terrain, { padIndex: near, approach: 'right' }),
     ];
+    const deep = flyMission(level, new Terrain(level, seed), { padIndex: 0, viaCells: true });
     const landed = runs.filter((r) => r.outcome === 'land').length;
     const reached = runs.filter((r) => r.reached).length;
-    rows.push({ seed, structural: v.problems, flight: { landed, reached, runs, notes: v.notes } });
+    rows.push({ seed, structural: v.problems, flight: { landed, reached, runs, deep, notes: v.notes } });
   }
 
   const structuralFails = rows.filter((r) => r.structural.length).length;
@@ -62,9 +76,12 @@ function assess(label, level, seedList) {
 
   const mark = !ok ? 'FAIL' : (unreachable ? 'warn' : (unflyable === 0 ? 'ok  ' : 'ok* '));
   const n = seedList.length;
+  const deepLanded = rows.filter((r) => r.flight && r.flight.deep.outcome === 'land').length;
+  const deepCells = rows.filter((r) => r.flight).reduce((a, r) => a + r.flight.deep.cellsTaken, 0);
   console.log(`${mark} ${label.padEnd(22)} structural ${String(n - structuralFails).padStart(3)}/${n}` +
-    `   reachable ${String(n - unreachable).padStart(3)}/${n}` +
-    `   landed ${String(n - unflyable).padStart(3)}/${n}` +
+    `   home ${String(n - unflyable).padStart(3)}/${n}` +
+    `   prize ${String(deepLanded).padStart(3)}/${n}` +
+    `   cells ${(deepCells / Math.max(1, n)).toFixed(1)}` +
     `   single-path ${String(singlePath).padStart(3)}`);
 
   if (unflyable && !unreachable) {
@@ -73,9 +90,10 @@ function assess(label, level, seedList) {
   for (const r of rows) {
     if (r.structural.length) console.log(`       seed ${r.seed}: ${r.structural.join('; ')}`);
     else if (r.flight && r.flight.reached === 0) {
-      console.log(`       seed ${r.seed}: pad never reached (closest ${r.flight.runs.map((x) => x.closest).join('/')} px) ` +
+      const dv = r.flight.notes.deltaV;
+      console.log(`       seed ${r.seed}: the near pad was never reached (closest ${r.flight.runs.map((x) => x.closest).join('/')} px) ` +
         `(${r.flight.runs.map((x) => `${x.outcome}${x.grade ? '/' + x.grade : ''}`).join(', ')})` +
-        `  deltaV ${r.flight.notes.deltaV.needed}/${r.flight.notes.deltaV.available}`);
+        `  deltaV need ${dv.near} / tank ${dv.tank}`);
     }
   }
   return ok;
@@ -115,23 +133,30 @@ console.log(`\nvalidating generated survey chapters (every body, sector 1 and 3)
 for (const pid of PLANET_IDS) {
   for (const sector of [1, 3]) {
     const ch = generateChapter(pid, 4242, sector);
-    let worstReach = 0, worstLand = 0, structural = 0;
+    let worstReach = 0, worstLand = 0, structural = 0, deepMiss = 0;
     for (const level of ch.levels) {
       for (const seed of seedList.slice(0, 6)) {
         const terrain = new Terrain(level, seed);
         const v = validateTerrain(level, terrain);
-        if (v.problems.length) structural++;
-        const runs = [flyMission(level, terrain, {}), flyMission(level, terrain, { approach: 'left' })];
+        const ev = validateEnemies(level, terrain, seed);
+        if (v.problems.length || ev.problems.length) structural++;
+        // The way home on the tank, then the prize by way of the fuel road.
+        const near = nearIndex(terrain);
+        const runs = [
+          flyMission(level, terrain, { padIndex: near }),
+          flyMission(level, new Terrain(level, seed), { padIndex: near, approach: 'left' }),
+        ];
         if (!runs.some((r) => r.reached)) worstReach++;
         if (!runs.some((r) => r.outcome === 'land')) worstLand++;
+        if (flyMission(level, new Terrain(level, seed), { padIndex: 0, viaCells: true }).outcome !== 'land') deepMiss++;
       }
     }
     const n = ch.levels.length * 6;
     const ok = structural === 0 && worstReach === 0;
     if (!ok) hardFail++;
     console.log(`${ok ? (worstLand ? 'ok* ' : 'ok  ') : 'FAIL'} ${(pid + ' s' + sector).padEnd(22)}` +
-      ` structural ${String(n - structural).padStart(3)}/${n}   reachable ${String(n - worstReach).padStart(3)}/${n}` +
-      `   landed ${String(n - worstLand).padStart(3)}/${n}`);
+      ` structural ${String(n - structural).padStart(3)}/${n}   home ${String(n - worstLand).padStart(3)}/${n}` +
+      `   prize ${String(n - deepMiss).padStart(3)}/${n}`);
   }
 }
 

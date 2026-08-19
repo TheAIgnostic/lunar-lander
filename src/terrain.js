@@ -3,6 +3,7 @@
 
 import { clamp, makeRng } from './util.js';
 import { buildArchetype } from './archetypes.js';
+import { cargoFor } from './objectives.js';
 
 export class Terrain {
   constructor(cfg, seed) {
@@ -61,12 +62,20 @@ export class Terrain {
       this.h[i] = clamp(this.h[i], this.height * 0.22, this.height - 40);
     }
 
+    // Where the lander enters the map. Chosen *before* the pads, because "how
+    // far from the start" is the axis the whole map is built around now - it
+    // used to be derived from the best pad afterwards, which made every mission
+    // exactly 30% of its own width long.
+    this.entry = this.shape ? this._chooseEntry(rng) : null;
+    if (this.entry) this.entry.y = this.height * 0.14;
+
     this.pads = this.shape ? this._carveAnchoredPads(cfg, rng) : this._carvePads(cfg, rng);
 
     this.ceiling = null;
     if (cfg.cave) this._makeCeiling(cfg, rng);
 
     this.fuelCells = this._placeFuel(cfg, rng);
+    this.cargo = this._placeCargo(cfg, rng);
     this.rocks = this._scatterRocks(cfg, rng);
     this._assertSane();
   }
@@ -175,18 +184,50 @@ export class Terrain {
    * Pads placed where the macro shape says a lander could sit - an inner shelf,
    * a canyon floor, a ridge terrace - rather than at evenly spaced slots.
    */
+  /**
+   * The lander enters near one edge, so the map runs away from it. Which edge is
+   * seeded, so a mission is not always flown in the same direction.
+   */
+  _chooseEntry(rng) {
+    const inset = this.width * 0.10;
+    const dir = rng() < 0.5 ? 1 : -1;                 // +1 = the map lies to the right
+    return { x: dir > 0 ? inset : this.width - inset, dir };
+  }
+
+  /**
+   * How far from the entry a pad of this rank should sit, as a window in world
+   * x. Pads are authored prize-first, so pad 0 takes the deepest band and the
+   * last pad takes the nearest - which is what makes the low-value pad the one
+   * you can always get home to.
+   */
+  _bandFor(index, count) {
+    const BANDS = [[0.14, 0.34], [0.38, 0.62], [0.66, 0.94]];
+    const run = this.entry.dir > 0 ? this.width - this.entry.x : this.entry.x;
+    // One pad sits mid-map; with more, the first is deepest and the last nearest.
+    const rank = count === 1 ? 1 : Math.min(2, Math.round(((count - 1 - index) / (count - 1)) * 2));
+    const [lo, hi] = BANDS[rank];
+    const a = this.entry.x + this.entry.dir * run * lo;
+    const b = this.entry.x + this.entry.dir * run * hi;
+    return { lo: Math.min(a, b), hi: Math.max(a, b), tier: rank };
+  }
+
   _carveAnchoredPads(cfg, rng) {
     const pads = [];
     const anchors = this.shape.anchors;
+    const count = cfg.pads.length;
     cfg.pads.forEach((specPad, i) => {
-      const anchor = i < anchors.length ? anchors[i] : null;
-      const width = specPad.width || (anchor && anchor.width) || 140;
+      const band = this._bandFor(i, count);
+      const width = specPad.width || 140;
+      // An anchor inside the band is worth taking - that is the archetype's own
+      // interesting ground. Otherwise the flattest free spot inside the band.
+      const anchor = anchors.find((a) => {
+        const x = a.nx * this.width;
+        return x >= band.lo && x <= band.hi && !pads.some((p) => x + width / 2 > p.x1 - 90 && x - width / 2 < p.x2 + 90);
+      }) || null;
       const slope = specPad.slope != null ? specPad.slope : (anchor ? anchor.slope || 0 : 0);
-      // More pads than the shape offers anchors: put the extras on the flattest
-      // ground still free, rather than carving them over an existing pad.
       const cx = anchor
         ? clamp(anchor.nx * this.width, width * 0.6 + 60, this.width - width * 0.6 - 60)
-        : this._findFlatSpot(width, pads);
+        : this._findFlatSpot(width, pads, band);
       const i1 = clamp(Math.round((cx - width / 2) / this.step), 1, this.n - 2);
       const i2 = clamp(Math.round((cx + width / 2) / this.step), i1 + 2, this.n - 2);
 
@@ -206,18 +247,23 @@ export class Terrain {
         y, y1: this.h[i1], y2: this.h[i2], slope,
         mult: specPad.mult, kind: anchor ? anchor.kind : 'flat', used: false, i1, i2,
         fragile: specPad.fragile || 0,
+        // 0 = near and safe, 1 = a real crossing, 2 = the far end of the map.
+        tier: band.tier,
+        reach: Math.round(Math.abs((i1 + i2) / 2 * this.step - this.entry.x)),
       });
     });
     return pads;
   }
 
   /** Centre of the flattest window of `width` that no existing pad occupies. */
-  _findFlatSpot(width, pads) {
+  _findFlatSpot(width, pads, band = null) {
     const half = width / 2;
     const margin = 70;
     let best = null;
     let bestScore = Infinity;
-    for (let cx = half + margin; cx <= this.width - half - margin; cx += this.step * 2) {
+    const from = Math.max(half + margin, band ? band.lo : 0);
+    const to = Math.min(this.width - half - margin, band ? band.hi : this.width);
+    for (let cx = from; cx <= to; cx += this.step * 2) {
       const clash = pads.some((p) => cx + half > p.x1 - 90 && cx - half < p.x2 + 90);
       if (clash) continue;
       const i1 = Math.max(0, Math.round((cx - half) / this.step));
@@ -227,6 +273,9 @@ export class Terrain {
       const score = hi - lo;
       if (score < bestScore) { bestScore = score; best = cx; }
     }
+    // A band with no free ground in it falls back to the whole map rather than
+    // dropping the pad: fewer landing zones is worse than a mistimed one.
+    if (best == null && band) return this._findFlatSpot(width, pads, null);
     return best != null ? best : this.width * 0.5;
   }
 
@@ -262,7 +311,54 @@ export class Terrain {
     this.ceiling = c;
   }
 
+  /**
+   * The fuel road.
+   *
+   * Cells used to be scattered anywhere, which made them a lottery. They are a
+   * *route* now: a line of them between the entry and the deepest landing zone,
+   * flown low. That is the whole economy of the map - the far pad is beyond the
+   * starting tank, and the only way to reach it is the low road, which is also
+   * the ground the guns can see. Going deep is a decision made at the top of
+   * the flight, not a whim at the end of it.
+   */
   _placeFuel(cfg, rng) {
+    if (!this.entry || !this.pads.length) return this._scatterFuel(cfg, rng);
+    const deep = this.pads.reduce((a, p) => ((p.reach || 0) > (a.reach || 0) ? p : a), this.pads[0]);
+    const target = (deep.x1 + deep.x2) / 2;
+    const span = Math.abs(target - this.entry.x);
+    // The road follows the glide line from the entry to the far pad, then sits
+    // a little under it. A cell you have to stop and hover for costs more fuel
+    // than it carries; a cell on the line you were already flying is a choice
+    // about *altitude* - lower and slower, in reach of the guns - which is the
+    // trade this map is built on.
+    const entryY = this.entry.y != null ? this.entry.y : this.height * 0.14;
+    const glide = (t) => entryY + (deep.y - 170 - entryY) * t + 70;
+    // One cell roughly every 700 px of crossing, and never fewer than the
+    // mission asked for. A short hop needs no road.
+    const want = Math.max(cfg.fuelCells || 0, span > 900 ? Math.round(span / 700) : 0);
+    const cells = [];
+    for (let i = 1; i <= want; i++) {
+      const t = i / (want + 1);
+      let placed = false;
+      for (let tries = 0; tries < 24 && !placed; tries++) {
+        const jitter = (rng() - 0.5) * span * 0.06;
+        const x = clamp(this.entry.x + (target - this.entry.x) * t + jitter, 160, this.width - 160);
+        const ground = this.heightAt(x);
+        const ceil = this.ceiling ? this.ceilingAt(x) : this.height * 0.12;
+        const lo = ceil + 80;
+        const hi = ground - 120;
+        if (hi - lo < 40) continue;
+        const y = clamp(glide(t) + (rng() - 0.5) * 60, lo, hi);
+        if (cells.some((c) => Math.hypot(c.x - x, c.y - y) < 220)) continue;
+        cells.push({ x, y, taken: false, phase: rng.range(0, 6.28), road: true });
+        placed = true;
+      }
+    }
+    return cells;
+  }
+
+  /** The old scatter, kept for legacy levels whose layout assumes it. */
+  _scatterFuel(cfg, rng) {
     const cells = [];
     for (let i = 0; i < (cfg.fuelCells || 0); i++) {
       for (let tries = 0; tries < 40; tries++) {
@@ -279,6 +375,60 @@ export class Terrain {
       }
     }
     return cells;
+  }
+
+  /**
+   * The thing a cargo objective asks you to recover, as an object in the world.
+   * It sits deep and low - a detour off the landing approach, so "recover the
+   * sample" is a route decision rather than a line of text on the briefing.
+   */
+  _placeCargo(cfg, rng) {
+    const spec = cargoFor(cfg);
+    if (!spec || !this.entry || !this.pads.length) return [];
+    const deep = this.pads.reduce((a, p) => ((p.reach || 0) > (a.reach || 0) ? p : a), this.pads[0]);
+    const mid = (deep.x1 + deep.x2) / 2;
+    const dir = this.entry.dir;
+    for (let tries = 0; tries < 30; tries++) {
+      // 'offRoute' sits past the landing zone, so taking it means overflying the
+      // pad and coming back; everything else sits just short of it.
+      const off = spec.place === 'offRoute'
+        ? dir * rng.range(240, 460)
+        : -dir * rng.range(200, 380);
+      const x = clamp(mid + off, 150, this.width - 150);
+      if (this.padAt(x)) continue;
+      const ground = this.heightAt(x);
+      const ceil = this.ceiling ? this.ceilingAt(x) : this.height * 0.12;
+      const y = ground - rng.range(70, 130);
+      if (y - ceil < 80) continue;
+      return [{
+        x, y, id: spec.id, label: spec.label, kind: 'cargo',
+        taken: false, phase: rng.range(0, 6.28),
+      }];
+    }
+    return [];
+  }
+
+  /**
+   * Collect anything the lander is touching. Shared by the game loop and the
+   * test pilot so both agree on what counts as picked up - the rule used to
+   * live in main.js, where no test could reach it.
+   */
+  collect(x, y, radius = 62) {
+    const got = [];
+    for (const c of this.fuelCells) {
+      if (c.taken) continue;
+      if (Math.hypot(c.x - x, c.y - y) < radius) { c.taken = true; got.push({ ...c, kind: 'fuel', ref: c }); }
+    }
+    for (const c of this.cargo || []) {
+      if (c.taken) continue;
+      if (Math.hypot(c.x - x, c.y - y) < radius) { c.taken = true; got.push({ ...c, kind: 'cargo', ref: c }); }
+    }
+    return got;
+  }
+
+  /** Has the mission's cargo objective been picked up? */
+  get cargoTaken() {
+    return (this.cargo || []).length > 0 && this.cargo.every((c) => c.taken);
   }
 
   /** Linearly interpolated ground height at world x. */

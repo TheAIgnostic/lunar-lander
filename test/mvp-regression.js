@@ -27,16 +27,38 @@ const check = (name, cond, extra = '') => {
 
 const AUTHORED = [...MOON_LEVELS, ...MARS_LEVELS, ...EUROPA_LEVELS];
 
+/** The near landing zone: the one the mission promises is always reachable. */
+const nearIndex = (terrain) => {
+  let best = 0;
+  terrain.pads.forEach((p, i) => { if ((p.tier || 0) < (terrain.pads[best].tier || 0)) best = i; });
+  return best;
+};
+
 function sweep(title, levels) {
   console.log(`\n${title}\n`);
   let landed = 0;
   let flights = 0;
+  let deepLanded = 0;
+  let deepFlights = 0;
   const tallies = { PERFECT: 0, GOOD: 0, HARD: 0 };
   for (const level of levels) {
+    // The way home, on the starting tank. This is the acceptance criterion:
+    // every mission has a seed the autopilot can complete.
     const rows = seedList.map((seed) => {
       const terrain = new Terrain(level, seed);
-      return flyMission(level, terrain, { enemies: level.enemyBudget > 0, enemySeed: seed });
+      return flyMission(level, terrain, {
+        padIndex: nearIndex(terrain), enemies: level.enemyBudget > 0, enemySeed: seed,
+      });
     });
+    // And the deep run, by way of the fuel road - reported, never required.
+    // Legacy levels have no distance tiers, so there is no deep run to fly.
+    const tiered = new Terrain(level, seedList[0]).pads.some((p) => p.tier != null);
+    const deep = tiered ? seedList.map((seed) => flyMission(level, new Terrain(level, seed), {
+      padIndex: 0, viaCells: true, enemies: level.enemyBudget > 0, enemySeed: seed,
+    })) : [];
+    const deepOk = deep.filter((r) => r.outcome === 'land').length;
+    deepLanded += deepOk;
+    deepFlights += deep.length;
     const ok = rows.filter((r) => r.outcome === 'land');
     landed += ok.length;
     flights += rows.length;
@@ -49,11 +71,13 @@ function sweep(title, levels) {
     // least one seed. Everything else on this line is context for tuning.
     const pass = ok.length > 0;
     if (!pass) fail++;
+    const cells = deep.length ? (deep.reduce((a, r) => a + r.cellsTaken, 0) / deep.length).toFixed(1) : '—';
     console.log(`${pass ? (ok.length >= seedList.length * 0.5 ? 'ok  ' : 'ok* ') : 'FAIL'} ` +
-      `${(level.id + ' ' + level.title).padEnd(24)} landed ${String(ok.length).padStart(3)}/${seedList.length}` +
+      `${(level.id + ' ' + level.title).padEnd(24)} home ${String(ok.length).padStart(3)}/${seedList.length}` +
+      `   prize ${(deep.length ? `${deepOk}/${seedList.length}` : '   —').padStart(5)}  cells ${String(cells).padStart(3)}` +
       `   best ${(best ? best.grade : '—').padEnd(7)} fuel ${String(fuel).padStart(3)}%   hull>=${String(worstHull).padStart(3)}`);
   }
-  return { landed, flights, tallies };
+  return { landed, flights, tallies, deepLanded, deepFlights };
 }
 
 const a = sweep(`the 15-mission MVP, ${SEEDS} seeds each`, AUTHORED);
@@ -63,7 +87,10 @@ const total = a.landed + c.landed;
 const flights = a.flights + c.flights;
 const grades = { ...a.tallies };
 for (const [k, v] of Object.entries(c.tallies)) grades[k] = (grades[k] || 0) + v;
-console.log(`\nlanded ${total}/${flights} (${Math.round((total / flights) * 100)}%)  ` +
+const deepTotal = a.deepLanded + c.deepLanded;
+const deepFlown = a.deepFlights + c.deepFlights;
+console.log(`\nhome ${total}/${flights} (${Math.round((total / flights) * 100)}%)  ` +
+  `· prize ${deepTotal}/${deepFlown} (${Math.round((deepTotal / deepFlown) * 100)}%)  ` +
   Object.entries(grades).map(([k, v]) => `${k} ${Math.round((v / total) * 100)}%`).join('  '));
 
 // ---------------------------------------------------------------- performance

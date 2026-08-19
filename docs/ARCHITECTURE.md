@@ -12,9 +12,9 @@ Everything under `src/` is a plain ES module, loaded directly in the browser and
 | `src/main.js` | state machine, camera, run loop, every overlay screen, persistence glue | — |
 | `src/ship.js` | integration, collision, the touchdown settling window, hull, per-run spec | — |
 | `src/landing.js` | severity score, band thresholds, gear tier, every landing constant | M1 |
-| `src/terrain.js` | heightmap, pad carving, cave ceilings, fuel cells, rocks, sanity assertions | — |
+| `src/terrain.js` | heightmap, the entry point, distance-banded pads, the fuel road, cargo, ceilings, rocks | —/M14 |
 | `src/archetypes.js` | 7 macro silhouettes and their landing-zone anchors | M2 |
-| `src/spawn.js` | the starting position and momentum rule | M3 |
+| `src/spawn.js` | the starting position and momentum rule (the terrain owns the entry since M14) | M3/M14 |
 | `src/validate.js` | structural mission checks: spawn clearance, approach corridors, delta-v bound | M3 |
 | `src/planets.js` | 10 PlanetDefinitions and the gravity mapping | M4/M5 |
 | `src/missions.js` | authored Moon/Mars/Europa chapters, survey-chapter generator, `chapterFor` | M4-M9 |
@@ -25,7 +25,8 @@ Everything under `src/` is a plain ES module, loaded directly in the browser and
 | `src/components.js` | 5 component tracks, `deriveLoadout` / `deriveFull`, purchase rules | M10/M11 |
 | `src/skills.js` | 3 skill trees, `deriveSkills`, purchase and gating rules | M11 |
 | `src/modules.js` | 5 active + 4 passive modules, blueprint guarantee list | M11/M12 |
-| `src/enemies.js` | enemy roster, deterministic placement, telegraphs, projectiles, damage, rewards | M12 |
+| `src/enemies.js` | enemy roster, placement around the prize, telegraphs, projectiles, damage, rewards | M12/M14 |
+| `src/objectives.js` | the fifteen optional objectives: eleven conditions and four cargo recoveries | M14 |
 | `src/abilities.js` | the active-module runtime: charges, duration, cooldown, effects | M12 |
 | `src/render.js` | background, world, ship, dust, pad beacons, enemies, hangar ship, HUD | —/M12 |
 | `src/debug.js` | F3 telemetry overlay, F4 landing-envelope bars, F5 enemy ranges | M0/M12 |
@@ -35,6 +36,14 @@ Everything under `src/` is a plain ES module, loaded directly in the browser and
 | `src/levels.js` | the original 12 classic missions, endless generator, world palettes | — |
 | `src/util.js` | math, seeded RNG, `safeStore` | — |
 | `serve.js` | the dev server, `no-store` so an edit always reaches the browser | M13 |
+
+**The axis the map is built on:** distance from the entry. The terrain picks where the lander comes
+in *before* it places pads, then places them in bands measured from there — near, mid, deep. Content
+is authored **prize-first**: `pads[0]` goes in the deepest band and the last entry in the nearest, so
+swapping two entries in a mission's `pads` array moves them across the map. Reward follows distance
+(`padTier` into `missionReward`), the fuel road is a line of cells from the entry to the deep zone,
+and enemies are placed around the prize rather than scattered. The near zone is always reachable on
+the starting tank; the deep one is deliberately not.
 
 **The rule that holds accessibility honest:** every accessibility setting changes *presentation*
 only — shake, flashing, instrument size, contrast and key bindings never reach the simulation.
@@ -58,11 +67,12 @@ object. Hazards apply through the shared force interface, so a new body is data,
 ## Tests
 
 ```bash
-./test/run-all.sh 20                 # everything: 9 unit suites, 2 fixtures, 2 sweeps, build
+./test/run-all.sh 20                 # everything: 10 unit suites, 2 fixtures, 2 sweeps, build
 node test/validate-missions.js 20    # structural + flown validation of every mission family
 node test/mvp-regression.js 20       # all 27 missions, performance, long session, determinism
 node test/enemies-tests.js           # enemies, combat rules, the active-module runtime
 node test/settings-tests.js          # key bindings, accessibility, presentation neutrality
+node test/objectives-tests.js        # objectives, distance tiers, the fuel road, cargo
 node test/physics-fixture.js         # physics drift, no pilot in the loop
 node test/flight-fixture.js          # mission outcomes flown by the autopilot
 ./macos/build.sh                     # bundles, then self-tests the app
@@ -73,7 +83,9 @@ harness so both fly identically. `test/autopilot.js` is the browser wrapper — 
 law rather than reimplementing it, which it used to, having quietly drifted three milestones behind.
 Load it with `await __autopilotReady` before flying, since it imports the law as a module.
 
-`flyMission` keeps enemies **off** unless `{ enemies: true }` asks for them. The terrain sweep and
+`flyMission` takes `{ padIndex }` to choose a landing zone and `{ viaCells: true }` to fly the fuel
+road — the two routes every tiered mission has, and both sweeps check both. It keeps enemies **off**
+unless `{ enemies: true }` asks for them. The terrain sweep and
 the flight fixture measure whether the ground can be flown; mixing gunfire into them would turn a
 terrain regression into a combat regression. The combat section of `validate-missions.js` turns them
 on and flies with nothing equipped, because what it has to prove is that nothing is needed.
@@ -130,6 +142,9 @@ The MVP is complete and measured (`test/BASELINE.md`, M13 section). What the nex
   recorded data is an autopilot, which is not a proxy for a person.
 - **Moving landing platforms** are still deferred (Europa 5, Io 5): `padAt` and the landing check
   would have to become time-aware.
+- **Mission fuel budgets have not been re-authored** since the map grew. They still work — the near
+  zone lands with 19–50% left — but they were written for a 900 px traverse and the numbers are
+  ripe for a pass now that the road carries the deep run.
 - **Controller support does not exist.** Keyboard remapping does, and every flight control is
   rebindable, but there is no gamepad backend to remap.
 - **Achievements** are deliberately not built. The spec gates them behind stable progression, and

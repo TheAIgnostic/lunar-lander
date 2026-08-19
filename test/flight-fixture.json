@@ -21,8 +21,8 @@
   ],
   "5": [
     "land/PERFECT/46.9/21.2",
-    "land/PERFECT/49.3/20.4",
-    "land/PERFECT/46.9/21.1"
+    "land/PERFECT/71.3/20.4",
+    "land/PERFECT/65.2/21.1"
   ],
   "6": [
     "land/PERFECT/39.7/20.3",
@@ -36,12 +36,12 @@
   ],
   "8": [
     "land/PERFECT/57.9/22.2",
-    "land/PERFECT/34.3/28.3",
+    "land/PERFECT/56.3/28.3",
     "land/PERFECT/57.3/22.5"
   ],
   "9": [
     "land/PERFECT/44.1/24.5",
-    "land/PERFECT/25.4/26.2",
+    "land/PERFECT/47.4/26.2",
     "land/PERFECT/48.5/22.7"
   ],
   "10": [
@@ -57,81 +57,81 @@
   "12": [
     "land/GOOD/65.6/24",
     "land/GOOD/61.7/24.7",
-    "land/GOOD/76.1/21.7"
+    "land/GOOD/94.2/21.7"
   ],
   "moon-1": [
-    "land/PERFECT/58.8/25.9",
-    "land/PERFECT/59.1/25.7",
-    "land/PERFECT/59.7/25.5"
+    "land/PERFECT/38.1/52.8",
+    "crash/CRASH/72.6/18.6",
+    "land/PERFECT/27.9/47.8"
   ],
   "moon-2": [
-    "land/PERFECT/51/25.8",
-    "land/PERFECT/51.1/25.7",
-    "land/PERFECT/51.6/25.5"
+    "land/PERFECT/55.7/23.3",
+    "land/PERFECT/52.3/25.1",
+    "land/PERFECT/53.1/24.8"
   ],
   "moon-3": [
-    "land/PERFECT/52.6/22.9",
-    "land/PERFECT/52.9/22.8",
-    "land/PERFECT/53.9/22.3"
+    "crash/CRASH/86.2/15.6",
+    "land/PERFECT/29.4/50.5",
+    "land/PERFECT/26.8/47.1"
   ],
   "moon-4": [
-    "land/PERFECT/50.9/21.7",
-    "land/PERFECT/50.8/21.8",
-    "land/PERFECT/44/25.8"
+    "crash/CRASH/82.3/16.6",
+    "crash/CRASH/64.1/14.9",
+    "land/PERFECT/38.5/37.5"
   ],
   "moon-5": [
-    "land/PERFECT/42.1/24.2",
-    "land/PERFECT/42.4/24",
-    "land/PERFECT/42.4/24"
+    "crash/CRASH/80.4/15.6",
+    "land/PERFECT/14.1/41.3",
+    "land/GOOD/0/53.7"
   ],
   "mars-1": [
-    "land/GOOD/29.2/28.4",
-    "land/GOOD/62.6/24",
-    "land/GOOD/33.1/26.9"
+    "crash/CRASH/0/37.6",
+    "land/GOOD/15.6/45.3",
+    "crash/CRASH/10.6/48.4"
   ],
   "mars-2": [
-    "land/GOOD/51.1/24.2",
-    "crash/CRASH/51.1/24.1",
-    "crash/CRASH/51.8/24.1"
+    "land/GOOD/10.8/34.1",
+    "land/GOOD/23.8/31.5",
+    "crash/CRASH/17.3/24.9"
   ],
   "mars-3": [
-    "land/GOOD/22.5/24.6",
-    "land/HARD/16.4/25.3",
-    "land/GOOD/20.4/24.8"
+    "land/HARD/17/39",
+    "land/HARD/18.3/38.6",
+    "crash/CRASH/4/42.6"
   ],
   "mars-4": [
-    "land/HARD/51/23",
-    "land/HARD/53/22.4",
-    "land/GOOD/18.7/23.6"
+    "crash/CRASH/0/37.8",
+    "land/GOOD/13.1/44.7",
+    "land/GOOD/37.2/39.2"
   ],
   "mars-5": [
-    "land/GOOD/42.9/24.9",
-    "land/GOOD/44.2/24.4",
-    "land/GOOD/43.6/24.6"
+    "crash/CRASH/25.3/41.8",
+    "crash/CRASH/0/39.5",
+    "land/HARD/6.4/40.3"
   ],
   "europa-1": [
-    "land/PERFECT/60.7/26.5",
-    "land/PERFECT/61/26.3",
-    "land/PERFECT/62.6/25.3"
+    "land/GOOD/0/52",
+    "land/PERFECT/27.6/42.6",
+    "land/PERFECT/39.3/39.3"
   ],
   "europa-2": [
-    "land/PERFECT/56/26.9",
-    "land/PERFECT/56.1/26.8",
-    "land/PERFECT/56.7/26.5"
+    "land/PERFECT/60.9/24.1",
+    "land/PERFECT/57.7/25.9",
+    "land/PERFECT/58.4/25.5"
   ],
   "europa-3": [
-    "land/PERFECT/59.2/23.9",
-    "land/PERFECT/59.5/23.7",
-    "land/PERFECT/60.4/23.2"
+    "crash/CRASH/83.6/21.7",
+    "land/PERFECT/39.1/45.4",
+    "land/PERFECT/48.5/52.6"
   ],
   "europa-4": [
-    "land/PERFECT/19.4/52",
-    "crash/null/55.8/27.3",
-    "crash/null/34.6/38.7"
+    "land/PERFECT/57.2/34.2",
+    "land/PERFECT/68.4/28.1",
+    "land/PERFECT/64.8/30.1"
   ],
   "europa-5": [
-    "land/PERFECT/65.5/24.9",
-    "land/PERFECT/65.8/24.7",
-    "land/PERFECT/65.8/24.7"
+    "crash/CRASH/89.9/22",
+    "land/PERFECT/18.1/42.1",
+    "land/PERFECT/18.6/53.3"
   ]
 }
