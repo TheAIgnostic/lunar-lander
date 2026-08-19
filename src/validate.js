@@ -7,6 +7,7 @@
 import { DEG, clamp } from './util.js';
 import { SHIP } from './ship.js';
 import { spawnFor } from './spawn.js';
+import { COMBAT, ENEMY_TYPES, placeEnemies, sanctuaryPad, sanctuaryGates, lineOfSight } from './enemies.js';
 
 export const VALIDATION = {
   shipHalfWidth: 20,
@@ -100,4 +101,88 @@ export function validateTerrain(level, terrain, cfg = VALIDATION) {
   }
 
   return { ok: problems.length === 0, problems, notes };
+}
+
+/**
+ * Enemy placement checks (roadmap section 12 and the section 17 combat list).
+ *
+ * The load-bearing one is the sanctuary: every mission must keep a landing zone
+ * that nothing can shoot into, because "every required landing must have a
+ * viable non-combat path" is a promise about geometry, not about skill. The
+ * rest stop a machine appearing somewhere it could never be fair from.
+ */
+export function validateEnemies(level, terrain, seed) {
+  const problems = [];
+  const notes = {};
+  const budget = Math.max(0, (level.enemyBudget | 0));
+  const enemies = placeEnemies(level, terrain, seed);
+  notes.placed = enemies.length;
+  notes.budget = budget;
+  if (!budget) return { ok: true, problems, notes, enemies };
+
+  const start = spawnFor(level, terrain);
+  const safe = sanctuaryPad(terrain);
+  notes.sanctuary = safe ? { mid: Math.round((safe.x1 + safe.x2) / 2), mult: safe.mult } : null;
+
+  for (const e of enemies) {
+    const type = ENEMY_TYPES[e.type];
+    const label = `${e.id}@${Math.round(e.x)}`;
+
+    // Nothing may open fire on a lander that has not had time to react.
+    const d0 = Math.hypot(e.x - start.x, e.y - start.y);
+    if (d0 < COMBAT.spawnSafeRadius) {
+      problems.push(`${label} sits ${d0.toFixed(0)} px from the spawn, inside the ${COMBAT.spawnSafeRadius} px safe radius`);
+    }
+
+    // Nothing may stand on a landing zone, or close enough to overlap one.
+    for (const p of terrain.pads) {
+      if (e.x > p.x1 - COMBAT.padGuard && e.x < p.x2 + COMBAT.padGuard) {
+        problems.push(`${label} stands within ${COMBAT.padGuard} px of a pad`);
+        break;
+      }
+    }
+
+    // Nothing may be inside the scenery, which would make it unkillable and
+    // able to shoot through a hill it is technically behind.
+    const ground = terrain.heightAt(e.x);
+    if (e.y > ground + 2) problems.push(`${label} is below the surface`);
+    if (terrain.ceiling && e.y < terrain.ceilingAt(e.x)) problems.push(`${label} is inside the ceiling`);
+
+    // The sanctuary must be unreachable: no point in the corridor a lander
+    // descends through may lie inside this machine's engagement range.
+    if (safe) {
+      const nearest = sanctuaryGates(safe)
+        .reduce((m, p) => Math.min(m, Math.hypot(e.x - p.x, e.y - p.y)), Infinity);
+      if (nearest < type.range) {
+        problems.push(`${label} can engage the sanctuary corridor (${nearest.toFixed(0)} px, reach ${type.range})`);
+      }
+    }
+  }
+
+  // Threats have to stay countable: the spec asks for 1-3 at once, 4 at most.
+  if (enemies.length > 4) problems.push(`${enemies.length} enemies placed, above the 4 the design allows`);
+  if (budget && !enemies.length) {
+    notes.starved = true;   // reported, not failed: fewer enemies is always safe
+  }
+
+  return { ok: problems.length === 0, problems, notes, enemies };
+}
+
+/**
+ * Is the sanctuary approach genuinely out of sight of every machine? Range
+ * alone is the hard rule; this is the softer, more honest question, sampled
+ * down the actual descent corridor.
+ */
+export function sanctuaryClear(level, terrain, enemies) {
+  const safe = sanctuaryPad(terrain);
+  if (!safe) return { ok: true, exposed: 0 };
+  let exposed = 0;
+  for (const p of sanctuaryGates(safe)) {
+    for (const e of enemies) {
+      const type = ENEMY_TYPES[e.type];
+      if (Math.hypot(e.x - p.x, e.y - p.y) > type.range) continue;
+      if (lineOfSight(terrain, e.x, e.y - type.radius, p.x, p.y)) exposed++;
+    }
+  }
+  return { ok: exposed === 0, exposed };
 }

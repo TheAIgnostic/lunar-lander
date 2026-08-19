@@ -69,6 +69,7 @@ export class Audio {
 
   silence() {
     if (!this.ready) return;
+    if (this.laserVoice) this.laserVoice.g.gain.setTargetAtTime(0, this.ctx.currentTime, 0.02);
     this.engines(false, false);
   }
 
@@ -142,6 +143,84 @@ export class Audio {
 
   alarm() {
     this.blip(220, 0.12, 'sawtooth', 0.1);
+  }
+
+  /**
+   * Combat voices. Each attack has a sound before it has an effect - the charge
+   * rises, the shot cracks, and only then can anything hit you.
+   */
+  charge(seconds = 1.2) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(180, t);
+    o.frequency.exponentialRampToValueAtTime(620, t + seconds);
+    o.connect(g).connect(this.master);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.09, t + seconds * 0.85);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + seconds + 0.05);
+    o.start();
+    o.stop(t + seconds + 0.1);
+  }
+
+  enemyShot() {
+    this.blip(140, 0.1, 'square', 0.09);
+  }
+
+  /** Being hit: a dull knock plus a warning, so it registers without masking the HUD. */
+  hullHit() {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noiseBuf;
+    const filt = this.ctx.createBiquadFilter();
+    filt.type = 'bandpass';
+    filt.frequency.value = 320;
+    const g = this.ctx.createGain();
+    src.connect(filt).connect(g).connect(this.master);
+    this._env(g, 0.4, 0.005, 0.22);
+    src.start();
+    src.stop(t + 0.3);
+    this.blip(98, 0.16, 'sawtooth', 0.09);
+  }
+
+  shieldHit() {
+    this.blip(1320, 0.07, 'sine', 0.09);
+  }
+
+  laser(on) {
+    if (!this.ready) return;
+    if (!this.laserVoice) {
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = 'sawtooth';
+      o.frequency.value = 720;
+      g.gain.value = 0;
+      o.connect(g).connect(this.master);
+      o.start();
+      this.laserVoice = { o, g };
+    }
+    const t = this.ctx.currentTime;
+    this.laserVoice.g.gain.setTargetAtTime(on ? 0.05 : 0, t, 0.03);
+  }
+
+  enemyDown() {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noiseBuf;
+    const filt = this.ctx.createBiquadFilter();
+    filt.type = 'lowpass';
+    filt.frequency.setValueAtTime(2200, t);
+    filt.frequency.exponentialRampToValueAtTime(160, t + 0.45);
+    const g = this.ctx.createGain();
+    src.connect(filt).connect(g).connect(this.master);
+    this._env(g, 0.4, 0.01, 0.5);
+    src.start();
+    src.stop(t + 0.6);
+    this.arpeggio([660, 440], 0.06, 'triangle', 0.1);
   }
 
   pickup() {

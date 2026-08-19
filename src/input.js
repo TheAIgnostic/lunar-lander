@@ -65,6 +65,6 @@ function keyName(e) {
 }
 
 const HANDLED = new Set([
-  ' ', 'w', 'a', 's', 'd', 'r', 'p', 'm', 'escape', 'enter',
+  ' ', 'w', 'a', 's', 'd', 'r', 'p', 'm', 'e', 'q', 'escape', 'enter',
   'arrowup', 'arrowdown', 'arrowleft', 'arrowright',
 ]);

@@ -1,8 +1,9 @@
 // Permanent skill trees, bought with Research Data (roadmap section 10).
 //
-// Two trees are live. The Combat tree is defined but gated: its nodes act on
-// enemies, which do not exist until M12, and a node with no testable effect is
-// worse than a node that says why it is not available yet.
+// All three trees are live. The Combat tree stayed gated until its nodes had
+// something to act on; M12 gave it enemies, a weapon and a shield, so every
+// node here now changes a value the simulation reads. The gate itself remains,
+// because a body with no hostile systems should not be selling threat analysis.
 
 export const TREES = {
   technician: {
@@ -47,13 +48,17 @@ export const TREES = {
     gated: 'Nothing out here is shooting at you yet. This tree opens with hostile systems.',
     nodes: [
       { id: 'capacitor', name: 'Capacitor Bank', tier: 1, ranks: 3, cost: 45, requiresFeature: 'enemies',
-        describe: (r) => `Weapon damage and shield capacity +${8 * r}%`, effect: () => ({}) },
+        describe: (r) => `Weapon damage and shield capacity +${8 * r}%`,
+        effect: (r) => ({ weaponPower: 1 + 0.08 * r, shieldCapacity: 1 + 0.08 * r }) },
       { id: 'threat-analysis', name: 'Threat Analysis', tier: 1, ranks: 1, cost: 60, requiresFeature: 'enemies',
-        describe: () => 'Enemy firing arcs are marked earlier', effect: () => ({}) },
-      { id: 'shield-harmonics', name: 'Shield Harmonics', tier: 2, ranks: 1, cost: 90, requiresFeature: 'enemies',
-        describe: () => 'Ray Shield absorbs one extra hazard type', effect: () => ({}) },
-      { id: 'energy-on-kill', name: 'Energy on Kill', tier: 2, ranks: 1, cost: 100, requiresFeature: 'enemies',
-        describe: () => 'Destroying a threat returns module energy', effect: () => ({}) },
+        describe: () => 'Enemy firing arcs are marked while they are still tracking',
+        effect: () => ({ threatWarning: 1 }) },
+      { id: 'shield-harmonics', name: 'Shield Harmonics', tier: 2, ranks: 1, cost: 90, requiresFeature: 'enemies', requires: ['capacitor'],
+        describe: () => 'Ray Shield also holds off heat, cold and radiation',
+        effect: () => ({ shieldHazard: 1 }) },
+      { id: 'energy-on-kill', name: 'Energy on Kill', tier: 2, ranks: 1, cost: 100, requiresFeature: 'enemies', requires: ['threat-analysis'],
+        describe: () => 'Destroying a threat returns a module charge',
+        effect: () => ({ energyOnKill: 1 }) },
     ],
   },
 };
@@ -65,19 +70,25 @@ export function findNode(id) {
   return ALL_NODES.find((n) => n.id === id) || null;
 }
 
+/** Stats that accumulate rather than compound. Everything else multiplies. */
+const ADDITIVE = new Set([
+  'repairOnLanding', 'cargoRecovery', 'threatWarning', 'shieldHazard', 'energyOnKill',
+]);
+
 /** Effects of every purchased rank, folded together. Pure. */
 export function deriveSkills(purchased = {}) {
   const out = {
     burnMain: 1, burnRcs: 1, fuelCapacity: 1, gearTier: 1,
     repairOnLanding: 0, cargoRecovery: 0, salvageBonus: 1,
     hazardResist: 1, disturbanceResist: 1,
+    weaponPower: 1, shieldCapacity: 1,
+    threatWarning: 0, shieldHazard: 0, energyOnKill: 0,
   };
   for (const node of ALL_NODES) {
     const rank = Math.min(node.ranks, purchased[node.id] || 0);
     if (rank <= 0) continue;
     for (const [k, v] of Object.entries(node.effect(rank))) {
-      // Multiplicative stats compound; additive ones add.
-      if (k === 'repairOnLanding' || k === 'cargoRecovery') out[k] += v;
+      if (ADDITIVE.has(k)) out[k] += v;
       else out[k] *= v;
     }
   }

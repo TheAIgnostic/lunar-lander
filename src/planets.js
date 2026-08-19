@@ -24,14 +24,20 @@ const P = (o) => ({
   surfaceFriction: 1,
   visibility: 1,
   hazards: [],
+  eligibleEnemySets: [],
   ...o,
 });
+
+// Which machines a body can be given, following the distribution in section 12.
+// Only the two designs M12 implements appear here; the other six roster entries
+// join the list they belong to when they exist, and nothing else has to change.
 
 export const PLANETS = {
   LUNA: P({
     id: 'LUNA', displayName: 'THE MOON', realGravity: 1.62, world: 'LUNA',
     rareMaterial: 'Ilmenite alloy stock',
     terrainPalette: ['crater', 'canyon', 'ridge', 'caldera', 'mesa'],
+    eligibleEnemySets: ['sentry-turret'],
     summary: 'No atmosphere. Inertia, fuel planning and rugged ground.',
   }),
   MARS: P({
@@ -40,6 +46,7 @@ export const PLANETS = {
     hazards: ['wind', 'dust'],
     rareMaterial: 'Iron-oxide ceramic',
     terrainPalette: ['basin', 'canyon', 'dunes', 'mesa'],
+    eligibleEnemySets: ['sentry-turret', 'seeker-drone'],
     summary: 'Thin air. Weak drag, dust and gusts that shift a descent.',
   }),
   MERCURY: P({
@@ -47,6 +54,7 @@ export const PLANETS = {
     feelOffset: 1.02, atmosphere: 'none', hazards: ['heat'],
     rareMaterial: 'Nickel-iron / tungsten stock',
     terrainPalette: ['crater', 'ridge', 'caldera'],
+    eligibleEnemySets: ['sentry-turret'],
     summary: 'Sunlight and shadow. Engine heat is the real fuel gauge.',
   }),
   VENUS: P({
@@ -55,6 +63,7 @@ export const PLANETS = {
     hazards: ['drag', 'acid', 'downdraft'],
     rareMaterial: 'Sulfur-resistant ceramic',
     terrainPalette: ['canyon', 'mesa', 'ridge'],
+    eligibleEnemySets: ['sentry-turret'],
     summary: 'Heavy air and heavier gravity. Everything responds late.',
   }),
   TITAN: P({
@@ -63,6 +72,7 @@ export const PLANETS = {
     hazards: ['wind', 'glide'],
     rareMaterial: 'Hydrocarbon composite',
     terrainPalette: ['dunes', 'basin', 'canyon'],
+    eligibleEnemySets: ['seeker-drone'],
     summary: 'Thick air, low gravity. You glide, and you overshoot.',
   }),
   EUROPA: P({
@@ -70,6 +80,7 @@ export const PLANETS = {
     feelOffset: 0.98, surfaceFriction: 0.07, hazards: ['ice', 'radiation'],
     rareMaterial: 'Conductive ice salts',
     terrainPalette: ['basin', 'canyon', 'mesa'],
+    eligibleEnemySets: ['seeker-drone'],
     summary: 'Ice. Touchdown is only the first half of the landing.',
   }),
   ENCELADUS: P({
@@ -77,6 +88,7 @@ export const PLANETS = {
     feelOffset: 1.15, surfaceFriction: 0.3, hazards: ['plume'],
     rareMaterial: 'Silica nanograins',
     terrainPalette: ['canyon', 'ridge', 'crater'],
+    eligibleEnemySets: [],
     summary: 'Almost no gravity. Every correction lasts far too long.',
   }),
   IO: P({
@@ -84,6 +96,7 @@ export const PLANETS = {
     feelOffset: 1.0, hazards: ['heat', 'eruption'],
     rareMaterial: 'Sulfur-basalt ceramic',
     terrainPalette: ['caldera', 'canyon', 'mesa'],
+    eligibleEnemySets: ['sentry-turret', 'seeker-drone'],
     summary: 'Lava reshapes the safe ground while you are still deciding.',
   }),
   PLUTO: P({
@@ -91,6 +104,7 @@ export const PLANETS = {
     feelOffset: 1.08, visibility: 0.45, hazards: ['cold', 'darkness'],
     rareMaterial: 'Tholin cryocomposite',
     terrainPalette: ['ridge', 'basin', 'mesa'],
+    eligibleEnemySets: ['sentry-turret'],
     summary: 'Dark and cold. Momentum is cheap to gain, expensive to lose.',
   }),
   GANYMEDE: P({
@@ -98,6 +112,7 @@ export const PLANETS = {
     feelOffset: 1.0, hazards: ['magnetic', 'falseRadar'],
     rareMaterial: 'Magnetite conductor',
     terrainPalette: ['canyon', 'ridge', 'crater'],
+    eligibleEnemySets: ['sentry-turret', 'seeker-drone'],
     summary: 'The instruments lie. Fly the window, not the readout.',
   }),
 };

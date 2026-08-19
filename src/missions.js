@@ -98,7 +98,9 @@ export function missionToLevel(mission) {
 
     optionalObjective: mission.optionalObjective || null,
     enemyBudget: mission.enemyBudget || 0,
-    enemySets: mission.enemySets || [],
+    // A mission may name its own machines; otherwise it inherits whatever the
+    // body is allowed to field, so content stays data and the roster can grow.
+    enemySets: mission.enemySets || planet.eligibleEnemySets || [],
   };
 }
 
@@ -137,23 +139,23 @@ export const MARS_MISSIONS = [
   },
   {
     id: 'mars-4', planet: 'MARS', index: 4, name: 'IRON RAIN',
-    brief: 'Iron-rich mesas, old ground batteries, and salvage sitting exactly where the safe route is not. The gusts do not care that you are being shot at.',
+    brief: 'Iron-rich mesas, old ground batteries, a patrol drone that still flies its beat, and salvage sitting exactly where the safe route is not. The gusts do not care that you are being shot at.',
     width: 3300, relief: 290, detail: 1.6, rough: 230, fuel: 124,
     terrain: { archetype: 'mesa' },
     pads: [{ mult: 3, width: 115 }, { mult: 2, width: 175 }],
     hazards: ['atmosphere', { type: 'dust', period: 18, minVisibility: 0.5, duty: 0.3 }],
     optionalObjective: { id: 'salvage-iron', text: 'Recover the iron-ceramic salvage off the safe route', reward: { salvage: 70 } },
-    enemyBudget: 2, enemySets: ['sentry-turret', 'mortar-platform'], fuelCells: 2,
+    enemyBudget: 2, enemySets: ['sentry-turret', 'seeker-drone'], fuelCells: 2,
   },
   {
     id: 'mars-5', planet: 'MARS', index: 5, name: 'STORM EYE',
-    brief: 'A storm walks the crater on a cycle. The pad is on the central mesa, and you will only see it in the gaps. Memorise the ground, then commit.',
+    brief: 'A storm walks the crater on a cycle. The pad is on the central mesa, and you will only see it in the gaps — and something is still flying in it. Memorise the ground, then commit.',
     width: 3400, relief: 320, detail: 1.5, rough: 240, fuel: 120,
     terrain: { archetype: 'caldera' },
     pads: [{ mult: 5, width: 84 }, { mult: 2, width: 175 }],
     hazards: ['atmosphere', { type: 'dust', period: 11, minVisibility: 0.22, duty: 0.55 }],
     optionalObjective: { id: 'centre', text: 'Touch down inside the central bonus area', reward: { cores: 1 } },
-    enemyBudget: 1, enemySets: ['sentry-turret'], fuelCells: 3,
+    enemyBudget: 1, enemySets: ['seeker-drone'], fuelCells: 3,
   },
 ];
 
@@ -190,13 +192,13 @@ export const EUROPA_MISSIONS = [
   },
   {
     id: 'europa-4', planet: 'EUROPA', index: 4, name: 'UNDER-ICE SIGNAL',
-    brief: 'A fractured shelf with something buried under it. The corridor is tight, the ceiling is ice, and neither forgives a fast approach.',
+    brief: 'A fractured shelf with something buried under it — and something buried in it that wakes when you pass. The corridor is tight, the ceiling is ice, and neither forgives a fast approach.',
     width: 3200, relief: 260, detail: 1.6, rough: 200, fuel: 126,
     terrain: { archetype: 'canyon' }, cave: true, clearance: 290,
     pads: [{ mult: 3, width: 130 }],
     hazards: [{ type: 'radiation', period: 18, duty: 0.35, rate: 22 }],
     optionalObjective: { id: 'no-ability', text: 'Complete without using the active ability', reward: { cores: 1 } },
-    enemyBudget: 2, enemySets: ['magnetic-mine'], fuelCells: 2,
+    enemyBudget: 2, enemySets: ['seeker-drone'], fuelCells: 2,
   },
   {
     id: 'europa-5', planet: 'EUROPA', index: 5, name: 'DRIFTING PLATE',
@@ -206,7 +208,7 @@ export const EUROPA_MISSIONS = [
     pads: [{ mult: 5, width: 96, fragile: 14 }, { mult: 2, width: 180 }],
     hazards: [{ type: 'radiation', period: 13, duty: 0.5, rate: 32 }],
     optionalObjective: { id: 'perfect', text: 'Set down on the plate without cracking it', reward: { cores: 2 } },
-    enemyBudget: 1, enemySets: ['magnetic-mine'], fuelCells: 3,
+    enemyBudget: 1, enemySets: ['seeker-drone'], fuelCells: 3,
   },
 ];
 
@@ -260,7 +262,10 @@ export function generateChapter(planetId, seed = 1, sector = 1) {
         : [{ mult, width: padWidth }, { mult: mult + 1, width: Math.round(padWidth * 0.7) }],
       hazards: planet.hazards.length ? undefined : [],   // undefined = inherit the planet's
       fuelCells: i >= 2 ? 2 : 0,
-      enemyBudget: Math.min(3, Math.max(0, i - 1 + Math.floor(depth))),
+      enemyBudget: planet.eligibleEnemySets.length
+        ? Math.min(3, Math.max(0, i - 1 + Math.floor(depth)))
+        : 0,
+      enemySets: planet.eligibleEnemySets,
       optionalObjective: null,
       procedural: true,
     };

@@ -198,6 +198,11 @@ kbd {
   border-color: rgba(255, 179, 71, .5); font-size: 26px; line-height: 1;
 }
 .tbtn.thrust span { display: block; font-size: 10px; letter-spacing: .16em; }
+.tbtn.ability {
+  width: 66px; height: 66px; margin: 0 10px 0 0; color: #7ef2d0;
+  border-color: rgba(126, 242, 208, .45); font-size: 20px; line-height: 1;
+}
+.tbtn.ability span { display: block; font-size: 8px; letter-spacing: .14em; }
 .tbtn.active { background: rgba(95, 245, 255, .25); box-shadow: 0 0 26px rgba(95, 245, 255, .4); }
 .tbtn.thrust.active { background: rgba(255, 179, 71, .3); box-shadow: 0 0 30px rgba(255, 179, 71, .5); }
 
@@ -259,6 +264,20 @@ table.metrics tr.m-total .m-val { color: var(--cyan); font-size: 14px; }
   background: rgba(255, 179, 71, .07); border: 1px solid rgba(255, 179, 71, .3); color: #e8d3b0;
 }
 .objective span { font-size: 10px; letter-spacing: .2em; color: var(--amber); margin-right: 8px; }
+
+/* Hostile systems on the briefing: what is out there, and how to beat it
+   without shooting back. Red-tinted so it reads as a warning at a glance. */
+.threats {
+  margin: 0 0 16px; padding: 10px 12px; border-radius: 8px; font-size: 12px;
+  background: rgba(255, 59, 92, .07); border: 1px solid rgba(255, 59, 92, .32); color: #e8bcc4;
+}
+.threats > span {
+  display: block; font-size: 10px; letter-spacing: .2em; color: var(--red);
+  margin-bottom: 6px;
+}
+.threats div { line-height: 1.5; }
+.threats b { color: #ffd7de; letter-spacing: .08em; }
+.threats i { font-style: normal; font-size: 10px; letter-spacing: .14em; color: #a88a92; }
 
 .grid.chapters { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
 .tile.chapter { gap: 5px; padding: 14px 16px; }

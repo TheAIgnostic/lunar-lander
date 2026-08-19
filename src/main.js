@@ -15,7 +15,9 @@ import { missionReward, addReward, settleHaul } from './economy.js';
 import { routeOffers, isCheckpoint } from './route.js';
 import { COMPONENTS, COMPONENT_IDS, deriveLoadout, deriveFull, purchaseCheck, purchase } from './components.js';
 import { TREES, TREE_IDS, deriveSkills, skillCheck, buySkill, findNode } from './skills.js';
-import { ACTIVE_MODULES, PASSIVE_MODULES, derivePassive, recommendedFor, MOON_BLUEPRINTS, STARTER_PASSIVES } from './modules.js';
+import { ACTIVE_MODULES, PASSIVE_MODULES, derivePassive, recommendedFor, MOON_BLUEPRINTS, STARTER_PASSIVES, COMBAT_BLUEPRINT } from './modules.js';
+import { EnemyField, ENEMY_TYPES, describeThreats } from './enemies.js';
+import { Abilities, ABILITY } from './abilities.js';
 import * as R from './render.js';
 import { Debug } from './debug.js';
 import { spawnFor } from './spawn.js';
@@ -68,6 +70,8 @@ const g = {
   run: null,                // active expedition, persisted between sessions
   terrain: null,
   backdrop: null,
+  field: null,             // enemies for the current mission, null when it has none
+  abilities: null,         // the equipped active module, live for this mission
   cam: { x: 0, y: 0, scale: 1, trauma: 0, tx: 0, ty: 0 },
   score: 0,
   lives: 3,
@@ -161,6 +165,17 @@ function startLevel(index, freshSeed = true) {
   ship.applyLoadout(loadout);
   g.loadout = loadout;
 
+  // Enemies share the mission's seed, so a retry after a crash faces exactly
+  // the same machines in exactly the same places.
+  g.field = new EnemyField(level, g.terrain, g.seed ^ (levelSeedSalt(level) | 0));
+  g.abilities = new Abilities(meta.equipped && meta.equipped.active, loadout);
+  if (!g.field.empty) {
+    // Counts missions flown against hostile systems. Its job is the Combat tree
+    // gate - anything above zero means something has shot at this pilot.
+    meta.stats.threatsSeen++;
+    Save.saveMeta(meta);
+  }
+
   const start = spawnFor(level, g.terrain);
   const sx = start.x;
   const sy = start.y;
@@ -169,6 +184,7 @@ function startLevel(index, freshSeed = true) {
   ship.vy = start.vy;
 
   g.levelTime = 0;
+  g.combatSalvage = 0;
   g.warn = { low: false, crit: false, dry: false };
   g.cam.x = sx;
   g.cam.y = sy;
@@ -238,7 +254,79 @@ function simulate(dt) {
     const ev = ship.step(FIXED, input, g.level, g.terrain, g.levelTime, settings);
     if (ev === 'land') return onLand();
     if (ev === 'crash') return onCrash();
+    if (combat(FIXED)) return onCrash();
     pickups();
+  }
+}
+
+/**
+ * Enemies and the active module, on the same fixed step as the physics. Returns
+ * true if the lander was lost - hull damage is a crash like any other, and it
+ * goes through the same path so shuttles, rewards and the save all agree.
+ */
+function combat(dt) {
+  const events = [];
+  if (g.field) events.push(...g.field.update(dt, g.levelTime, ship));
+  if (g.abilities) events.push(...g.abilities.update(dt, { ship, field: g.field, terrain: g.terrain, level: g.level }));
+  for (const e of events) combatEffect(e);
+  if (ship.hull <= 0 && ship.alive && !ship.landed) {
+    ship.alive = false;
+    ship.contact = { x: ship.x, y: ship.y };
+    return true;
+  }
+  return false;
+}
+
+/** Turn one combat event into light and noise. Nothing here changes the sim. */
+function combatEffect(e) {
+  switch (e.kind) {
+    case 'telegraph':
+      audio.charge(ENEMY_TYPES[e.enemy.type].telegraph);
+      break;
+    case 'fire':
+      audio.enemyShot();
+      particles.sparks(e.x, e.y, 5, 0);
+      break;
+    case 'hit':
+      if (e.absorbed > 0 && e.damage <= 0) {
+        audio.shieldHit();
+        particles.ring(e.x, e.y, 60, 0.25, '#7ef2d0');
+      } else {
+        audio.hullHit();
+        particles.sparks(e.x, e.y, 14, 0);
+        particles.text(ship.x, ship.y - 44, `-${Math.round(e.damage)} HULL`, '#ff3b5c', 16);
+        g.cam.trauma = Math.min(1, g.cam.trauma + 0.35);
+        meta.stats.hitsTaken++;
+      }
+      break;
+    case 'ram':
+      audio.hullHit();
+      particles.explode(e.x, e.y, 0, 0, []);
+      particles.sparks(e.x, e.y, 20, 0);
+      g.cam.trauma = Math.min(1, g.cam.trauma + 0.5);
+      meta.stats.hitsTaken++;
+      break;
+    case 'spark':
+      particles.sparks(e.x, e.y, 4, 0);
+      break;
+    case 'kill': {
+      audio.enemyDown();
+      particles.sparks(e.x, e.y, 26, 0);
+      particles.ring(e.x, e.y, 150, 0.4, '#ffb347');
+      // Destroying a machine pays salvage. It is never required, and never
+      // enough on its own to replace a landing.
+      const bonus = Math.round(e.reward * ((g.loadout && g.loadout.salvageBonus) || 1));
+      particles.text(e.x, e.y - 24, `+${bonus} SALVAGE`, '#ffb347', 17);
+      g.combatSalvage = (g.combatSalvage || 0) + bonus;
+      meta.stats.threatsDestroyed++;
+      break;
+    }
+    case 'shield-down':
+      audio.shieldHit();
+      particles.ring(ship.x, ship.y, 90, 0.3, '#7ef2d0');
+      break;
+    default:
+      break;
   }
 }
 
@@ -291,6 +379,7 @@ function effects(dt) {
   }
 
   audio.engines(ship.thrusting && !ship.landed, (ship.rcsLeft || ship.rcsRight) && !ship.landed);
+  audio.laser(!!(g.abilities && g.abilities.beam));
   if (g.level.wind || g.level.gust) audio.setWind(Math.abs(ship.windNow || 0) / 60);
   else audio.setWind(0);
 }
@@ -360,6 +449,10 @@ function onLand() {
     q, offPad, mult, qf, landing, fuelPts, comboMult, total,
     fuel: ship.fuel, time: g.levelTime,
     detail: ship.landingResult || null,
+    combat: g.field && !g.field.empty ? g.field.summary() : null,
+    combatSalvage: g.combatSalvage || 0,
+    hull: Math.round(ship.hull), hullMax: ship.hullMax,
+    abilityUsed: g.abilities ? g.abilities.used : 0,
   };
   store.setBest(g.level.id, total);
   if (g.score > store.high) { g.newRecord = true; store.high = g.score; }
@@ -372,7 +465,7 @@ function onLand() {
       rareMaterial: g.level.rareMaterial, firstClear: true, offPad,
     });
     const bonus = (g.loadout && g.loadout.salvageBonus) || 1;
-    reward.salvage = Math.round(reward.salvage * bonus);
+    reward.salvage = Math.round(reward.salvage * bonus) + (g.combatSalvage || 0);
     g.run.haul = addReward(g.run.haul, reward);
     g.lastReward = reward;
     persistRun();
@@ -398,6 +491,14 @@ function onLand() {
           meta.equipped = { ...meta.equipped, active: meta.equipped.active || grant };
           Save.saveMeta(meta);
           particles.text(ship.x, ship.y - 110, 'BLUEPRINT RECOVERED', '#5ff5ff', 22);
+        }
+        // Clearing a body that had hostile systems on it hands over the weapon.
+        // Surviving them is the requirement, not destroying them - the laser
+        // cannot be the reward for owning a laser.
+        if (meta.stats.threatsSeen > 0 && !meta.unlockedBlueprints.includes(COMBAT_BLUEPRINT)) {
+          meta.unlockedBlueprints = [...meta.unlockedBlueprints, COMBAT_BLUEPRINT];
+          Save.saveMeta(meta);
+          particles.text(ship.x, ship.y - 140, 'WEAPON BLUEPRINT RECOVERED', '#ff4fd8', 20);
         }
         g.run.chaptersCleared++;
         g.run.shuttles = g.lives;
@@ -502,7 +603,13 @@ function draw() {
   R.drawTerrain(ctx, cam, W, H, g.terrain, g.level, g.time);
   if (g.state === 'play' && ship.alive && !ship.landed) R.drawTrajectory(ctx, ship, g.level, g.terrain, cam);
   particles.draw(ctx);
+  R.drawEnemies(ctx, g.field, ship, g.time, {
+    threatWarning: !!(g.loadout && g.loadout.threatWarning),
+    showPaths: Debug.showEnemyPaths,
+  });
   R.drawShip(ctx, ship, g.time, cam);
+  if (g.abilities) R.drawBeam(ctx, g.abilities.beam, g.time);
+  R.drawShield(ctx, ship, ABILITY.shieldPool * ((g.loadout && g.loadout.shieldCapacity) || 1), g.time);
   particles.drawTexts(ctx);
   ctx.restore();
 
@@ -619,6 +726,7 @@ function screenHTML(s) {
           <div><kbd>A</kbd><kbd>←</kbd><span>Left attitude burner (rotates you)</span></div>
           <div><kbd>D</kbd><kbd>→</kbd><span>Right attitude burner</span></div>
           <div><kbd>S</kbd><kbd>↓</kbd><span>Attitude hold — burns fuel to kill spin</span></div>
+          <div><kbd>E</kbd><kbd>Q</kbd><span>Fire the equipped active module</span></div>
           <div><kbd>R</kbd><span>Retry</span><kbd>P</kbd><span>Pause</span><kbd>M</kbd><span>Mute</span></div>
         </div>
         <p class="body">Prefer arrows that just move the lander? <b>Settings → Steering → Direct</b> turns the
@@ -633,6 +741,10 @@ function screenHTML(s) {
         <p class="body">Miss the pad and a clean touchdown on <b>level ground</b> still survives, at the base
         rate with the streak broken. Steep ground, a hard arrival, the hull touching first, or the ice
         ceiling on Europa — those are all wreckage.</p>
+        <p class="body">Some ground is defended. Old security machines <b>telegraph every shot</b> — a
+        line locks on and a ring closes before anything is fired — and hits cost <b>hull</b>, not control.
+        Terrain is cover, a turret cannot shoot at something sitting on top of it, and every mission
+        keeps one pad no machine can reach. Destroying them pays, but it is never the way through.</p>
         <div class="btns">${btn('back', 'BACK', true, 'SPACE')}</div>
       </div>`;
 
@@ -669,6 +781,7 @@ function screenHTML(s) {
           <div><span>PADS</span><b>${padList}</b></div>
           <div><span>HAZARD</span><b>${l.cave ? 'ICE CEILING' : l.wind ? 'WIND ' + Math.abs(l.wind / 6).toFixed(0) : 'NONE'}</b></div>
         </div>
+        ${threatBrief()}
         ${l.optionalObjective ? `<div class="objective"><span>OPTIONAL</span> ${l.optionalObjective.text}</div>` : ''}
         <div class="btns">${btn('launch', 'LAUNCH', true, 'SPACE')}${btn('menu', 'ABORT')}</div>
       </div>`;
@@ -682,6 +795,10 @@ function screenHTML(s) {
         <div class="verdict" style="color:${color};text-shadow:0 0 30px ${color}">${head}</div>
         ${r.offPad ? '<p class="body">Level ground held the legs, but there is no bonus off the pad — and the streak resets.</p>' : ''}
         ${r.detail ? metricsTable(r.detail) : ''}
+        ${r.combat ? `<div class="objective"><span>THREATS</span>
+          ${r.combat.total} on this ground · ${r.combat.kills} destroyed ·
+          ${r.combat.hitsTaken} hit${r.combat.hitsTaken === 1 ? '' : 's'} taken ·
+          hull ${Math.round((r.hull / r.hullMax) * 100)}%${r.combatSalvage ? ` · +${r.combatSalvage} salvage` : ''}</div>` : ''}
         <table class="score">
           <tr><td>${r.offPad ? 'Open ground x1' : `Pad x${r.mult}`} · quality x${r.qf.toFixed(1)}</td><td>${formatScore(r.landing)}</td></tr>
           <tr><td>Fuel remaining ${r.fuel.toFixed(0)}</td><td>${formatScore(r.fuelPts)}</td></tr>
@@ -767,7 +884,8 @@ function screenHTML(s) {
 
     case 'outfit': {
       const data = meta.banked.data;
-      const features = { enemies: false };
+      // The tree opens once something has actually shot at you.
+      const features = { enemies: meta.stats.threatsSeen > 0 };
       const trees = TREE_IDS.map((tid) => {
         const tree = TREES[tid];
         const nodes = tree.nodes.map((n) => {
@@ -780,9 +898,12 @@ function screenHTML(s) {
             <span class="node-cost">${rank >= n.ranks ? 'complete' : chk.ok ? `${chk.cost} data` : chk.reason}</span>
           </button>`;
         }).join('');
-        return `<div class="tree${tree.gated ? ' gated' : ''}">
+        // A tree is only dimmed while its feature is genuinely locked. Once
+        // something has shot at you, Combat Systems reads like any other tree.
+        const locked = tree.nodes.some((n) => n.requiresFeature && !features[n.requiresFeature]);
+        return `<div class="tree${locked ? ' gated' : ''}">
           <div class="tree-name">${tree.name}</div>
-          <div class="tree-blurb">${tree.gated || tree.blurb}</div>
+          <div class="tree-blurb">${locked ? tree.gated : tree.blurb}</div>
           ${nodes}
         </div>`;
       }).join('');
@@ -911,6 +1032,19 @@ function screenHTML(s) {
 }
 
 /** Post-landing breakdown: every number the grade was made of. */
+/**
+ * What is waiting on this ground, and how to beat it without a weapon. The
+ * counterplay is printed because an untelegraphed threat and an unexplained one
+ * cost the player the same thing: a lander they had no way to save.
+ */
+function threatBrief() {
+  const threats = describeThreats(g.level);
+  if (!threats.length) return '';
+  const rows = threats.map((t) =>
+    `<div><b>${t.name}</b> <i>${t.kind === 'air' ? 'airborne' : 'ground'}</i> — ${t.counterplay}</div>`).join('');
+  return `<div class="threats"><span>HOSTILE SYSTEMS</span>${rows}</div>`;
+}
+
 function metricsTable(d) {
   const rows = [
     ['DESCENT', `${(d.parts.vy.value / 6).toFixed(2)} m/s`, d.parts.vy, 'vy'],
@@ -936,6 +1070,11 @@ function metricsTable(d) {
 }
 
 function crashReason() {
+  if (ship.lostToFire) {
+    return ship.damageSource === 'ram'
+      ? 'A drone rammed the hull and it came apart.'
+      : 'The hull failed under fire. Nothing left to absorb the next hit.';
+  }
   if (ship.landingResult && ship.landingResult.blocker && ship.landingResult.grade === 'CRASH') {
     return ship.landingResult.blocker;
   }
@@ -959,7 +1098,8 @@ function act(action) {
   }
   if (action === 'noop') return;
   if (action.startsWith('skill:')) {
-    const res = buySkill(action.slice(6), meta.purchasedSkills, meta.banked.data, { enemies: false });
+    const res = buySkill(action.slice(6), meta.purchasedSkills, meta.banked.data,
+      { enemies: meta.stats.threatsSeen > 0 });
     if (res) {
       meta.purchasedSkills = res.purchased;
       meta.banked.data = res.researchData;
@@ -1111,6 +1251,19 @@ input.bind('escape', () => {
 input.bind('f3', () => { Debug.toggle(); });
 input.bind('`', () => { Debug.toggle(); });
 input.bind('f4', () => { Debug.showEnvelope = !Debug.showEnvelope; });
+input.bind('f5', () => { Debug.showEnemyPaths = !Debug.showEnemyPaths; });
+/** Fire the equipped active module. */
+const useAbility = () => {
+  if (g.state !== 'play' || !g.abilities) return;
+  if (g.abilities.trigger(ship)) {
+    audio.arpeggio([880, 1174.66], 0.05, 'triangle', 0.11);
+    particles.ring(ship.x, ship.y, 120, 0.35, '#7ef2d0');
+  } else if (g.abilities.equipped) {
+    audio.blip(180, 0.06, 'square', 0.06);
+  }
+};
+input.bind('e', useAbility);
+input.bind('q', useAbility);
 input.bind('m', () => {
   audio.unlock();
   audio.setMuted(!audio.muted);
@@ -1122,6 +1275,8 @@ input.bindTouchButton(document.getElementById('t-left'), 'left');
 input.bindTouchButton(document.getElementById('t-thrust'), 'thrust');
 input.bindTouchButton(document.getElementById('t-right'), 'right');
 document.getElementById('t-hold') && input.bindTouchButton(document.getElementById('t-hold'), 'hold');
+const abilityBtn = document.getElementById('t-ability');
+if (abilityBtn) abilityBtn.addEventListener('pointerdown', (ev) => { ev.preventDefault(); useAbility(); });
 
 window.addEventListener('pointerdown', () => audio.unlock(), { once: true });
 
@@ -1150,6 +1305,21 @@ window.__preview = (archetype, relief = 260, detail = 1) => {
   setState('play');
   return { archetype, pads: g.terrain.pads.map((p) => [Math.round(p.x1), Math.round(p.x2), Math.round(p.y), p.kind, +p.slope.toFixed(3)]), rocks: g.terrain.rocks.length };
 };
+
+/** Dev: jump straight to any mission of any chapter, for testing content. */
+window.__goMission = (chapterId, index = 0) => {
+  g.run = null;
+  g.chapter = chapterFor(chapterId, g.forcedSeed != null ? g.forcedSeed : 1, 1);
+  g.campaign = chapterId;
+  g.endless = false;
+  g.score = 0; g.lives = 3; g.combo = 0; g.newRecord = false;
+  startLevel(index, g.forcedSeed == null);
+  return { mission: g.level.id, enemies: g.field.enemies.length };
+};
+
+/** Dev: the live enemy field, and a way to fire the module from a test. */
+window.__field = () => g.field;
+window.__useAbility = () => (g.abilities ? g.abilities.trigger(ship) : false);
 
 window.__setSeed = (n) => { g.forcedSeed = n == null ? null : (n | 0); return g.forcedSeed; };
 window.__advance = advance;

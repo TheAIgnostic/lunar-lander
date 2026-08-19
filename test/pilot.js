@@ -3,6 +3,7 @@
 
 import { Ship, DEFAULT_SETTINGS } from '../src/ship.js';
 import { spawnFor } from '../src/spawn.js';
+import { EnemyField } from '../src/enemies.js';
 
 const THRUST = 130;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -141,6 +142,12 @@ export function makeControl(ship, terrain, level, opts = {}) {
 /**
  * Fly a mission start to finish with no browser and no game loop.
  * Returns { outcome, grade, fuelLeft, simSecs, offPad }.
+ *
+ * Enemies are off unless `opts.enemies` asks for them. That is deliberate: the
+ * terrain sweep and the flight fixture measure whether the *ground* can be
+ * flown, and adding gunfire to those would turn a terrain regression into a
+ * combat regression. The combat sweep turns them on explicitly, and it flies
+ * with no weapon, because what it has to prove is that one is not needed.
  */
 export function flyMission(level, terrain, opts = {}) {
   const ship = new Ship();
@@ -149,6 +156,7 @@ export function flyMission(level, terrain, opts = {}) {
   ship.vx = start.vx;
   ship.vy = start.vy;
 
+  const field = opts.enemies ? new EnemyField(level, terrain, opts.enemySeed != null ? opts.enemySeed : 1) : null;
   const control = makeControl(ship, terrain, level, opts);
   const input = { thrust: false, left: false, right: false, hold: false };
   const pads = terrain.pads;
@@ -166,6 +174,11 @@ export function flyMission(level, terrain, opts = {}) {
   while (t < maxT) {
     control(input);
     event = ship.step(step, input, level, terrain, t, settings);
+    if (field) {
+      field.update(step, t, ship);
+      // Hull loss is a crash like any other: the run ends where it ends.
+      if (ship.hull <= 0 && ship.alive) { ship.alive = false; event = 'crash'; }
+    }
     t += step;
     // Reachability: how near the pad did it get, low and slow enough to land?
     const alt = terrain.heightAt(ship.x) - ship.y;
@@ -185,5 +198,8 @@ export function flyMission(level, terrain, opts = {}) {
     fuelLeft: +ship.fuel.toFixed(1),
     simSecs: +t.toFixed(1),
     x: Math.round(ship.x),
+    hull: Math.round(ship.hull),
+    lostToFire: !!ship.lostToFire,
+    combat: field ? field.summary() : null,
   };
 }

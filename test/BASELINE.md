@@ -281,3 +281,76 @@ leaves it identical, and `SHIP` is never mutated.
 
 **The blueprint guarantee** hands over an active module on the first chapter clear, so no route can
 demand gear the player was never offered.
+
+---
+
+## M12 — enemies and light combat
+
+Two machines, one shared system, and one promise: a weapon is never the price of a landing.
+
+### The promise, measured
+
+Every armed mission, 20 seeds, flown by the same autopilot with **no weapon, no shield and no
+evasive logic at all** — it does not know the enemies exist. `node test/validate-missions.js 20`:
+
+| Mission | placed | sanctuary clear | survived fire | landed | worst hull | hits/flight |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| moon-4 SILENT BATTERY | 2/2 | 20/20 | 20/20 | 20/20 | 40% | 1.5 |
+| moon-5 TYCHO DESCENT | 1/1 | 20/20 | 20/20 | 20/20 | 90% | 0.1 |
+| mars-4 IRON RAIN | 2/2 | 20/20 | 20/20 | 12/20 | 12% | 3.5 |
+| mars-5 STORM EYE | 1/1 | 20/20 | 20/20 | 14/20 | 52% | 2.1 |
+| europa-4 UNDER-ICE SIGNAL | 2/2 | 20/20 | 20/20 | 14/20 | 12% | 4.7 |
+| europa-5 DRIFTING PLATE | 1/1 | 20/20 | 20/20 | 20/20 | 76% | 1.0 |
+
+**Nothing was ever lost to enemy fire, and the enemies cost zero landings.** The same sweep flies
+each seed twice, armed and quiet, and compares: every seed that lands without enemies also lands
+with them. mars-4 and mars-5 at 12/20 and 14/20 are the pilot's known crosswind precision, identical
+in both columns. What combat actually costs is hull — down to 12% at worst — which is exactly the
+intended pressure: you arrive with less margin, not with fewer options.
+
+### What makes that true
+
+- **The sanctuary rule.** Every mission keeps its lowest-multiplier pad, and the whole 420 px column
+  above it, outside every machine's engagement range. Placement and validation measure the *same*
+  points; the first version cleared two points while the validator swept the column, and two Europa
+  seeds put a drone high above the safe pad with a clear sight line. Caught by the sweep at 20 seeds,
+  not at 8.
+- **The aim freezes when the telegraph starts** — 1.25 s for a turret, 1.0 s for a drone — so lateral
+  movement always beats standing still. A ground gun also cannot depress its barrel inside 130 px:
+  flying at it is a real answer.
+- **Terrain is cover.** Line of sight is sampled against the heightmap and the ice ceiling; losing
+  sight during a telegraph aborts the shot rather than delaying it.
+- **Fire never spawns on the hull.** If the muzzle point would be within 56 px of the lander, the
+  machine holds fire and records it. Verified over a sweep that walks a target through every range
+  band of every armed mission: 0 shots born inside the lander.
+- **Nothing shoots at a lander that is already down.** Engagement ends at first contact.
+
+### Physics is untouched
+
+Both fixtures are byte-identical across this milestone: `physics fixture: unchanged`,
+`flight fixture: unchanged`. Enemies are off by default in `flyMission`, deliberately — the terrain
+sweep and the flight fixture measure whether the *ground* can be flown, and mixing gunfire into them
+would turn a terrain regression into a combat regression. The combat sweep turns them on explicitly.
+
+### The gap M11 left, closed
+
+M11 recorded that every module had "a consumer already in the simulation". That was true of the four
+passives and false of the four actives: they could be equipped, and nothing could fire them. There
+was no trigger, no charge, no cooldown and no effect. `src/abilities.js` is that runtime — charges,
+duration, cooldown, and an effect the simulation reads — and `E` (or the on-screen module button)
+fires it. Sensor Pulse now clears visibility, Ray Shield raises a real 26-point pool that absorbs
+fire before hull, Magnetic Anchor multiplies post-touchdown grip, Thermal Purge dumps status and
+blinds you for a second, and Pulse Laser burns the nearest thing in line of sight.
+
+The Combat tree opens on first contact (`stats.threatsSeen > 0`) and every node now moves a number
+the simulation reads: Capacitor Bank ×1.24 weapon damage and shield pool at rank 3, Threat Analysis
+draws the tracking arc a phase early, Shield Harmonics widens the shield from radiation to heat and
+cold, Energy on Kill returns the spent charge.
+
+### Balance notes for M13
+
+- Turret damage 10, drone shot 8, drone ram 16, against a 100-point hull. Worst observed loss over
+  120 flights was 88% of the hull, on europa-4, where a tight ice corridor keeps a drone in sight.
+- europa-4 remains the hardest ground in the game: 14/20 landed under fire, 17/20 quiet.
+- The reward is 26 salvage for a turret and 34 for a drone — a nudge, not a living. A cleared
+  mission pays roughly 50-325 depending on pad and grade.

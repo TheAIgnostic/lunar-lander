@@ -3,6 +3,7 @@
 import { clamp, lerp, TAU, DEG, makeRng } from './util.js';
 import { HULL, LEGS, ENVELOPE, normalizeAngle } from './ship.js';
 import { WORLDS } from './levels.js';
+import { ENEMY_TYPES } from './enemies.js';
 
 const FONT = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const GREEN = '#4dff9f';
@@ -409,6 +410,246 @@ export function drawShip(ctx, ship, time, cam) {
 }
 
 /** Dotted predicted path a couple of seconds ahead - a real pilot aid. */
+/**
+ * Enemies, their telegraphs and their fire, in world space.
+ *
+ * The telegraph is the whole design: a locked line that grows toward the point
+ * the shot will pass through, and a ring that closes as the timer runs out. It
+ * is deliberately readable without colour - a player who cannot separate red
+ * from amber still sees a line appear and a ring shrink.
+ */
+export function drawEnemies(ctx, field, ship, time, opts = {}) {
+  if (!field) return;
+  for (const e of field.enemies) {
+    const type = ENEMY_TYPES[e.type];
+    if (e.dead) { drawWreck(ctx, e, type); continue; }
+    if (type.kind === 'ground') drawTurret(ctx, e, type, time);
+    else drawDrone(ctx, e, type, time);
+    drawTelegraph(ctx, e, type, time, opts);
+    if (e.hp < e.maxHp) drawEnemyHealth(ctx, e, type);
+    if (opts.showPaths) drawEnemyRange(ctx, e, type);
+  }
+  for (const p of field.shots) drawShot(ctx, p, time);
+}
+
+function threatAlpha(e) {
+  return e.hitFlash > 0 ? 1 : 0.85;
+}
+
+function drawTurret(ctx, e, type, time) {
+  ctx.save();
+  ctx.translate(e.x, e.y);
+  const hot = e.state === 'telegraph';
+  const col = e.hitFlash > 0 ? '#ffffff' : hot ? RED : e.state === 'idle' ? 'rgba(190,205,220,0.75)' : AMBER;
+  ctx.strokeStyle = col;
+  ctx.fillStyle = 'rgba(10,14,22,0.9)';
+  ctx.lineWidth = 2;
+  ctx.globalAlpha = threatAlpha(e);
+  // barrel first, so the base caps it
+  ctx.save();
+  ctx.rotate(e.aim);
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(type.radius + 12, 0);
+  ctx.lineWidth = 4;
+  ctx.stroke();
+  ctx.restore();
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-type.radius, type.radius);
+  ctx.lineTo(-type.radius * 0.7, -type.radius * 0.3);
+  ctx.lineTo(type.radius * 0.7, -type.radius * 0.3);
+  ctx.lineTo(type.radius, type.radius);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // the eye: dark asleep, lit awake, pulsing while it charges
+  const eye = hot ? 1 : e.alert;
+  if (eye > 0.05) {
+    ctx.fillStyle = col;
+    ctx.shadowColor = col;
+    ctx.shadowBlur = 10 * eye * (hot ? 1.4 + Math.sin(time * 18) * 0.4 : 1);
+    ctx.beginPath();
+    ctx.arc(0, -type.radius * 0.55, 3.2, 0, TAU);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+  ctx.restore();
+}
+
+function drawDrone(ctx, e, type, time) {
+  ctx.save();
+  ctx.translate(e.x, e.y);
+  const hot = e.state === 'telegraph';
+  const col = e.hitFlash > 0 ? '#ffffff' : hot ? RED : e.state === 'idle' ? 'rgba(190,205,220,0.8)' : AMBER;
+  const bob = Math.sin(time * 3 + e.beat) * 2.4;
+  ctx.translate(0, bob);
+  ctx.strokeStyle = col;
+  ctx.fillStyle = 'rgba(10,14,22,0.9)';
+  ctx.lineWidth = 2;
+  ctx.globalAlpha = threatAlpha(e);
+  ctx.beginPath();
+  ctx.moveTo(-type.radius, 0);
+  ctx.lineTo(0, -type.radius * 0.75);
+  ctx.lineTo(type.radius, 0);
+  ctx.lineTo(0, type.radius * 0.75);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // nacelles
+  ctx.beginPath();
+  ctx.moveTo(-type.radius - 6, -3);
+  ctx.lineTo(-type.radius + 2, -3);
+  ctx.moveTo(type.radius - 2, -3);
+  ctx.lineTo(type.radius + 6, -3);
+  ctx.stroke();
+  const eye = hot ? 1 : Math.max(0.2, e.alert);
+  ctx.fillStyle = col;
+  ctx.shadowColor = col;
+  ctx.shadowBlur = 12 * eye;
+  ctx.beginPath();
+  ctx.arc(0, 0, 2.6, 0, TAU);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.restore();
+}
+
+function drawWreck(ctx, e, type) {
+  ctx.save();
+  ctx.translate(e.x, e.y);
+  ctx.globalAlpha = 0.45;
+  ctx.strokeStyle = 'rgba(120,135,150,0.7)';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(-type.radius, type.radius * 0.6);
+  ctx.lineTo(-type.radius * 0.3, -type.radius * 0.2);
+  ctx.lineTo(type.radius * 0.5, type.radius * 0.5);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** The locked aim line and the closing ring: everything the player gets to react to. */
+function drawTelegraph(ctx, e, type, time, opts) {
+  const tracking = e.state === 'track';
+  const charging = e.state === 'telegraph';
+  // Threat Analysis is what turns the tracking phase visible; without it the
+  // warning starts when the aim locks, which is still a full second of notice.
+  if (!charging && !(tracking && opts.threatWarning)) return;
+
+  const frac = charging ? 1 - clamp(e.timer / type.telegraph, 0, 1) : 0.25;
+  const dir = charging ? Math.atan2(e.aimY - e.y, e.aimX - e.x) : e.aim;
+  const len = type.range * (charging ? 0.35 + 0.65 * frac : 0.3);
+
+  ctx.save();
+  ctx.translate(e.x, e.y);
+  ctx.rotate(dir);
+  ctx.strokeStyle = charging ? RED : 'rgba(255,179,71,0.55)';
+  ctx.globalAlpha = charging ? 0.35 + 0.4 * frac : 0.4;
+  ctx.lineWidth = charging ? 1.4 + frac * 1.8 : 1;
+  ctx.setLineDash(charging ? [] : [6, 9]);
+  ctx.beginPath();
+  ctx.moveTo(type.radius, 0);
+  ctx.lineTo(len, 0);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+
+  if (!charging) return;
+  // The ring closes on the muzzle: shape carries the timing, not just colour.
+  ctx.save();
+  ctx.translate(e.x, e.y);
+  ctx.strokeStyle = RED;
+  ctx.globalAlpha = 0.5 + 0.4 * frac;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(0, 0, type.radius + 26 * (1 - frac) + 6, 0, TAU);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawEnemyHealth(ctx, e, type) {
+  const w = type.radius * 2;
+  const x = e.x - w / 2;
+  const y = e.y - type.radius - 12;
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.fillRect(x, y, w, 3);
+  ctx.fillStyle = GREEN;
+  ctx.fillRect(x, y, w * clamp(e.hp / e.maxHp, 0, 1), 3);
+  ctx.restore();
+}
+
+/** Debug only: how far this machine can actually reach. */
+function drawEnemyRange(ctx, e, type) {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,59,92,0.22)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 8]);
+  ctx.beginPath();
+  ctx.arc(e.x, e.y, type.range, 0, TAU);
+  ctx.stroke();
+  if (type.minRange) {
+    ctx.strokeStyle = 'rgba(77,255,159,0.22)';
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, type.minRange, 0, TAU);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+function drawShot(ctx, p, time) {
+  const sp = Math.hypot(p.vx, p.vy) || 1;
+  const tail = 14;
+  ctx.save();
+  ctx.strokeStyle = RED;
+  ctx.shadowColor = RED;
+  ctx.shadowBlur = 10;
+  ctx.lineWidth = p.radius;
+  ctx.beginPath();
+  ctx.moveTo(p.x - (p.vx / sp) * tail, p.y - (p.vy / sp) * tail);
+  ctx.lineTo(p.x, p.y);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.restore();
+}
+
+/** The laser beam, drawn from the lander to whatever it is burning. */
+export function drawBeam(ctx, beam, time) {
+  if (!beam) return;
+  ctx.save();
+  const flicker = 0.7 + Math.sin(time * 40) * 0.3;
+  ctx.strokeStyle = CYAN;
+  ctx.shadowColor = CYAN;
+  ctx.shadowBlur = 16;
+  ctx.globalAlpha = 0.55 + 0.3 * flicker;
+  ctx.lineWidth = 2 + flicker * 2;
+  ctx.beginPath();
+  ctx.moveTo(beam.x1, beam.y1);
+  ctx.lineTo(beam.x2, beam.y2);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
+  ctx.restore();
+}
+
+/** A raised shield, drawn as a bubble that thins as its pool is spent. */
+export function drawShield(ctx, ship, pool, time) {
+  if (!ship.shieldActive || ship.shieldHp <= 0) return;
+  const f = clamp(ship.shieldHp / Math.max(1, pool), 0, 1);
+  ctx.save();
+  ctx.translate(ship.x, ship.y);
+  ctx.strokeStyle = '#7ef2d0';
+  ctx.shadowColor = '#7ef2d0';
+  ctx.shadowBlur = 14;
+  ctx.globalAlpha = 0.25 + 0.45 * f;
+  ctx.lineWidth = 1 + 2 * f;
+  ctx.beginPath();
+  ctx.arc(0, 0, 30 + Math.sin(time * 6) * 1.5, 0, TAU);
+  ctx.stroke();
+  ctx.restore();
+}
+
 export function drawTrajectory(ctx, ship, level, terrain, cam) {
   if (!ship.alive || ship.landed) return;
   let x = ship.x;
@@ -737,8 +978,36 @@ export function drawHUD(ctx, W, H, g) {
     ctx.shadowBlur = 0;
   }
 
+  // ---- hull, once there is something in the world that can dent it
+  const threats = g.field && !g.field.empty;
+  if (ship.hullMax && (ship.hull < ship.hullMax || threats)) {
+    const hy = py + ph + 8;
+    panel(ctx, px, hy, pw, 40 * s, ship.hull < ship.hullMax * 0.35 ? 'rgba(255,59,92,0.4)' : 'rgba(95,245,255,0.25)');
+    label(ctx, 'HULL', px + 14, hy + 18 * s, 10 * s);
+    const hf = clamp(ship.hull / ship.hullMax, 0, 1);
+    const hbw = pw - 28;
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(px + 14, hy + 24 * s, hbw, 8 * s);
+    const hc = hf > 0.55 ? GREEN : hf > 0.25 ? AMBER : RED;
+    ctx.fillStyle = hc;
+    ctx.shadowColor = hc;
+    ctx.shadowBlur = ship.hitFlash > 0 ? 18 : 6;
+    ctx.fillRect(px + 14, hy + 24 * s, hbw * hf, 8 * s);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#dff6ff';
+    ctx.font = `700 ${11 * s}px ${FONT}`;
+    ctx.textAlign = 'right';
+    ctx.fillText(`${Math.round(hf * 100)}%`, px + pw - 14, hy + 18 * s);
+    ctx.textAlign = 'left';
+  }
+
+  // ---- threats, and the module that answers them
+  if (threats) drawThreatPanel(ctx, W, H, g, s);
+  if (g.abilities && g.abilities.equipped) drawAbilityPanel(ctx, W, H, g, s);
+
   // ---- off-screen pad chevrons
   drawPadPointers(ctx, W, H, g);
+  if (threats) drawThreatPointers(ctx, W, H, g);
 
   // ---- proximity alarm vignette
   const danger = alt < 60 && ship.vy > ENVELOPE.GOOD.vy * 1.4 && ship.alive && !ship.landed;
@@ -832,5 +1101,111 @@ function drawPadPointers(ctx, W, H, g) {
     ctx.font = `700 11px ${FONT}`;
     ctx.textAlign = 'center';
     ctx.fillText(`x${p.mult} ${dist.toFixed(0)}m`, cx - Math.cos(ang) * 22, cy - Math.sin(ang) * 22 + 4);
+  }
+}
+
+/**
+ * How many machines are awake, and how close the nearest one is. A count is
+ * enough: the world itself shows where they are, and a busy radar would take
+ * attention away from the landing, which is the thing that must stay in front.
+ */
+function drawThreatPanel(ctx, W, H, g, s) {
+  const { ship, field, compact } = g;
+  const live = field.live;
+  if (!live.length && !field.kills) return;
+  const w = 190 * s;
+  const x = W - w - 16;
+  const y = 16 + 92 * s + 26;
+  const engaged = field.engaged;
+  panel(ctx, x, y, w, 44 * s, engaged ? 'rgba(255,59,92,0.45)' : 'rgba(255,179,71,0.28)');
+  label(ctx, 'THREATS', x + 14, y + 20 * s, 10 * s);
+  ctx.textAlign = 'right';
+  ctx.font = `700 ${16 * s}px ${FONT}`;
+  ctx.fillStyle = engaged ? RED : live.length ? AMBER : 'rgba(200,220,235,0.6)';
+  ctx.fillText(live.length ? `${live.length}` : 'CLEAR', x + w - 14, y + 20 * s);
+  ctx.textAlign = 'left';
+  let nearest = Infinity;
+  for (const e of live) nearest = Math.min(nearest, Math.hypot(e.x - ship.x, e.y - ship.y));
+  ctx.font = `600 ${10 * s}px ${FONT}`;
+  ctx.fillStyle = 'rgba(160,190,215,0.75)';
+  const status = engaged ? 'TRACKING YOU'
+    : field.reloading ? 'RELOADING'
+      : live.length ? 'IDLE' : 'AREA CLEAR';
+  ctx.fillText(status, x + 14, y + 36 * s);
+  if (Number.isFinite(nearest)) {
+    ctx.textAlign = 'right';
+    ctx.fillStyle = 'rgba(200,220,235,0.7)';
+    ctx.fillText(`${(nearest / 6).toFixed(0)}m`, x + w - 14, y + 36 * s);
+    ctx.textAlign = 'left';
+  }
+}
+
+/** The equipped active: what it is, how many charges are left, and its state. */
+function drawAbilityPanel(ctx, W, H, g, s) {
+  const a = g.abilities.readout();
+  const w = 210 * s;
+  const h = 46 * s;
+  const x = 16;
+  const y = H - h - 16;
+  const accent = a.active ? 'rgba(126,242,208,0.5)' : a.blocker ? 'rgba(120,140,160,0.3)' : 'rgba(95,245,255,0.3)';
+  panel(ctx, x, y, w, h, accent);
+  ctx.font = `700 ${11 * s}px ${FONT}`;
+  ctx.fillStyle = a.active ? '#7ef2d0' : a.blocker ? 'rgba(170,185,200,0.7)' : '#dff6ff';
+  ctx.textAlign = 'left';
+  ctx.fillText(a.name, x + 12, y + 18 * s);
+  ctx.textAlign = 'right';
+  ctx.font = `600 ${10 * s}px ${FONT}`;
+  ctx.fillStyle = 'rgba(160,190,215,0.75)';
+  ctx.fillText(a.blocker ? a.blocker : a.active ? 'ACTIVE' : 'E', x + w - 12, y + 18 * s);
+  ctx.textAlign = 'left';
+
+  // charge pips, then a bar that fills while it recharges and drains while it runs
+  const pipY = y + 28 * s;
+  for (let i = 0; i < a.maxCharges; i++) {
+    const cx = x + 12 + i * 12;
+    ctx.fillStyle = i < a.charges ? (a.active ? '#7ef2d0' : CYAN) : 'rgba(255,255,255,0.14)';
+    ctx.fillRect(cx, pipY, 8, 8 * s);
+  }
+  const bx = x + 12 + a.maxCharges * 12 + 8;
+  const bw = w - (bx - x) - 12;
+  if (bw > 20) {
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(bx, pipY, bw, 8 * s);
+    const f = a.active ? clamp(a.remaining / Math.max(0.001, a.duration), 0, 1) : a.fraction;
+    ctx.fillStyle = a.active ? '#7ef2d0' : a.cooldown > 0 ? AMBER : 'rgba(95,245,255,0.5)';
+    ctx.fillRect(bx, pipY, bw * f, 8 * s);
+  }
+}
+
+/** A chevron for anything that has locked on from outside the view. */
+function drawThreatPointers(ctx, W, H, g) {
+  const { ship, field, cam } = g;
+  if (!ship.alive || ship.landed) return;
+  for (const e of field.enemies) {
+    if (e.dead || e.state !== 'telegraph') continue;
+    const sx = W / 2 + (e.x - cam.x) * cam.scale;
+    const sy = H / 2 + (e.y - cam.y) * cam.scale;
+    const m = 30;
+    if (sx > m && sx < W - m && sy > m && sy < H - m) continue;
+    const ang = Math.atan2(sy - H / 2, sx - W / 2);
+    const rx = Math.abs(Math.cos(ang)) > 0.001 ? Math.abs((W / 2 - 52) / Math.cos(ang)) : 1e9;
+    const ry = Math.abs(Math.sin(ang)) > 0.001 ? Math.abs((H / 2 - 52) / Math.sin(ang)) : 1e9;
+    const d = Math.min(rx, ry, Math.min(W, H) / 2);
+    const cx = W / 2 + Math.cos(ang) * d;
+    const cy = H / 2 + Math.sin(ang) * d;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(ang);
+    ctx.strokeStyle = RED;
+    ctx.shadowColor = RED;
+    ctx.shadowBlur = 12;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(11, 0);
+    ctx.lineTo(-6, -8);
+    ctx.lineTo(-6, 8);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
   }
 }

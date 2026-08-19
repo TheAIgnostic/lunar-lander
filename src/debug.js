@@ -11,6 +11,7 @@ const PX_PER_M = 6;
 export const Debug = {
   enabled: false,
   showEnvelope: true,
+  showEnemyPaths: false,
   frames: [],
   lastTouchdown: null,
 
@@ -68,6 +69,22 @@ export const Debug = {
       const v = ship.verdict();
       rows.push(['verdict now', v || 'CRASH']);
     }
+    if (g.field && !g.field.empty) {
+      const f = g.field;
+      rows.push(['threats', `${f.live.length}/${f.enemies.length} live · ${f.engaged} engaged · ${f.kills} down`]);
+      rows.push(['  fire', `${f.shotsFired} shots · ${f.hitsTaken} hits taken · ${f.suppressed} held`]);
+      rows.push(['  shots live', String(f.shots.length)]);
+      const near = f.live
+        .map((e) => ({ e, d: Math.hypot(e.x - ship.x, e.y - ship.y) }))
+        .sort((a, b) => a.d - b.d)[0];
+      if (near) rows.push(['  nearest', `${near.e.type} ${near.e.state} ${near.d.toFixed(0)} px`]);
+      rows.push(['hull', `${Math.round(ship.hull)} / ${ship.hullMax}${ship.shieldActive ? ` · shield ${ship.shieldHp.toFixed(0)}` : ''}`]);
+    }
+    if (g.abilities && g.abilities.equipped) {
+      const a = g.abilities.readout();
+      rows.push(['module', `${a.name} ${a.charges}/${a.maxCharges}` +
+        `${a.active ? ` active ${a.remaining.toFixed(1)}s` : a.cooldown > 0 ? ` cd ${a.cooldown.toFixed(1)}s` : ' ready'}`]);
+    }
     if (this.lastTouchdown) {
       const d = this.lastTouchdown;
       rows.push(['last touchdown', `${d.result} ${d.quality || ''}`]);
@@ -103,7 +120,7 @@ export const Debug = {
 
     ctx.textAlign = 'left';
     ctx.fillStyle = 'rgba(150,180,205,0.55)';
-    ctx.fillText('F3 debug · F4 envelope', x, y - 14);
+    ctx.fillText('F3 debug · F4 envelope · F5 enemy ranges', x, y - 14);
     ctx.restore();
 
     if (this.showEnvelope && g.state === 'play' && ship && ship.alive && !ship.landed) {

@@ -6,6 +6,19 @@
 // what a planet is. Every force is a pure function of (ship, level, t), so the
 // same seed and the same inputs always reproduce the same flight.
 
+/**
+ * How much of a hazard actually reaches the ship on one channel. Skills and
+ * modules reduce it; a raised Ray Shield reduces it a great deal, but only on
+ * the channels that shield covers. Every force asks this rather than reaching
+ * into the loadout itself, so a new mitigation has one place to land.
+ */
+export function hazardScale(ship, channel) {
+  const base = (ship.loadout && ship.loadout.hazardResist) || 1;
+  if (!ship.shieldActive) return base;
+  const covered = channel === 'radiation' || ship.shieldHazard;
+  return covered ? base * (ship.shieldFactor != null ? ship.shieldFactor : 0.15) : base;
+}
+
 /** Status channels a hazard can raise. Damage models consume these later. */
 export const STATUS_CHANNELS = ['heat', 'cold', 'corrosion', 'radiation', 'charge'];
 
@@ -57,7 +70,7 @@ function thermal(cfg) {
     id: 'thermal',
     apply(ship, level, t, dt) {
       const s = ship.statusLevels;
-      const res = (ship.loadout && ship.loadout.hazardResist) || 1;
+      const res = hazardScale(ship, 'heat');
       s.heat = Math.max(0, Math.min(100, s.heat + (ship.thrusting ? rise * res : -fall) * dt));
     },
   };
@@ -70,7 +83,7 @@ function cryo(cfg) {
     id: 'cryo',
     apply(ship, level, t, dt) {
       const s = ship.statusLevels;
-      const res = (ship.loadout && ship.loadout.hazardResist) || 1;
+      const res = hazardScale(ship, 'cold');
       s.cold = Math.max(0, Math.min(100, s.cold + (ship.thrusting ? rate * 0.3 : rate) * res * dt));
     },
   };
@@ -168,7 +181,7 @@ function radiation(cfg) {
         }
       }
       ship.env.shielded = shielded;
-      const res = (ship.loadout && ship.loadout.hazardResist) || 1;
+      const res = hazardScale(ship, 'radiation');
       const take = (shielded ? rate * 0.15 : rate) * res;
       ship.statusLevels.radiation = Math.min(100, ship.statusLevels.radiation + take * dt);
     },

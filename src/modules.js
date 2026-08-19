@@ -1,8 +1,9 @@
 // Active and passive loadout modules (roadmap section 11).
 //
 // One active, one passive, chosen before a body and fixed for the chapter.
-// Only modules whose effects the simulation can actually deliver are offered;
-// weapons wait for the enemies that give them a target.
+// Only modules whose effects the simulation can actually deliver are offered.
+// The weapon waited for M12's enemies, because a gun with nothing to shoot is
+// a number on a screen; it is here now, and `src/abilities.js` runs all of it.
 
 export const ACTIVE_MODULES = {
   'sensor-pulse': {
@@ -32,6 +33,15 @@ export const ACTIVE_MODULES = {
     good: ['MERCURY', 'IO', 'PLUTO'],
     charges: 2, duration: 1, cooldown: 10,
     effect: { purgeStatus: 0.7 },
+  },
+  // The Moon has no weather to fight, so the weapon is its recommendation -
+  // and it is the only body where a turret is the hardest thing in the sky.
+  'pulse-laser': {
+    id: 'pulse-laser', name: 'PULSE LASER',
+    blurb: 'Tracks the nearest hostile in line of sight and burns it down. Short range, short burst.',
+    good: ['LUNA'],
+    charges: 3, duration: 2.5, cooldown: 5,
+    effect: { laserDps: 26, laserRange: 430 },
   },
 };
 
@@ -65,6 +75,12 @@ export const PASSIVE_MODULES = {
 export const STARTER_PASSIVES = ['fuel-recycler', 'gyro-stabilizer'];
 /** Guaranteed choice during the Moon chapter, per the blueprint rules. */
 export const MOON_BLUEPRINTS = ['sensor-pulse', 'ray-shield', 'magnetic-anchor'];
+/**
+ * Recovered from the first chapter that had hostile systems in it. The weapon
+ * is deliberately not the reward for shooting things, which would be circular -
+ * it is the reward for surviving a body that shot at you.
+ */
+export const COMBAT_BLUEPRINT = 'pulse-laser';
 
 export function moduleById(id) {
   return ACTIVE_MODULES[id] || PASSIVE_MODULES[id] || null;

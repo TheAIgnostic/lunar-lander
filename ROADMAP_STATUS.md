@@ -2,10 +2,9 @@
 
 Working document for the roguelite expansion.
 
-- **Spec:** Tom's brief, `~/Downloads/Lunar_Landing_Roguelite_Roadmap_for_Claude.md`. Read it before
-  starting a milestone — section 6 has the 50-mission table, 12 the enemy roster, 18 the MVP scope.
-  It lives outside the repo and this environment cannot copy it in; ask Tom to move it into `docs/`
-  if it ever goes missing.
+- **Spec:** Tom's brief, now in the repo at `docs/Lunar_Landing_Roguelite_Roadmap_for_Claude.md`.
+  Read it before starting a milestone — section 6 has the 50-mission table, 12 the enemy roster,
+  18 the MVP scope.
 - **Architecture, dev hooks, environment gotchas:** `docs/ARCHITECTURE.md`
 - **Measured behaviour at every milestone:** `test/BASELINE.md`
 - **Branch:** `v2`, cut from the tag `snapshot-2026-08-16`. `main` stays playable and untouched.
@@ -232,7 +231,27 @@ scheduled until the MVP is stable — the spec says the same.
   - one active and one passive slot, equipped from the OUTFIT screen
   - components × skills × passive fold into a single derived spec, so nothing stacks twice
   - blueprint guarantee on the first chapter clear
-- [ ] M12 — enemies
+- [x] **M12 — enemies and light combat** (this commit)
+  - `src/enemies.js`: one shared system — deterministic placement, engagement, a telegraph that
+    freezes the aim, projectiles that obey the local air, damage into the hull model M10 added,
+    and a salvage reward
+  - **Sentry Turret** (ground, 1.25 s locked arc, cannot depress inside 130 px) and **Seeker Drone**
+    (air, approaches to a standoff, locks, fires — and rams if you let it close)
+  - **the sanctuary rule**: every mission keeps its lowest-multiplier pad and the 420 px column above
+    it outside every machine's reach, so a weapon is never the price of a landing. Placement and
+    validation measure the same points — the first version did not, and a 20-seed sweep found two
+    Europa seeds with a drone looking straight down the safe corridor
+  - **proved, not asserted**: all 6 armed missions × 20 seeds flown by an autopilot with no weapon,
+    no shield and no evasive logic. Nothing was lost to fire, and every seed that lands quiet also
+    lands under fire — combat costs hull (down to 12% at worst), never the mission
+  - `src/abilities.js`: the active-module runtime M11 was missing. Actives could be equipped and
+    never fired — no trigger, no charges, no effect. Now `E` (or the on-screen button) fires one,
+    and all five actives do what their blurb says
+  - **Pulse Laser** added, auto-tracking and short-ranged, recovered from the first body that had
+    hostile systems on it — surviving them is the requirement, not destroying them
+  - Combat tree ungated on first contact, every node moving a value the simulation reads
+  - enemy placement, telegraph timing, cover, muzzle safety, shields, kills and the module runtime
+    under 67 unit tests; both fixtures byte-identical, so the flight model did not move
 
 ## Decisions (Tom, 2026-08-16)
 
@@ -251,17 +270,30 @@ None.
 
 ## Next task
 
-**M12 — enemies.** Sentry Turret and Seeker Drone on a shared telegraph, projectile and damage
-system, wired to the hull model M10 added. Every enemy needs an evasive path that does not require
-a weapon, and turning on the `enemies` feature flag opens the Combat tree that M11 left gated.
+**M13 — MVP polish.** Balance from the recorded data, accessibility (screen shake and flash
+controls, text scaling, remapping — the telegraphs already carry timing in shape as well as colour),
+the statistics screen (`meta.stats` records threats seen, destroyed and hits taken but shows none of
+it), and a full autopilot regression across all 15 missions. That completes the spec's own MVP.
 
 ### Known findings
 
+- **Six of the eight enemies are deferred.** M12 ships the two the MVP asks for (section 18). Coil
+  Cannon, Patrol Drone, Mortar Platform, Magnetic Mine, Solar Sentry and Shielded Guardian are
+  roster entries only. Mission data that referenced two of them was pointed at what exists —
+  IRON RAIN now fields a turret and a drone, and the Europa missions field buried nodes that lift
+  off the ice instead of magnetic mines. Adding a design later is an `ENEMY_TYPES` entry, a draw
+  function, and a line in `PlanetDefinition.eligibleEnemySets`.
+- **M11 overstated the modules.** It recorded that every module had "a consumer already in the
+  simulation". True of the four passives, false of the four actives: nothing could fire them. M12
+  built the runtime and the trigger. Worth remembering as a class of error — a system that is only
+  ever read by a *screen* has not been shown to work.
 - **Moving landing platforms are deferred.** Europa 5 and Io 5 call for a pad that translates or
   rotates. Pads are static geometry in the heightmap, so this needs `padAt` and the landing check to
   become time-aware — a structural change, not content. DRIFTING PLATE ships as a fragile plate
   instead, which is honest but not the full brief.
-- **europa-4 UNDER-ICE SIGNAL** — 17/20 seeds. Geometry sound; the pilot still clips ice on three.
+- **europa-4 UNDER-ICE SIGNAL** — 17/20 seeds quiet, 14/20 under fire. Geometry sound; the pilot
+  still clips ice on three, and the tight corridor keeps a drone in sight longer than anywhere else
+  in the game (worst hull in the MVP, 12%).
 - **Sector checkpoints** — delivered in M9.
 - **Crosswind (missions 11-12)** — resolved in M6. The pilot now lands 18/20 and 19/20.
 

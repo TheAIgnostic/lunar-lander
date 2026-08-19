@@ -24,14 +24,22 @@ Everything under `src/` is a plain ES module, loaded directly in the browser and
 | `src/route.js` | discovery tiers, four-card offers, checkpoint rule | M9 |
 | `src/components.js` | 5 component tracks, `deriveLoadout` / `deriveFull`, purchase rules | M10/M11 |
 | `src/skills.js` | 3 skill trees, `deriveSkills`, purchase and gating rules | M11 |
-| `src/modules.js` | 4 active + 4 passive modules, blueprint guarantee list | M11 |
+| `src/modules.js` | 5 active + 4 passive modules, blueprint guarantee list | M11/M12 |
+| `src/enemies.js` | enemy roster, deterministic placement, telegraphs, projectiles, damage, rewards | M12 |
+| `src/abilities.js` | the active-module runtime: charges, duration, cooldown, effects | M12 |
 | `src/render.js` | background, world, ship, dust, pad beacons, hangar ship, HUD | — |
-| `src/debug.js` | F3 telemetry overlay, F4 landing-envelope bars | M0 |
+| `src/debug.js` | F3 telemetry overlay, F4 landing-envelope bars, F5 enemy ranges | M0/M12 |
 | `src/particles.js` | pooled particles, debris, rings, floating text | — |
 | `src/audio.js` | synthesized engines, impacts, chimes | — |
 | `src/input.js` | keyboard + touch into an intent object | — |
 | `src/levels.js` | the original 12 classic missions, endless generator, world palettes | — |
 | `src/util.js` | math, seeded RNG, `safeStore` | — |
+
+**The rule that holds combat fair:** every mission keeps a *sanctuary* — its lowest-multiplier pad
+and the 420 px column above it — outside every machine's engagement range. `placeEnemies` and
+`validateEnemies` measure against the same points (`sanctuaryGates`), so the rule cannot drift
+between what is generated and what is checked. That is what makes "a weapon is never required" a
+statement about geometry rather than about skill.
 
 **The rule that holds the upgrade system together:** components, skills and the equipped passive are
 *derived* into a per-run ship spec at mission start (`deriveFull` then `ship.applyLoadout`). The
@@ -44,8 +52,9 @@ object. Hazards apply through the shared force interface, so a new body is data,
 ## Tests
 
 ```bash
-./test/run-all.sh 20                 # everything: 7 unit suites, 2 fixtures, validation, build
+./test/run-all.sh 20                 # everything: 8 unit suites, 2 fixtures, validation, build
 node test/validate-missions.js 20    # structural + flown validation of every mission family
+node test/enemies-tests.js           # enemies, combat rules, the active-module runtime
 node test/physics-fixture.js         # physics drift, no pilot in the loop
 node test/flight-fixture.js          # mission outcomes flown by the autopilot
 ./macos/build.sh                     # bundles, then self-tests the app
@@ -53,6 +62,11 @@ node test/flight-fixture.js          # mission outcomes flown by the autopilot
 
 `test/pilot.js` is the control law as a pure module, shared by the node validator and the browser
 harness so both fly identically. `test/autopilot.js` is the browser wrapper.
+
+`flyMission` keeps enemies **off** unless `{ enemies: true }` asks for them. The terrain sweep and
+the flight fixture measure whether the ground can be flown; mixing gunfire into them would turn a
+terrain regression into a combat regression. The combat section of `validate-missions.js` turns them
+on and flies with nothing equipped, because what it has to prove is that nothing is needed.
 
 Two fixtures, deliberately: the **physics** fixture replays a fixed input script and moves only when
 the simulation moves; the **flight** fixture records autopilot outcomes and moves when either the
@@ -70,6 +84,9 @@ game or the pilot changes. Improving the pilot should move the second and leave 
 | `__flyHeadless({padIndex, approach})` | fly the current mission instantly |
 | `__runAllHeadless(12)` | fly the whole classic campaign in ~450 ms |
 | `__preview(archetype, relief, detail)` | rebuild the current mission with another terrain shape |
+| `__goMission('LUNA', 3)` | jump straight to any mission of any chapter |
+| `__field()` | the live enemy field: machines, shots, kills, suppressed shots |
+| `__useAbility()` | fire the equipped active module |
 | `__settleNow()` | resolve a pending landing or crash immediately |
 
 ## Environment notes that cost real time
@@ -84,13 +101,22 @@ game or the pilot changes. Improving the pilot should move the second and leave 
   module missing from the bundler list, and a namespace import that vanished from the bundle. Run it
   before calling any milestone done.
 
-## For M12 (enemies)
+## For M13 (balance, accessibility, polish)
 
-The Combat skill tree already exists in `src/skills.js`, gated behind a feature flag. Turning it on
-is one place: `main.js` passes `{ enemies: false }` into `skillCheck` and `buySkill`. Missions
-already declare `enemyBudget` and `enemySets` — SILENT BATTERY, IRON RAIN, STORM EYE, UNDER-ICE
-SIGNAL, DRIFTING PLATE — and nothing reads them yet. Hull damage lives in `ship.js` and is the
-natural consumer for enemy fire. The enemy roster and its rules are in section 12 of the spec.
+Combat is in and measured (`test/BASELINE.md`, M12 section). What M13 inherits:
+
+- **Two of eight enemies exist.** Coil Cannon, Patrol Drone, Mortar Platform, Magnetic Mine, Solar
+  Sentry and Shielded Guardian are roster entries with no implementation. Adding one is a
+  `ENEMY_TYPES` entry plus a draw function; the field, telegraph, projectile, damage and reward
+  systems are shared. `PlanetDefinition.eligibleEnemySets` is where a new design joins the bodies
+  that should field it.
+- **Accessibility is the open item.** Telegraphs already carry timing in shape (a growing line, a
+  closing ring) as well as colour, but screen shake, flash reduction, text scaling and remapping are
+  all still to do.
+- **Statistics exist but are not shown.** `meta.stats` now records `threatsSeen`, `threatsDestroyed`
+  and `hitsTaken` alongside landings and crashes.
+- **The numbers to tune** are all in two config objects: `COMBAT` in `enemies.js` and `ABILITY` in
+  `abilities.js`, plus the per-type entries in `ENEMY_TYPES`.
 
 ## Baseline physics constants (do not drift without a measured reason)
 
@@ -132,5 +158,8 @@ This is a precondition for every later validation test.
 ## Debug controls
 
 - `F3` or `` ` `` — telemetry overlay (fps, seed, gravity, position, velocity, altitude, angle,
-  spin, surface slope, fuel, throttle, live inputs, steering mode, current verdict, last touchdown)
+  spin, surface slope, fuel, throttle, live inputs, steering mode, current verdict, last touchdown,
+  and — when the mission has any — threat states, shots fired, hits taken, hull and module state)
 - `F4` — landing-envelope bars showing each criterion against its perfect/good/hard/crash zones
+- `F5` — enemy engagement rings: outer range in red, the minimum range a ground gun cannot shoot
+  inside in green

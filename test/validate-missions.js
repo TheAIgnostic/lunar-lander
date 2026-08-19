@@ -2,7 +2,7 @@
 // Structural checks plus a real flight, over many seeds, with no browser:
 //   node test/validate-missions.js [seedCount]
 import { Terrain } from '../src/terrain.js';
-import { validateTerrain } from '../src/validate.js';
+import { validateTerrain, validateEnemies, sanctuaryClear } from '../src/validate.js';
 import { flyMission } from './pilot.js';
 import { LEVELS } from '../src/levels.js';
 import { ARCHETYPE_NAMES } from '../src/archetypes.js';
@@ -135,6 +135,54 @@ for (const pid of PLANET_IDS) {
   }
 }
 
+// ---------------------------------------------------------------- combat
+//
+// The acceptance criterion for M12 is that a weapon is never required. So this
+// sweep flies every armed mission with the machines live, the same autopilot,
+// and nothing equipped: no laser, no shield, no evasive logic at all. If that
+// pilot still lands, a human with any of those has a path.
+console.log(`\nvalidating combat: every armed mission, flown with no weapon\n`);
+const ARMED = [...MOON_LEVELS, ...MARS_LEVELS, ...EUROPA_LEVELS].filter((l) => l.enemyBudget > 0);
+let combatFail = 0;
+for (const level of ARMED) {
+  const rows = [];
+  for (const seed of seedList) {
+    const terrain = new Terrain(level, seed);
+    const ev = validateEnemies(level, terrain, seed);
+    const exposure = sanctuaryClear(level, terrain, ev.enemies);
+    const armed = flyMission(level, terrain, { enemies: true, enemySeed: seed });
+    const quiet = flyMission(level, terrain, {});
+    rows.push({ seed, ev, exposure, armed, quiet });
+  }
+  const structural = rows.filter((r) => r.ev.problems.length).length;
+  const exposed = rows.filter((r) => !r.exposure.ok).length;
+  const shotDown = rows.filter((r) => r.armed.lostToFire).length;
+  const costLanding = rows.filter((r) => r.quiet.outcome === 'land' && r.armed.outcome !== 'land').length;
+  const landed = rows.filter((r) => r.armed.outcome === 'land').length;
+  const placed = rows.reduce((a, r) => a + r.ev.enemies.length, 0) / rows.length;
+  const worstHull = Math.min(...rows.map((r) => r.armed.hull));
+  const hits = rows.reduce((a, r) => a + (r.armed.combat ? r.armed.combat.hitsTaken : 0), 0) / rows.length;
+
+  // Structure and survivability are proofs; a landing the pilot fumbled under
+  // fire is evidence, and is reported as such.
+  const ok = structural === 0 && exposed === 0 && shotDown === 0;
+  if (!ok) { hardFail++; combatFail++; }
+  const n = rows.length;
+  console.log(`${ok ? (costLanding ? 'ok* ' : 'ok  ') : 'FAIL'} ${(level.id + ' ' + level.title).padEnd(22)}` +
+    ` placed ${placed.toFixed(1)}/${level.enemyBudget}   sanctuary ${String(n - exposed).padStart(3)}/${n}` +
+    `   survived fire ${String(n - shotDown).padStart(3)}/${n}   landed ${String(landed).padStart(3)}/${n}` +
+    `   hull>=${String(worstHull).padStart(3)}   hits ${hits.toFixed(1)}`);
+  for (const r of rows) {
+    if (r.ev.problems.length) console.log(`       seed ${r.seed}: ${r.ev.problems.join('; ')}`);
+    if (!r.exposure.ok) console.log(`       seed ${r.seed}: sanctuary pad exposed in ${r.exposure.exposed} samples`);
+    if (r.armed.lostToFire) console.log(`       seed ${r.seed}: LOST TO ENEMY FIRE - no non-combat path`);
+  }
+  if (costLanding) {
+    warnings.push(`${level.id}: ${costLanding}/${n} seeds the pilot landed unarmed and quiet but missed under fire`);
+    console.log(`       ${costLanding}/${n} seeds: reached and survived, but the touchdown slipped - pilot precision under pressure`);
+  }
+}
+
 console.log(`\nvalidating the classic campaign (legacy terrain)\n`);
 for (const level of LEVELS) {
   assess(`${level.id} ${level.title}`, level, seedList);
@@ -145,5 +193,6 @@ if (warnings.length) {
   for (const w of warnings) console.log(`  - ${w}`);
 }
 console.log(`\n${hardFail === 0 ? 'all mission families structurally valid' : `${hardFail} mission families STRUCTURALLY INVALID`}` +
+  `${combatFail === 0 ? `, ${ARMED.length} armed missions flyable with no weapon` : `, ${combatFail} armed missions WITHOUT a non-combat path`}` +
   `${warnings.length ? `, ${warnings.length} with flight warnings` : ''}\n`);
 process.exit(hardFail ? 1 : 0);

@@ -13,6 +13,10 @@ Three ways to play, side by side:
 Fifteen authored missions across the Moon, Mars and Europa, plus generated survey chapters for every
 other body, so no route card leads nowhere.
 
+Some of that ground is defended. Abandoned security machines track you, telegraph every shot, and
+cost you hull — but never a landing: every mission keeps one pad that nothing can reach, so a weapon
+is a choice and never a requirement.
+
 No dependencies, no build step, no image or audio assets — one canvas, ES modules, WebAudio.
 
 ## Run
@@ -30,7 +34,7 @@ not `file://`.)
 node build.js
 ```
 
-Writes `dist/terminal-velocity.html` — the nine modules and the stylesheet inlined into a single
+Writes `dist/terminal-velocity.html` — every module and the stylesheet inlined into a single
 self-contained page. That one runs straight from `file://` with no server at all, because the
 restriction is on loading *external* module files, not on an inline `<script type="module">`.
 Copy it anywhere; it works offline.
@@ -60,9 +64,10 @@ else without that step requires an Apple Developer account to sign and notarize.
 | `Space` `W` `↑` | Main booster |
 | `A` `←` / `D` `→` | Left / right attitude burner |
 | `S` `↓` | Attitude hold — burns fuel to kill spin |
+| `E` `Q` | Fire the equipped active module |
 | `R` | Retry · `P`/`Esc` pause · `M` mute |
 
-Touch devices get three on-screen pads in landscape.
+Touch devices get the same controls as on-screen pads in landscape, including the module button.
 
 ### Steering modes
 
@@ -79,7 +84,7 @@ choice persists between sessions.
 
 ## Layout
 
-23 modules under `src/`, plus `test/` and `macos/`. **`docs/ARCHITECTURE.md` is the map** — what each
+25 modules under `src/`, plus `test/` and `macos/`. **`docs/ARCHITECTURE.md` is the map** — what each
 file owns, the dev hooks on `window`, the environment gotchas, and the baseline physics constants.
 
 - `DESIGN.md` — the research the original design came from

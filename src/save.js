@@ -28,7 +28,12 @@ export function defaultMeta() {
     purchasedSkills: {},
     unlockedBlueprints: [],
     settings: { muted: false, steering: 'classic', invertRotation: false },
-    stats: { attempts: 0, landings: 0, crashes: 0, perfect: 0, bestScore: 0 },
+    // threatsSeen is what opens the Combat skill tree: the trainer sells you
+    // threat analysis once something has actually shot at you, not before.
+    stats: {
+      attempts: 0, landings: 0, crashes: 0, perfect: 0, bestScore: 0,
+      threatsSeen: 0, threatsDestroyed: 0, hitsTaken: 0,
+    },
     classic: { high: 0, unlocked: 1, bests: {} },
     chapterBests: {},
   };

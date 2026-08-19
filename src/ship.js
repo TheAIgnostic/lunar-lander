@@ -93,8 +93,54 @@ export class Ship {
     this.vxHistory = [];
     this.statusLevels = freshStatus();
     this.env = freshEnv();
+    // Combat state. A mission with no enemies never touches any of it.
+    this.shieldActive = false;
+    this.shieldHp = 0;
+    this.shieldHazard = false;
+    this.anchor = 1;
+    this.beaconBoost = 1;
+    this.revealed = false;
+    this.hitsTaken = 0;
+    this.hitFlash = 0;
+    this.lostToFire = false;
     if (!this.spec) this.applyLoadout(null);
     this.hull = this.hullMax;
+  }
+
+  /**
+   * Take damage from anything that is not the ground: enemy fire, a ram, a
+   * hazard that finally bites. A raised shield absorbs first and collapses when
+   * its pool is gone, so the module buys a window rather than immunity.
+   *
+   * Returns { absorbed, damage, hull, destroyed }. It never touches thrust,
+   * fuel or the controls - being shot must not take the aircraft away from the
+   * pilot, only the margin.
+   */
+  damage(amount, source = 'hit') {
+    // A wreck cannot be wrecked further: once the hull is gone the loss is
+    // already decided, and counting more hits would double-report it.
+    if (!this.alive || this.landed || this.hull <= 0 || amount <= 0) {
+      return { absorbed: 0, damage: 0, hull: this.hull, destroyed: false };
+    }
+    let left = amount;
+    let absorbed = 0;
+    if (this.shieldActive && this.shieldHp > 0) {
+      absorbed = Math.min(this.shieldHp, left);
+      this.shieldHp -= absorbed;
+      left -= absorbed;
+      if (this.shieldHp <= 0) this.shieldActive = false;
+    }
+    if (left > 0) {
+      this.hull = Math.max(0, this.hull - left);
+      this.hitsTaken++;
+      this.hitFlash = 0.45;
+    }
+    const destroyed = this.hull <= 0;
+    if (destroyed) {
+      this.lostToFire = source !== 'impact';
+      this.damageSource = source;
+    }
+    return { absorbed, damage: left, hull: this.hull, destroyed };
   }
 
   /** Median of the recent samples, so one freak frame cannot define an impact. */
@@ -124,6 +170,7 @@ export class Ship {
     this.input = input;
     if (this.touchdown) return this.settle(dt, level, terrain);
 
+    if (this.hitFlash > 0) this.hitFlash = Math.max(0, this.hitFlash - dt);
     const hasFuel = this.fuel > 0;
     this.thrusting = input.thrust && hasFuel;
     this.rcsLeft = input.left && hasFuel;
@@ -310,7 +357,7 @@ export class Ship {
         if (Math.abs(this.vy) < 4) this.vy = 0;
       }
       const surface = level.surfaceFriction != null ? level.surfaceFriction : 1;
-      const cleats = (this.loadout && this.loadout.gripBonus) || 1;
+      const cleats = ((this.loadout && this.loadout.gripBonus) || 1) * (this.anchor || 1);
       const grip = LANDING.groundFriction ** (surface * cleats);
       this.vx *= Math.pow(grip, dt);
       this.spin *= Math.pow(LANDING.spinDamp, dt * 60);

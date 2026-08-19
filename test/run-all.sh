@@ -9,6 +9,7 @@ echo "=== unit: route + economy ===" && node test/route-tests.js | tail -2
 echo "=== unit: components ===" && node test/components-tests.js | tail -2
 echo "=== unit: skills + modules ===" && node test/skills-tests.js | tail -2
 echo "=== unit: terrain grammar ===" && node test/terrain-tests.js  | tail -2
+echo "=== unit: enemies + abilities ===" && node test/enemies-tests.js | tail -2
 echo "=== regression: physics (no pilot) ===" && node test/physics-fixture.js | tail -2
 echo "=== regression: flight outcomes ===" && node test/flight-fixture.js | tail -2
 echo "=== validation: every mission ===" && node test/validate-missions.js "${1:-10}" | tail -4
