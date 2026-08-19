@@ -65,6 +65,10 @@ export class Ship {
       burnMain: SHIP.burnMain * (l.burnMain || 1),
       burnRcs: SHIP.burnRcs * (l.burnRcs || 1),
       burnSide: SHIP.burnSide * (l.burnRcs || 1),
+      // The Gyro Stabilizer's second half. It declared `spinDampBonus` from
+      // M11 and nothing ever read it, so half of what the module advertises
+      // ("resists the rotation gusts put into the hull") did not exist.
+      spinDamp: l.spinDampBonus != null ? l.spinDampBonus : SHIP.spinDamp,
     };
     this.gearTier = l.gearTier || 1;
     this.restitution = l.restitution;
@@ -365,7 +369,13 @@ export class Ship {
         if (Math.abs(this.vy) < 4) this.vy = 0;
       }
       const surface = level.surfaceFriction != null ? level.surfaceFriction : 1;
-      const cleats = ((this.loadout && this.loadout.gripBonus) || 1) * (this.anchor || 1);
+      // Gear levels 3 and 4 sell "better hold on a slope" and `slopeGrip` was
+      // never read, so they sold nothing. It scales with how steep the ground
+      // actually is, so it earns its name instead of being a second flat grip
+      // bonus: level ground is unaffected, a real slope is where it shows.
+      const steep = Math.min(1, Math.abs(terrain.slopeAt(this.x)) / LANDING.offPadMaxSlope);
+      const slopeHold = 1 + (((this.loadout && this.loadout.slopeGrip) || 1) - 1) * steep;
+      const cleats = ((this.loadout && this.loadout.gripBonus) || 1) * (this.anchor || 1) * slopeHold;
       const grip = LANDING.groundFriction ** (surface * cleats);
       this.vx *= Math.pow(grip, dt);
       this.spin *= Math.pow(LANDING.spinDamp, dt * 60);

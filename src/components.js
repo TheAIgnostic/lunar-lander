@@ -5,6 +5,8 @@
 // spec from the base values, never by mutating the shared constants, so
 // reloading a save cannot stack an upgrade twice.
 
+import { ADDITIVE } from './skills.js';
+
 export const COMPONENTS = {
   gear: {
     id: 'gear',
@@ -116,17 +118,25 @@ export function deriveLoadout(componentLevels = {}) {
   return out;
 }
 
-/** Components + skills + equipped passive, folded into one spec. */
+/**
+ * Components + skills + equipped passive, folded into one spec.
+ *
+ * Effects are *multiplied* unless they are named in `ADDITIVE`. That default
+ * matters: this used to hold its own list of multiplicative keys and add
+ * anything missing from it, so an effect nobody remembered to list combined
+ * backwards. The Gyro Stabilizer declares `disturbanceResist: 0.7` and was
+ * folded as `1 + 0.7 = 1.7`, which made gusts 70% *stronger* — a module the
+ * player buys and equips, doing the opposite of what it says. Multiplying by
+ * default means the failure mode of forgetting a key is a correct fold.
+ */
 export function deriveFull(componentLevels, skillEffects = {}, passiveEffects = {}) {
   const base = deriveLoadout(componentLevels);
   const out = { ...base };
-  const mulKeys = ['burnMain', 'burnRcs', 'fuelCapacity', 'gearTier', 'thrust', 'rcsAccel',
-    'sideThrust', 'hullMax', 'impactResist', 'predict', 'beacon', 'hazardLead', 'noiseResist'];
   for (const src of [skillEffects, passiveEffects]) {
     for (const [k, v] of Object.entries(src)) {
-      if (mulKeys.includes(k)) out[k] = (out[k] != null ? out[k] : 1) * v;
-      else if (typeof v === 'number' && out[k] != null && typeof out[k] === 'number') out[k] += v;
-      else out[k] = v;
+      if (typeof v !== 'number') { out[k] = v; continue; }
+      if (ADDITIVE.has(k)) out[k] = (out[k] != null ? out[k] : 0) + v;
+      else out[k] = (out[k] != null ? out[k] : 1) * v;
     }
   }
   return out;

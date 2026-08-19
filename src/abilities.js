@@ -122,8 +122,10 @@ export class Abilities {
     const { ship, field } = ctx;
     switch (this.id) {
       case 'sensor-pulse':
-        // Burns through dust and darkness, and paints anything hostile.
-        ship.env.visibility = 1;
+        // Burns through dust and darkness, and paints anything hostile. The
+        // reveal level is the module's own declared effect rather than a 1
+        // written here, so the data and the behaviour cannot drift apart.
+        ship.env.visibility = Math.max(ship.env.visibility, this.mod.effect.revealVisibility || 1);
         ship.beaconBoost = this.mod.effect.beacon || 1;
         ship.revealed = true;
         break;

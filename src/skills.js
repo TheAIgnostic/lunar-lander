@@ -70,8 +70,17 @@ export function findNode(id) {
   return ALL_NODES.find((n) => n.id === id) || null;
 }
 
-/** Stats that accumulate rather than compound. Everything else multiplies. */
-const ADDITIVE = new Set([
+/**
+ * Stats that accumulate rather than compound. Everything else multiplies.
+ *
+ * Exported because `deriveFull` folds skills and the equipped passive into the
+ * same spec and has to agree with this list. It used to carry its own list of
+ * *multiplicative* keys instead, which meant a key missing from that list was
+ * silently added - and the Gyro Stabilizer, whose effect is a 0.7 multiplier,
+ * turned into `1 + 0.7 = 1.7` and made gusts 70% stronger. Naming the additive
+ * ones and multiplying everything else puts the safe behaviour on the default.
+ */
+export const ADDITIVE = new Set([
   'repairOnLanding', 'cargoRecovery', 'threatWarning', 'shieldHazard', 'energyOnKill',
 ]);
 

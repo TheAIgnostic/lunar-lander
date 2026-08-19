@@ -8,6 +8,7 @@ echo "=== unit: save + migration ===" && node test/save-tests.js | tail -2
 echo "=== unit: route + economy ===" && node test/route-tests.js | tail -2
 echo "=== unit: components ===" && node test/components-tests.js | tail -2
 echo "=== unit: skills + modules ===" && node test/skills-tests.js | tail -2
+echo "=== unit: loadout reaches the sim ===" && node test/loadout-tests.js | tail -3
 echo "=== unit: terrain grammar ===" && node test/terrain-tests.js  | tail -2
 echo "=== unit: enemies + abilities ===" && node test/enemies-tests.js | tail -2
 echo "=== unit: settings + bindings ===" && node test/settings-tests.js | tail -2

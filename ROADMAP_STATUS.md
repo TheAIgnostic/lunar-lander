@@ -390,6 +390,14 @@ owed; everything else those chapters need already exists.
 
 ### Known findings
 
+- **`hazardLead` is sold and not delivered.** The Sensors track's level 3 (700 salvage plus two
+  materials) advertises "Hazard trajectory prediction", and `hazardLead` is folded into the ship
+  spec and read by nothing — there is no hazard forecast in the game to scale. Every hazard warning
+  is reactive: it reports the level now. Implementing it means exposing the *next* sweep or front
+  from `forces.js` (both are periodic and deterministic, so the forecast is exact) and warning
+  `hazardLead x` earlier. `test/loadout-tests.js` carries it as the single entry in `KNOWN_GAPS`
+  and fails on any *other* dead effect key. Until it is built, level 3 sells only a beacon bump.
+
 - **Mission fuel budgets predate the bigger maps, and M15 put a number on it.** They were authored
   for a 900 px traverse and are now flown across 2,000-2,600 px with a fuel road *and* an ore field
   in between. Taking the deposits on the road is affordable (236/300 landings, 27-55% fuel left);

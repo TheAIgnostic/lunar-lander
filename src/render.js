@@ -830,7 +830,10 @@ export function drawTrajectory(ctx, ship, level, terrain, cam) {
   ctx.lineWidth = 1.6 / cam.scale + 0.4;
   ctx.beginPath();
   ctx.moveTo(x, y);
-  for (let i = 0; i < 70; i++) {
+  // How far ahead the dotted path runs. The Sensors track sells exactly this
+  // and `predict` was never read, so every level of it drew the same line.
+  const steps = Math.round(70 * ((ship.loadout && ship.loadout.predict) || 1));
+  for (let i = 0; i < steps; i++) {
     vy += level.gravity * dt;
     const w = ship.windNow || 0;
     if (level.drag) {
