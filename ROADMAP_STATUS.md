@@ -1,7 +1,15 @@
 # ROADMAP STATUS
 
-Working document for the roguelite expansion. Source spec:
-`Lunar_Landing_Roguelite_Roadmap_for_Claude.md`. Branch: `v2` off `snapshot-2026-08-16`.
+Working document for the roguelite expansion.
+
+- **Spec:** Tom's brief, `~/Downloads/Lunar_Landing_Roguelite_Roadmap_for_Claude.md`. Read it before
+  starting a milestone — section 6 has the 50-mission table, 12 the enemy roster, 18 the MVP scope.
+  It lives outside the repo and this environment cannot copy it in; ask Tom to move it into `docs/`
+  if it ever goes missing.
+- **Architecture, dev hooks, environment gotchas:** `docs/ARCHITECTURE.md`
+- **Measured behaviour at every milestone:** `test/BASELINE.md`
+- **Branch:** `v2`, cut from the tag `snapshot-2026-08-16`. `main` stays playable and untouched.
+- **Run everything:** `./test/run-all.sh 20`
 
 **Rule for every milestone:** ends with a playable build, a passing test pass, a commit, and this
 file updated. `main` stays untouched and playable throughout.

@@ -1,7 +1,17 @@
 # TERMINAL VELOCITY
 
 A neon-vector lunar lander. Space is the booster, `A`/`D` are the attitude burners, the tank is
-finite, and the small pads pay the most. Twelve missions across four worlds, then an endless mode.
+finite, and the small pads pay the most.
+
+Three ways to play, side by side:
+
+- **EXPEDITION** — a roguelite run. Three shuttles, five missions a body, then choose your next leg
+  from four route cards. Bank salvage, spend it in the hangar, spend research in the skill trees.
+- **CLASSIC** — the original twelve missions across four worlds, unchanged.
+- **ENDLESS** — procedurally escalating sectors.
+
+Fifteen authored missions across the Moon, Mars and Europa, plus generated survey chapters for every
+other body, so no route card leads nowhere.
 
 No dependencies, no build step, no image or audio assets — one canvas, ES modules, WebAudio.
 
@@ -69,22 +79,12 @@ choice persists between sessions.
 
 ## Layout
 
-```
-index.html      canvas + DOM overlay screens
-style.css       UI chrome
-src/util.js     math, seeded RNG
-src/audio.js    synthesized engines, impacts, chimes
-src/input.js    keyboard + touch -> intent
-src/terrain.js  midpoint-displacement heightmap, pads, cave ceilings, fuel cells
-src/levels.js   12 missions + endless generator
-src/particles.js pooled particles, debris, rings, floating text
-src/ship.js     integration, collision, landing verdict
-src/render.js   parallax background, world, ship, HUD
-src/main.js     state machine, camera, scoring, persistence
-test/autopilot.js  phased autopilot used to verify every level is landable
-```
+23 modules under `src/`, plus `test/` and `macos/`. **`docs/ARCHITECTURE.md` is the map** — what each
+file owns, the dev hooks on `window`, the environment gotchas, and the baseline physics constants.
 
-`DESIGN.md` has the research the design came from and the full spec.
+- `DESIGN.md` — the research the original design came from
+- `ROADMAP_STATUS.md` — the roguelite expansion: milestones, decisions, open findings, next task
+- `test/BASELINE.md` — measured behaviour at every milestone
 
 ## Testing
 
@@ -97,16 +97,21 @@ const s = document.createElement('script'); s.src = '/test/autopilot.js'; docume
 await __runAll(12)   // [{lvl, outcome, quality, fuelLeft, secs}, ...]
 ```
 
-It flies the highest-multiplier pad on each mission (`__runAll(12, 0)` flies the *safe* pad instead).
+Or run every check at once:
+
+```bash
+./test/run-all.sh 20
+```
+
+The autopilot flies the highest-multiplier pad on each mission (`__runAll(12, 0)` flies the *safe* pad instead).
 That is the fuel-budget regression test: a mission that comes back `outcome: "crash"` with
 `fuelLeft: 0` is a budget that got too tight.
 
-Last full run — every mission lands, most of them on the ×5:
+Last full run of the classic campaign — every mission lands:
 
 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ✅ 43% | ✅ 37% | ✅ 31% | ✅ 45% | ✅ 56% | ✅ 34% | ✅ 49% | ✅ 46% | ✅ 48% | ✅ 44% | ✅ 33% | ✅ HARD |
+| ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-**Known harness limit:** the autopilot has no terrain lookahead and hunts under crosswind, so on
-Titan (10–12) it burns roughly twice what a human needs and sometimes runs dry chasing the ×5.
-Those levels were validated by landing them individually rather than by its fuel figure.
+The autopilot's old crosswind and ceiling weaknesses were fixed in M6 and M7; see `test/BASELINE.md`
+for the before/after numbers.
