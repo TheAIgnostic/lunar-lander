@@ -565,3 +565,46 @@ The physics fixture is unchanged: **the flight model has not drifted since M0**.
 keeps the old spawn rule and the old pad carver, and its layout is untouched; the five classic
 entries that moved in the flight fixture moved because the test pilot now collects fuel cells the way
 the game always has — the harness got more faithful, not the game less stable.
+
+---
+
+## Encounter audit — what a player actually meets (2026-08-19, after M14)
+
+Tom played M14 and reported meeting no enemies and finding no material on Europa. This is the
+measurement behind that report: all 15 missions, 20 seeds each, flown twice — the safe route to the
+near zone, and the deep route by way of the fuel road.
+
+```
+                       SAFE ROUTE                  DEEP ROUTE
+mission             land  secs  shot-at     land  secs  shot-at  cells  cargo
+moon-1 FIRST SCAR   20/20  25s    0/20      20/20  45s    0/20    2.9    yes
+moon-4 SILENT BATT  20/20  24s    0/20      20/20  49s   20/20    3.1     no
+mars-4 IRON RAIN    20/20  22s    1/20      14/20  46s   20/20    3.3    yes
+europa-1 GLASS LAN  20/20  26s    0/20      20/20  49s    0/20    2.9     no
+europa-3 RADIATION  20/20  24s    0/20      20/20  52s    0/20    2.6     no
+europa-5 DRIFTING   20/20  26s    3/20      20/20  53s   20/20    3.6     no
+
+flights that were shot at:  safe route 27/300 (9%)   deep route 119/300 (40%)
+```
+
+**The systems work; the content distribution does not.** On a mission that has enemies, flying the
+deep route means being engaged **20 times out of 20** — M14's guard placement does exactly what it
+was built to do. The problem is upstream of it:
+
+| | count |
+| --- | --- |
+| missions with no enemies at all | **9 of 15** — every chapter arms only missions 4 and 5 |
+| missions with nothing to recover | **11 of 15** |
+| Europa missions with anything to recover | **0 of 5** |
+| flights on the safe route that met anything hostile | 27 of 300 |
+
+The deep route also costs roughly double the flight time — 42–53 s against 22–35 s — so the
+commitment is real when there is a reason to make it. On two thirds of the game there is not.
+
+### The deeper mismatch
+
+Rare material is not an object. It is a number computed at touchdown from grade and pad tier, and
+M14 made that number scale with distance — which is invisible. A player who flies further sees a
+bigger figure on the results screen and nothing at all in the world. Tom's report was not "the
+numbers are wrong", it was "I never saw any material to pick up", twice. That is a design fault,
+not a content gap, and M15 is the fix.

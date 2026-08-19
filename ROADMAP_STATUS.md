@@ -320,10 +320,64 @@ None.
 
 ## Next task
 
-**Playtest the gradient.** M14 rebuilt the shape of every map from a playtest report, and it wants
-the same treatment back: does the deep run feel like a decision, is the fuel road readable in the
-air, and do the guards now show up where they matter? After that, M15 is the Titan chapter and the
-glide force it needs.
+**M15 — reward you can see and have to take.** Two decisions from Tom (2026-08-19), both from
+playing M14 and finding nothing out there. Read the encounter audit in `test/BASELINE.md` first:
+it is the measurement these come from.
+
+### The two rules
+
+1. **Every mission except the first of a chapter has enemies.** Today nine of fifteen missions have
+   none — every chapter arms only missions 4 and 5 — so two thirds of the game is empty. The ramp
+   should be roughly `m1: 0, m2: 1, m3: 1-2, m4: 2, m5: 2-3`, staying inside the spec's "1-3 at
+   once, rarely 4" rule (section 12).
+
+2. **Material is picked up, not awarded.** This is the load-bearing change. Today `missionReward`
+   computes a material figure from grade and pad tier at touchdown; M14 made it scale with distance,
+   which is invisible — the player flies further and sees a bigger number on a screen. Tom's words:
+   *"You need to take active risk for your reward. Reward only on stats is no fun. Most of it should
+   come from picking it up."*
+
+   So: **most of a mission's material and salvage should come from objects the player physically
+   collects**, and those objects must be
+   - **visible** — both the ones sitting at landing zones and the ones floating in the air, drawn
+     and legible at range like fuel cells are;
+   - **placed next to enemies and outside the landing areas**, so collecting is a decision to leave
+     the safe line and take fire;
+   - **weighted by depth**, richer the further out they sit, which is the M14 gradient made
+     physical rather than statistical.
+
+### What that touches
+
+| File | Change |
+| --- | --- |
+| `src/terrain.js` | place material nodes: floating on the road, clustered around the deep zone and beside enemies, never on a pad or the sanctuary approach. `collect()` already returns typed items (`fuel`, `cargo`) — add `material` |
+| `src/economy.js` | `missionReward` shifts from computing material to *counting what was carried home*; the landing grade becomes a multiplier on the haul rather than the source of it |
+| `src/enemies.js` | placement already clusters on the prize; material nodes should be placed *with* the guards, so one rule serves both |
+| `src/render.js` | draw material nodes, and show what is being carried in the HUD |
+| `src/main.js` | pickups already flow through `terrain.collect`; add the material kind and the carried tally |
+| `src/validate.js` | material must never be the only route, and must be reachable — the sanctuary rule extended to "a mission is always completable while collecting nothing" |
+| `src/missions.js` | enemy budgets per the ramp above; Europa needs recoveries, it currently has none |
+
+### Acceptance criteria
+
+- Every mission except each chapter's first has at least one machine, and the encounter audit shows
+  a player is engaged on the deep route on effectively every seed.
+- A flight that collects nothing still completes and still pays *something* — collection is the
+  upside, never the price of admission.
+- Material nodes are visible at range, and the results screen shows what was carried versus what
+  was left behind.
+- Crashing loses what you were carrying, per the existing cargo rules.
+- The encounter audit is re-run and recorded in `test/BASELINE.md`.
+
+### Handover
+
+This chat is out of room. A new one starts by reading, in order: `ROADMAP_STATUS.md` (this file),
+`docs/ARCHITECTURE.md`, and the M12/M13/M14 sections plus the encounter audit in `test/BASELINE.md`.
+Then **re-run the audit before writing any code** — `node test/mvp-regression.js 20`,
+`node test/validate-missions.js 20`, and the encounter measurement described in the audit section —
+so the next session starts from measured ground rather than from this summary.
+
+### Superseded
 
 ### Superseded
 
@@ -341,6 +395,12 @@ owed; everything else those chapters need already exists.
 
 ### Known findings
 
+- **Nine of fifteen missions have no enemies, and eleven have nothing to recover.** Europa has
+  nothing to recover at all. Measured in the encounter audit; M15's first rule fixes it.
+- **Reward is a number, not a place.** Material is computed at touchdown rather than collected, so
+  the M14 distance gradient is invisible to the player. M15's second rule fixes it, and it is the
+  larger of the two changes: it moves the economy from "what grade did you get" to "what did you
+  carry home".
 - **Mission fuel budgets predate the bigger maps.** They were authored for a 900 px traverse and are
   now flown across 2,000-2,600 px with a fuel road in between. Everything validates, but the numbers
   deserve a deliberate pass rather than continuing to work by accident.

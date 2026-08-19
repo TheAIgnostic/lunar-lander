@@ -126,6 +126,17 @@ game or the pilot changes. Improving the pilot should move the second and leave 
   module missing from the bundler list, and a namespace import that vanished from the bundle. Run it
   before calling any milestone done.
 
+## Reading order for a new session
+
+1. `ROADMAP_STATUS.md` — what is done, what is next, and the decisions behind both.
+2. This file — what each module owns and the rules that hold the design together.
+3. `test/BASELINE.md` — the measurements, milestone by milestone, ending with the encounter audit.
+
+Then **measure before editing**: `./test/run-all.sh 20` for the suites, and the encounter audit
+described at the end of `test/BASELINE.md` for what a player actually meets in the world. Every
+milestone in this project that went well started from a number, and both of the ones that went
+badly started from an assumption.
+
 ## After the MVP (M14+)
 
 The MVP is complete and measured (`test/BASELINE.md`, M13 section). What the next milestones inherit:
@@ -142,6 +153,9 @@ The MVP is complete and measured (`test/BASELINE.md`, M13 section). What the nex
   recorded data is an autopilot, which is not a proxy for a person.
 - **Moving landing platforms** are still deferred (Europa 5, Io 5): `padAt` and the landing check
   would have to become time-aware.
+- **The economy is about to change shape.** M15 moves material from a figure computed at touchdown
+  (`missionReward` in `economy.js`) to objects collected in the world through `terrain.collect`.
+  Anything that reads `reward.material` today will need to read a carried tally instead.
 - **Mission fuel budgets have not been re-authored** since the map grew. They still work — the near
   zone lands with 19–50% left — but they were written for a 900 px traverse and the numbers are
   ripe for a pass now that the road carries the deep run.
