@@ -146,6 +146,38 @@ export class Audio {
   }
 
   /**
+   * Warning layers, with right of way. Mars can have low fuel, a dust front, a
+   * heat build and a turret charging inside the same second, and four alarms at
+   * once is the same as none: a warning has to be identifiable to be useful.
+   * A more urgent warning always interrupts; an equal or lesser one waits.
+   */
+  warn(kind) {
+    const spec = WARNINGS[kind];
+    if (!spec || !this.ready) return false;
+    const now = this.ctx.currentTime;
+    const last = this._lastWarn;
+    if (last && now - last.t < spec.hold && WARNINGS[last.kind].rank >= spec.rank) return false;
+    this._lastWarn = { kind, t: now };
+    spec.play(this);
+    return true;
+  }
+
+  /** First contact: the legs touching down, before anything is graded. */
+  gearContact(force = 1) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(150, t);
+    o.frequency.exponentialRampToValueAtTime(64, t + 0.16);
+    o.connect(g).connect(this.master);
+    this._env(g, 0.14 + 0.2 * clamp(force, 0, 1), 0.004, 0.2);
+    o.start();
+    o.stop(t + 0.3);
+  }
+
+  /**
    * Combat voices. Each attack has a sound before it has an effect - the charge
    * rises, the shot cracks, and only then can anything hit you.
    */
@@ -243,3 +275,18 @@ export class Audio {
     this.windVoice.g.gain.setTargetAtTime(on ? clamp(strength, 0, 1) * 0.22 : 0, t, 0.4);
   }
 }
+
+/**
+ * The warning table. `rank` is right of way, `hold` is how long that claim
+ * lasts in seconds.
+ */
+const WARNINGS = {
+  'fuel-low':      { rank: 1, hold: 2.0, play: (a) => a.blip(330, 0.12, 'sawtooth', 0.09) },
+  heat:            { rank: 2, hold: 3.0, play: (a) => a.arpeggio([520, 470], 0.09, 'sawtooth', 0.08) },
+  cold:            { rank: 2, hold: 3.0, play: (a) => a.arpeggio([300, 260], 0.09, 'triangle', 0.09) },
+  radiation:       { rank: 2, hold: 3.0, play: (a) => a.arpeggio([740, 740, 740], 0.07, 'square', 0.06) },
+  lock:            { rank: 3, hold: 0.4, play: (a) => a.charge(1.1) },
+  'fuel-critical': { rank: 4, hold: 1.5, play: (a) => a.blip(220, 0.16, 'sawtooth', 0.11) },
+  hull:            { rank: 5, hold: 0.5, play: (a) => a.hullHit() },
+  dry:             { rank: 6, hold: 3.0, play: (a) => a.arpeggio([220, 165], 0.1, 'sawtooth', 0.12) },
+};

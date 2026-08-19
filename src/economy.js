@@ -11,6 +11,22 @@
 
 export const RESOURCES = ['salvage', 'data', 'cores'];
 
+/**
+ * Anti-frustration numbers (roadmap section 13).
+ *
+ * `CORE_PITY` is bad-luck protection: Tech Cores normally need a perfect
+ * landing on a small pad, which a player who is still learning may not manage
+ * for a long time. After this many missions without one, the next clear pays a
+ * core regardless.
+ *
+ * `DEBRIEF` is what a *failed* expedition still transmits. The rule it exists
+ * for is "the first failed expedition should still unlock or purchase something
+ * meaningful" - the data floor is set to the price of the cheapest skill rank,
+ * so a run that ends badly still ends with a decision.
+ */
+export const CORE_PITY = 8;
+export const DEBRIEF = { salvage: 60, data: 40 };
+
 export function freshHaul() {
   return { salvageSafe: 0, salvageCargo: 0, data: 0, cores: 0, materials: {} };
 }
@@ -20,18 +36,21 @@ export function freshHaul() {
  * scales it, and leftover fuel is worth something because it represents a
  * flight flown well rather than merely survived.
  */
-export function missionReward({ grade, padMultiplier, fuelLeft, maxFuel, rareMaterial, firstClear, offPad }) {
+export function missionReward({ grade, padMultiplier, fuelLeft, maxFuel, rareMaterial, firstClear, offPad, coreDrought = 0 }) {
   const q = grade === 'PERFECT' ? 1 : grade === 'GOOD' ? 0.7 : 0.45;
   const mult = offPad ? 1 : padMultiplier;
   const fuelFrac = maxFuel > 0 ? Math.max(0, fuelLeft / maxFuel) : 0;
 
   const salvage = Math.round((60 + 45 * mult) * q + fuelFrac * 40);
   const data = Math.round((firstClear ? 24 : 10) * q + (grade === 'PERFECT' ? 6 : 0));
-  // Cores are rare on purpose: a clean landing on a small pad, nothing else.
-  const cores = grade === 'PERFECT' && mult >= 5 && !offPad ? 1 : 0;
+  // Cores are rare on purpose: a clean landing on a small pad, nothing else -
+  // unless the drought has run long enough that "rare" has become "never".
+  const earned = grade === 'PERFECT' && mult >= 5 && !offPad;
+  const pity = !earned && coreDrought >= CORE_PITY;
+  const cores = earned || pity ? 1 : 0;
   const material = rareMaterial ? Math.round((8 + 6 * mult) * q) : 0;
 
-  return { salvage, data, cores, material, materialId: rareMaterial || null };
+  return { salvage, data, cores, material, materialId: rareMaterial || null, pityCore: pity };
 }
 
 /** Add a mission's pay to the run's haul, splitting salvage by risk. */
@@ -59,11 +78,21 @@ export function settleHaul(haul, { completed, recovered = 0 }) {
     const kept = Math.round(v * keepCargo);
     if (kept > 0) materials[k] = kept;
   }
+  const salvage = haul.salvageSafe + Math.round(haul.salvageCargo * keepCargo);
+  const data = haul.data;                              // transmitted, always kept
+  // A lost expedition still files its debrief. Without this an early run can
+  // end with nothing to spend and nothing to change, which is the one failure
+  // state a roguelite cannot afford.
+  const debrief = completed ? null : {
+    salvage: Math.max(0, DEBRIEF.salvage - salvage),
+    data: Math.max(0, DEBRIEF.data - data),
+  };
   return {
-    salvage: haul.salvageSafe + Math.round(haul.salvageCargo * keepCargo),
-    data: haul.data,                                   // transmitted, always kept
+    salvage: salvage + (debrief ? debrief.salvage : 0),
+    data: data + (debrief ? debrief.data : 0),
     cores: completed ? haul.cores : 0,                 // only once the lander is down
     materials,
+    debrief: debrief && (debrief.salvage || debrief.data) ? debrief : null,
     lost: {
       salvage: Math.round(haul.salvageCargo * (1 - keepCargo)),
       cores: completed ? 0 : haul.cores,

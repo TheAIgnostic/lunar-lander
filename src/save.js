@@ -30,9 +30,16 @@ export function defaultMeta() {
     settings: { muted: false, steering: 'classic', invertRotation: false },
     // threatsSeen is what opens the Combat skill tree: the trainer sells you
     // threat analysis once something has actually shot at you, not before.
+    // The rest is the pilot's logbook, shown on the STATISTICS screen.
     stats: {
       attempts: 0, landings: 0, crashes: 0, perfect: 0, bestScore: 0,
-      threatsSeen: 0, threatsDestroyed: 0, hitsTaken: 0,
+      threatsSeen: 0, threatsDestroyed: 0, hitsTaken: 0, threatsPassed: 0,
+      fuelBurned: 0, fuelCarried: 0,     // ratio of these is fuel efficiency
+      flightSeconds: 0,
+      bodies: {},          // planet id -> chapters cleared there
+      missionGrades: {},   // mission id -> best grade
+      moduleFlights: {},   // module id -> missions flown with it equipped
+      moduleUses: {},      // module id -> times actually triggered
     },
     classic: { high: 0, unlocked: 1, bests: {} },
     chapterBests: {},
@@ -73,6 +80,11 @@ function coerceMeta(raw) {
   m.componentLevels = { ...d.componentLevels, ...(raw.componentLevels || {}) };
   m.settings = { ...d.settings, ...(raw.settings || {}) };
   m.stats = { ...d.stats, ...(raw.stats || {}) };
+  // The logbook's nested tallies arrived after the first v2 saves, so they are
+  // merged rather than assumed - an older save simply starts them empty.
+  for (const k of ['bodies', 'missionGrades', 'moduleFlights', 'moduleUses']) {
+    m.stats[k] = { ...(raw.stats && raw.stats[k]) || {} };
+  }
   m.classic = { ...d.classic, ...(raw.classic || {}) };
   m.clearedChapters = Array.isArray(raw.clearedChapters) ? raw.clearedChapters : [];
   m.discoveredPlanets = Array.isArray(raw.discoveredPlanets) && raw.discoveredPlanets.length
@@ -143,6 +155,10 @@ export function newRun(chapterId, seed, shuttles = 3) {
     chaptersCleared: 0,
     visited: [chapterId],
     sector: 1,
+    banked: [],          // settlement ids already paid out, so none pays twice
+    coreDrought: 0,      // missions since the last Tech Core, for bad-luck protection
+    attempts: {},        // mission id -> how many landers this mission has cost
+    loaner: null,        // a module lent for the rest of the expedition
     haul: { salvageSafe: 0, salvageCargo: 0, data: 0, cores: 0, materials: {} },
     startedAt: Date.now(),
   };
@@ -185,8 +201,23 @@ export function clearRun(store = safeStore) {
  * Fold a finished expedition into permanent progress. Called whether the run
  * was completed or lost: a failed expedition must still leave something behind.
  */
-export function bankRun(meta, run, { completed, settled }) {
+/**
+ * Fold a settlement into permanent progress.
+ *
+ * A run banks more than once - every sector checkpoint pays out, and then the
+ * end of the run pays out again - so each settlement carries an `id` and the
+ * run records which ones it has already been paid for. A reload between the
+ * payout and the run being cleared used to be able to pay the same settlement
+ * twice ("prevent double rewards when reloading"); now the second call sees the
+ * id and does nothing.
+ */
+export function bankRun(meta, run, { completed, settled, id = 'final' }) {
   const m = coerceMeta(meta);
+  if (run) {
+    run.banked = Array.isArray(run.banked) ? run.banked : [];
+    if (run.banked.includes(id)) return m;
+    run.banked.push(id);
+  }
   const s = settled || { salvage: 0, data: 0, cores: 0, materials: {} };
   m.banked.salvage += s.salvage || 0;
   m.banked.data += s.data || 0;

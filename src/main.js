@@ -1,8 +1,8 @@
 // TERMINAL VELOCITY - state machine, camera, scoring, persistence.
 
-import { clamp, lerp, approach, makeRng, formatScore, safeStore, DEG } from './util.js';
+import { clamp, lerp, approach, makeRng, formatScore, DEG } from './util.js';
 import { Audio } from './audio.js';
-import { Input } from './input.js';
+import { Input, ACTIONS, keyLabel } from './input.js';
 import { Terrain } from './terrain.js';
 import { LEVELS, endlessLevel, WORLDS } from './levels.js';
 import { CHAPTERS, chapterFor, chapterTitle } from './missions.js';
@@ -13,10 +13,10 @@ import { PLANETS, gravityFor } from './planets.js';
 import * as Save from './save.js';
 import { missionReward, addReward, settleHaul } from './economy.js';
 import { routeOffers, isCheckpoint } from './route.js';
-import { COMPONENTS, COMPONENT_IDS, deriveLoadout, deriveFull, purchaseCheck, purchase } from './components.js';
-import { TREES, TREE_IDS, deriveSkills, skillCheck, buySkill, findNode } from './skills.js';
-import { ACTIVE_MODULES, PASSIVE_MODULES, derivePassive, recommendedFor, MOON_BLUEPRINTS, STARTER_PASSIVES, COMBAT_BLUEPRINT } from './modules.js';
-import { EnemyField, ENEMY_TYPES, describeThreats } from './enemies.js';
+import { COMPONENTS, COMPONENT_IDS, deriveFull, purchaseCheck, purchase } from './components.js';
+import { TREES, TREE_IDS, deriveSkills, skillCheck, buySkill } from './skills.js';
+import { ACTIVE_MODULES, PASSIVE_MODULES, derivePassive, recommendedFor, MOON_BLUEPRINTS, STARTER_PASSIVES, COMBAT_BLUEPRINT, moduleById } from './modules.js';
+import { EnemyField, describeThreats } from './enemies.js';
 import { Abilities, ABILITY } from './abilities.js';
 import * as R from './render.js';
 import { Debug } from './debug.js';
@@ -54,10 +54,23 @@ const store = {
 };
 
 const settings = { ...DEFAULT_SETTINGS, ...meta.settings };
+input.setBindings(settings.keys);
 function saveSettings() {
   meta.settings = { ...meta.settings, ...settings };
   Save.saveMeta(meta);
+  applyPresentation();
 }
+
+/**
+ * Push the presentation settings into the places that are not redrawn from `g`
+ * every frame: the stylesheet, which sizes every overlay screen.
+ */
+function applyPresentation() {
+  document.documentElement.style.setProperty('--ui-scale', String(settings.uiScale || 1));
+  document.documentElement.classList.toggle('high-contrast', !!settings.highContrast);
+  document.documentElement.classList.toggle('reduce-motion', (settings.shake || 0) < 0.5);
+}
+applyPresentation();
 
 const g = {
   settings,
@@ -168,7 +181,15 @@ function startLevel(index, freshSeed = true) {
   // Enemies share the mission's seed, so a retry after a crash faces exactly
   // the same machines in exactly the same places.
   g.field = new EnemyField(level, g.terrain, g.seed ^ (levelSeedSalt(level) | 0));
-  g.abilities = new Abilities(meta.equipped && meta.equipped.active, loadout);
+  // A loaner, if the expedition has been given one, flies in place of whatever
+  // is equipped - it is lent for the run, never added to the player's gear.
+  const activeId = (g.run && g.run.loaner) || (meta.equipped && meta.equipped.active);
+  g.abilities = new Abilities(activeId, loadout);
+  if (g.run) {
+    g.run.attempts = g.run.attempts || {};
+    const key = level.missionId || level.id;
+    g.run.attempts[key] = (g.run.attempts[key] || 0) + 1;
+  }
   if (!g.field.empty) {
     // Counts missions flown against hostile systems. Its job is the Combat tree
     // gate - anything above zero means something has shot at this pilot.
@@ -185,7 +206,8 @@ function startLevel(index, freshSeed = true) {
 
   g.levelTime = 0;
   g.combatSalvage = 0;
-  g.warn = { low: false, crit: false, dry: false };
+  g.gearCued = false;
+  g.warn = { low: false, crit: false, dry: false, heat: false, cold: false, radiation: false };
   g.cam.x = sx;
   g.cam.y = sy;
   g.cam.scale = 0.8;
@@ -237,6 +259,13 @@ function persistRun() {
 function launch() {
   setState('play');
   audio.unlock();
+  // An attempt is a mission actually flown, not a mission looked at.
+  meta.stats.attempts++;
+  const active = meta.equipped && meta.equipped.active;
+  if (active) meta.stats.moduleFlights[active] = (meta.stats.moduleFlights[active] || 0) + 1;
+  const passive = meta.equipped && meta.equipped.passive;
+  if (passive) meta.stats.moduleFlights[passive] = (meta.stats.moduleFlights[passive] || 0) + 1;
+  Save.saveMeta(meta);
 }
 
 // ------------------------------------------------------------------ simulation
@@ -252,6 +281,15 @@ function simulate(dt) {
     acc -= FIXED;
     steps++;
     const ev = ship.step(FIXED, input, g.level, g.terrain, g.levelTime, settings);
+    // The legs touching is its own moment, and it happens before the grader has
+    // decided anything - so it gets its own sound.
+    if (ship.touchdown && !g.gearCued) {
+      g.gearCued = true;
+      audio.gearContact(Math.abs(ship.touchdown.vy) / 40);
+      const feet = ship.feet();
+      particles.dust(feet[0].x, g.terrain.heightAt(feet[0].x), 5, 0.5);
+      particles.dust(feet[1].x, g.terrain.heightAt(feet[1].x), 5, 0.5);
+    }
     if (ev === 'land') return onLand();
     if (ev === 'crash') return onCrash();
     if (combat(FIXED)) return onCrash();
@@ -281,7 +319,7 @@ function combat(dt) {
 function combatEffect(e) {
   switch (e.kind) {
     case 'telegraph':
-      audio.charge(ENEMY_TYPES[e.enemy.type].telegraph);
+      audio.warn('lock');
       break;
     case 'fire':
       audio.enemyShot();
@@ -292,7 +330,7 @@ function combatEffect(e) {
         audio.shieldHit();
         particles.ring(e.x, e.y, 60, 0.25, '#7ef2d0');
       } else {
-        audio.hullHit();
+        audio.warn('hull');
         particles.sparks(e.x, e.y, 14, 0);
         particles.text(ship.x, ship.y - 44, `-${Math.round(e.damage)} HULL`, '#ff3b5c', 16);
         g.cam.trauma = Math.min(1, g.cam.trauma + 0.35);
@@ -300,7 +338,7 @@ function combatEffect(e) {
       }
       break;
     case 'ram':
-      audio.hullHit();
+      audio.warn('hull');
       particles.explode(e.x, e.y, 0, 0, []);
       particles.sparks(e.x, e.y, 20, 0);
       g.cam.trauma = Math.min(1, g.cam.trauma + 0.5);
@@ -367,15 +405,28 @@ function effects(dt) {
   // Fuel callouts - the tank draining is the real clock, so it gets a voice.
   if (ship.alive && !ship.landed) {
     const f = ship.fuel / ship.maxFuel;
-    const call = (key, at, text, color) => {
+    const call = (key, at, text, color, warning) => {
       if (g.warn[key] || f > at) return;
       g.warn[key] = true;
-      audio.alarm();
+      audio.warn(warning);
       particles.text(ship.x, ship.y - 46, text, color, 18);
     };
-    call('low', 0.25, 'FUEL 25%', '#ffb347');
-    call('crit', 0.1, 'FUEL CRITICAL', '#ff3b5c');
-    call('dry', 0, 'TANKS DRY', '#ff3b5c');
+    call('low', 0.25, 'FUEL 25%', '#ffb347', 'fuel-low');
+    call('crit', 0.1, 'FUEL CRITICAL', '#ff3b5c', 'fuel-critical');
+    call('dry', 0, 'TANKS DRY', '#ff3b5c', 'dry');
+
+    // Status warnings, once per crossing rather than once per frame.
+    const st = ship.statusLevels || {};
+    const status = (key, value, text, color) => {
+      if (value < 60) { g.warn[key] = false; return; }
+      if (g.warn[key]) return;
+      g.warn[key] = true;
+      audio.warn(key);
+      particles.text(ship.x, ship.y - 62, text, color, 17);
+    };
+    status('heat', st.heat || 0, 'ENGINE HEAT', '#ff3b5c');
+    status('cold', st.cold || 0, 'COLD SOAK', '#5ff5ff');
+    status('radiation', st.radiation || 0, 'RADIATION', '#ffb347');
   }
 
   audio.engines(ship.thrusting && !ship.landed, (ship.rcsLeft || ship.rcsRight) && !ship.landed);
@@ -463,7 +514,10 @@ function onLand() {
     const reward = missionReward({
       grade: q, padMultiplier: mult, fuelLeft: ship.fuel, maxFuel: ship.maxFuel,
       rareMaterial: g.level.rareMaterial, firstClear: true, offPad,
+      coreDrought: g.run.coreDrought || 0,
     });
+    g.run.coreDrought = reward.cores ? 0 : (g.run.coreDrought || 0) + 1;
+    if (reward.pityCore) particles.text(ship.x, ship.y - 92, 'TECH CORE RECOVERED', '#5ff5ff', 20);
     const bonus = (g.loadout && g.loadout.salvageBonus) || 1;
     reward.salvage = Math.round(reward.salvage * bonus) + (g.combatSalvage || 0);
     g.run.haul = addReward(g.run.haul, reward);
@@ -472,6 +526,7 @@ function onLand() {
   }
   meta.stats.landings++;
   if (q === 'PERFECT') meta.stats.perfect++;
+  recordFlight(q);
   if (!g.run) Save.saveMeta(meta);
 
   g.freeze = 0.75;
@@ -501,14 +556,45 @@ function onLand() {
           particles.text(ship.x, ship.y - 140, 'WEAPON BLUEPRINT RECOVERED', '#ff4fd8', 20);
         }
         g.run.chaptersCleared++;
+        const body = g.level.planet || g.campaign;
+        meta.stats.bodies[body] = (meta.stats.bodies[body] || 0) + 1;
         g.run.shuttles = g.lives;
         persistRun();
         setState(isCheckpoint(g.run.chaptersCleared) ? 'checkpoint' : 'route');
         return;
       }
+      if (g.level && (g.chapter || CHAPTERS[g.campaign])) {
+        const body = g.level.planet || g.campaign;
+        meta.stats.bodies[body] = (meta.stats.bodies[body] || 0) + 1;
+        Save.saveMeta(meta);
+      }
       setState('victory');
     } else setState('result');
   }, 950);
+}
+
+/**
+ * The logbook. Everything the statistics screen shows is accumulated here, in
+ * one place, so a new figure never means hunting through the state machine for
+ * the four places a mission can end.
+ */
+function recordFlight(grade) {
+  const st = meta.stats;
+  st.fuelBurned += Math.max(0, ship.maxFuel - ship.fuel);
+  st.fuelCarried += ship.maxFuel;
+  st.flightSeconds += g.levelTime;
+  const id = g.level.missionId || g.level.id;
+  const order = { HARD: 1, GOOD: 2, PERFECT: 3 };
+  if (grade && (order[grade] || 0) > (order[st.missionGrades[id]] || 0)) st.missionGrades[id] = grade;
+  if (g.field && !g.field.empty) {
+    // A threat left alive behind you was still beaten - flying past one is the
+    // counterplay the design is built around, so it is counted like a kill.
+    st.threatsPassed += g.field.live.length;
+  }
+  const active = meta.equipped && meta.equipped.active;
+  if (active && g.abilities && g.abilities.used) {
+    st.moduleUses[active] = (st.moduleUses[active] || 0) + g.abilities.used;
+  }
 }
 
 function onCrash() {
@@ -525,6 +611,7 @@ function onCrash() {
   audio.explosion();
   g.lives--;
   meta.stats.crashes++;
+  recordFlight(null);
   if (g.run) persistRun(); else Save.saveMeta(meta);
   g.freeze = 0.12;
   const tok = g.token;
@@ -534,7 +621,11 @@ function onCrash() {
       // Expedition over: bank what was gathered, then release the run.
       const settled = settleHaul(g.run.haul, { completed: false, recovered: (g.loadout && g.loadout.cargoRecovery) || 0 });
       g.lastRunSummary = { missions: g.run.missionsCleared, chapter: g.run.chapterId, settled };
-      meta = Save.bankRun(meta, { ...g.run, score: g.score }, { completed: false, settled });
+      g.run.score = g.score;
+      meta = Save.bankRun(meta, g.run, { completed: false, settled, id: 'final' });
+      // Persist the stamp before the payout, so a reload in between cannot pay
+      // the same settlement a second time.
+      Save.saveRun(g.run);
       Save.saveMeta(meta);
       Save.clearRun();
       g.run = null;
@@ -591,7 +682,9 @@ function draw() {
   const cam = g.cam;
   R.drawBackground(ctx, W, H, cam, g.level, g.backdrop, g.time);
 
-  const t2 = cam.trauma * cam.trauma;
+  // Screen shake is presentation, never simulation: turning it down changes
+  // how the camera reports a hit, not what the hit did.
+  const t2 = cam.trauma * cam.trauma * (settings.shake != null ? settings.shake : 1);
   const sx = (Math.random() - 0.5) * 26 * t2;
   const sy = (Math.random() - 0.5) * 26 * t2;
 
@@ -600,10 +693,12 @@ function draw() {
   ctx.scale(cam.scale, cam.scale);
   ctx.translate(-cam.x, -cam.y);
 
-  R.drawTerrain(ctx, cam, W, H, g.terrain, g.level, g.time);
+  const present = { flash: settings.flash, contrast: !!settings.highContrast };
+  R.drawTerrain(ctx, cam, W, H, g.terrain, g.level, g.time, present);
   if (g.state === 'play' && ship.alive && !ship.landed) R.drawTrajectory(ctx, ship, g.level, g.terrain, cam);
   particles.draw(ctx);
   R.drawEnemies(ctx, g.field, ship, g.time, {
+    ...present,
     threatWarning: !!(g.loadout && g.loadout.threatWarning),
     showPaths: Debug.showEnemyPaths,
   });
@@ -617,7 +712,7 @@ function draw() {
   const vis = ship.env ? ship.env.visibility : 1;
   if (vis < 0.985) {
     R.drawDust(ctx, W, H, g.level, vis, g.time);
-    R.drawPadBeacons(ctx, cam, W, H, g.terrain, g.level, g.time, 1 - vis);
+    R.drawPadBeacons(ctx, cam, W, H, g.terrain, g.level, g.time, 1 - vis, present);
   }
 
   if (g.state === 'play' || g.state === 'paused') {
@@ -713,6 +808,7 @@ function screenHTML(s) {
           ${btn('help', 'HOW TO FLY')}
           ${btn('hangar', 'HANGAR')}
           ${btn('outfit', 'OUTFIT')}
+          ${btn('stats', 'LOGBOOK')}
           ${btn('settings', 'SETTINGS')}
         </div>
         <div class="foot">${audio.muted ? '🔇' : '🔊'} press M to ${audio.muted ? 'unmute' : 'mute'}</div>
@@ -810,14 +906,19 @@ function screenHTML(s) {
       </div>`;
     }
 
-    case 'crash':
+    case 'crash': {
+      const assist = flightAssist();
       return `<div class="screen">
         <div class="verdict bad">LANDER LOST</div>
         <p class="body">${crashReason()}</p>
         <div class="stats"><span>SHUTTLES LEFT</span><b>${g.lives}</b></div>
         ${g.run ? '<p class="body">The same ground, the same seed. Fly it again knowing what it does.</p>' : ''}
-        <div class="btns">${btn('retry', 'TRY AGAIN', true, 'SPACE')}${btn(g.run ? 'abandon-run' : 'menu', g.run ? 'ABANDON' : 'MENU')}</div>
+        ${assist ? `<div class="objective assist"><span>FLIGHT ASSIST</span> ${assist.tip}</div>` : ''}
+        <div class="btns">${btn('retry', 'TRY AGAIN', true, 'SPACE')}${
+          assist && assist.loaner ? btn('loan', `TAKE THE ${assist.loaner.name}`) : ''
+        }${btn(g.run ? 'abandon-run' : 'menu', g.run ? 'ABANDON' : 'MENU')}</div>
       </div>`;
+    }
 
     case 'gameover':
       return `<div class="screen">
@@ -878,6 +979,118 @@ function screenHTML(s) {
             ${opt('invertRotation', true, 'INVERTED', 'Left burner tips the nose right. Some pilots read the stick the other way round.')}
           </div>
         </div>
+        <div class="setting">
+          <div class="setting-name">MOTION</div>
+          <div class="opts">
+            ${opt('shake', 1, 'FULL SHAKE', 'The camera kicks on impacts, hard burns and hits.')}
+            ${opt('shake', 0.5, 'REDUCED', 'Half the movement. Still readable as force, far less motion.')}
+            ${opt('shake', 0, 'NONE', 'The camera never shakes. Nothing else changes.')}
+          </div>
+        </div>
+        <div class="setting">
+          <div class="setting-name">FLASHING</div>
+          <div class="opts">
+            ${opt('flash', 1, 'FULL', 'Alarms pulse, beacons strobe, telegraphs throb.')}
+            ${opt('flash', 0.35, 'REDUCED', 'The same warnings, held much steadier.')}
+            ${opt('flash', 0, 'STEADY', 'No pulsing at all. Warnings stay lit instead.')}
+          </div>
+        </div>
+        <div class="setting">
+          <div class="setting-name">INSTRUMENT SIZE</div>
+          <div class="opts">
+            ${opt('uiScale', 0.85, 'COMPACT', 'Smaller panels, more sky.')}
+            ${opt('uiScale', 1, 'NORMAL', 'The standard instrument panel.')}
+            ${opt('uiScale', 1.25, 'LARGE', 'Bigger readouts and bigger text everywhere.')}
+          </div>
+        </div>
+        <div class="setting">
+          <div class="setting-name">CONTRAST</div>
+          <div class="opts">
+            ${opt('highContrast', false, 'STANDARD', 'Pads and threats in their usual colours.')}
+            ${opt('highContrast', true, 'HIGH', 'Pads outlined and labelled, threats ringed and lettered — every marker readable without relying on colour.')}
+          </div>
+        </div>
+        <div class="setting">
+          <div class="setting-name">CONTROLS</div>
+          <div class="opts">
+            <button class="opt" data-action="keys">
+              <span class="opt-title">REBIND KEYS</span>
+              <span class="opt-blurb">${ACTIONS.map((a) => keyLabel(input.bindings[a][0])).join(' · ')}</span>
+            </button>
+          </div>
+        </div>
+        <div class="btns">${btn('back', 'DONE', true, 'SPACE')}</div>
+      </div>`;
+    }
+
+    case 'keys': {
+      const names = {
+        thrust: 'MAIN BOOSTER', left: 'LEFT BURNER', right: 'RIGHT BURNER',
+        hold: 'ATTITUDE HOLD', ability: 'ACTIVE MODULE',
+      };
+      const rows = ACTIONS.map((a) => {
+        const listening = g.rebinding === a;
+        return `<button class="opt keyrow${listening ? ' on' : ''}" data-action="rebind:${a}">
+          <span class="opt-title">${names[a]}</span>
+          <span class="opt-blurb">${listening ? 'press any key…' : input.bindings[a].map(keyLabel).map((k) => `<kbd>${k}</kbd>`).join(' ')}</span>
+        </button>`;
+      }).join('');
+      return `<div class="screen">
+        <h2>CONTROLS</h2>
+        <p class="body">Pick a control, then press the key you want on it. Retry, pause, mute and
+        escape stay where they are, so the menu is always reachable.</p>
+        <div class="setting"><div class="opts keys-list">${rows}</div></div>
+        ${g.rebindNote ? `<div class="notice">${g.rebindNote}</div>` : ''}
+        <div class="btns">${btn('keys-reset', 'RESET TO DEFAULT')}${btn('settings', 'DONE', true, 'SPACE')}</div>
+      </div>`;
+    }
+
+    case 'stats': {
+      const st = meta.stats;
+      const pct = (n, d) => (d > 0 ? `${Math.round((n / d) * 100)}%` : '—');
+      const flights = st.attempts || (st.landings + st.crashes);
+      const efficiency = st.fuelCarried > 0
+        ? `${Math.round((1 - st.fuelBurned / st.fuelCarried) * 100)}% left on average` : '—';
+
+      const row = (name, value, note = '') =>
+        `<tr><td>${name}</td><td class="m-val">${value}</td><td class="m-w">${note}</td></tr>`;
+
+      const bodies = Object.entries(st.bodies || {})
+        .sort((a, b) => b[1] - a[1])
+        .map(([id, n]) => `${chapterTitle(id)} ×${n}`).join(' · ') || 'none yet';
+
+      const graded = Object.entries(st.missionGrades || {});
+      const perfectRuns = graded.filter(([, v]) => v === 'PERFECT').length;
+
+      const modules = Object.entries(st.moduleFlights || {})
+        .sort((a, b) => b[1] - a[1]).slice(0, 3)
+        .map(([id, n]) => {
+          const m = moduleById(id);
+          const used = (st.moduleUses || {})[id];
+          return `${m ? m.name : id} ×${n}${used ? ` (fired ${used})` : ''}`;
+        }).join(' · ') || 'none yet';
+
+      const threatTotal = st.threatsDestroyed + st.threatsPassed;
+
+      return `<div class="screen wide">
+        <div class="eyebrow" style="color:#5ff5ff">LOGBOOK</div>
+        <h2>STATISTICS</h2>
+        <table class="metrics stats-table">
+          ${row('Missions flown', formatScore(flights))}
+          ${row('Landed', formatScore(st.landings), pct(st.landings, flights))}
+          ${row('Lost', formatScore(st.crashes), pct(st.crashes, flights))}
+          ${row('Perfect landings', formatScore(st.perfect), pct(st.perfect, st.landings))}
+          ${row('Fuel efficiency', efficiency)}
+          ${row('Time flown', `${Math.round(st.flightSeconds / 60)} min`)}
+          ${row('Chapters cleared', bodies)}
+          ${row('Missions at PERFECT', `${perfectRuns} of ${graded.length} flown`)}
+          ${row('Best score', formatScore(Math.max(st.bestScore, meta.classic.high)))}
+          ${row('Threats met', formatScore(st.threatsSeen), st.threatsSeen ? 'under fire' : '')}
+          ${row('Threats destroyed', formatScore(st.threatsDestroyed), pct(st.threatsDestroyed, threatTotal))}
+          ${row('Threats flown past', formatScore(st.threatsPassed), pct(st.threatsPassed, threatTotal))}
+          ${row('Hits taken', formatScore(st.hitsTaken))}
+          ${row('Most-flown gear', modules)}
+        </table>
         <div class="btns">${btn('back', 'DONE', true, 'SPACE')}</div>
       </div>`;
     }
@@ -1018,6 +1231,10 @@ function screenHTML(s) {
           <tr class="tot"><td>BANKED SALVAGE</td><td>${formatScore(b.salvage)}</td></tr>
           <tr class="run"><td>BANKED RESEARCH</td><td>${formatScore(b.data)}</td></tr>
         </table>
+        ${g.lastRunSummary && g.lastRunSummary.settled && g.lastRunSummary.settled.debrief
+          ? `<div class="objective"><span>DEBRIEF</span> The flight recorders came home:
+             +${g.lastRunSummary.settled.debrief.salvage} salvage, +${g.lastRunSummary.settled.debrief.data} research.
+             Enough to change something before the next attempt.</div>` : ''}
         <div class="btns">${btn('chapters', 'NEW EXPEDITION', true, 'SPACE')}${btn('menu', 'MENU')}</div>
       </div>`;
     }
@@ -1069,6 +1286,51 @@ function metricsTable(d) {
   </table>`;
 }
 
+/**
+ * Offered after a mission has cost three landers (roadmap section 13: "if the
+ * player fails the same mission repeatedly, offer an optional forecast tip,
+ * practice mode, or temporary loaner module - not an invisible difficulty
+ * reduction"). Nothing here changes the mission. It names what is killing you,
+ * and offers to lend the tool for it.
+ */
+function flightAssist() {
+  if (!g.run || !g.level) return null;
+  const key = g.level.missionId || g.level.id;
+  const tries = (g.run.attempts && g.run.attempts[key]) || 0;
+  if (tries < 3) return null;
+
+  const planet = PLANETS[g.level.planet] || null;
+  const hazard = (g.level.hazards || []).map((h) => (typeof h === 'string' ? h : h.type))[0];
+  const TIPS = {
+    dust: 'the storm runs on a cycle — learn the ground in a clear window, then commit during the next one',
+    windChannels: 'the wind reverses between altitude bands — drop through them one at a time instead of straight down',
+    atmosphere: 'the air answers late here — start braking earlier than feels right, and trim into the gust',
+    radiation: 'ridges throw a shadow — the sheltered route is slower and keeps your instruments honest',
+    thermal: 'heat builds while you burn — short bursts, not a long hold',
+    cryo: 'the cold builds while you coast — a little thrust keeps it back',
+    plumes: 'the vents fire on a cycle — cross the field between them',
+  };
+  const tips = [];
+  if (TIPS[hazard]) tips.push(TIPS[hazard]);
+  if (g.level.surfaceFriction != null && g.level.surfaceFriction < 0.3) {
+    tips.push('this surface barely holds you — arrive slow and straight, and expect to slide');
+  }
+  if (g.level.cave) tips.push('the ceiling is as fatal as the floor — climb in small steps');
+  if (g.field && !g.field.empty) tips.push('the safe pad is out of every gun\'s reach — the small pad is the one being watched');
+  if (!tips.length) tips.push(planet ? planet.summary.toLowerCase() : 'take the wide pad and the base rate — a landing beats a multiplier');
+
+  // A loaner only when the player has nothing equipped for this body.
+  const rec = recommendedFor(g.level.planet);
+  const owned = meta.equipped && meta.equipped.active;
+  const wanted = rec.active && rec.active !== owned ? rec.active : null;
+  const loaner = wanted && !g.run.loaner ? ACTIVE_MODULES[wanted] : null;
+
+  return {
+    tip: `This ground has cost you ${tries} landers. ${tips[0].charAt(0).toUpperCase()}${tips[0].slice(1)}.`,
+    loaner,
+  };
+}
+
 function crashReason() {
   if (ship.lostToFire) {
     return ship.damageSource === 'ram'
@@ -1116,6 +1378,32 @@ function act(action) {
     renderOverlay();
     return;
   }
+  if (action === 'loan') {
+    const assist = flightAssist();
+    if (assist && assist.loaner && g.run) {
+      g.run.loaner = assist.loaner.id;
+      persistRun();
+      audio.arpeggio([523.25, 784], 0.07);
+    }
+    act('retry');
+    return;
+  }
+  if (action === 'keys') { g.rebinding = null; g.rebindNote = null; setState('keys'); return; }
+  if (action === 'keys-reset') {
+    settings.keys = null;
+    input.setBindings(null);
+    g.rebinding = null;
+    g.rebindNote = 'Every control is back to its default key.';
+    saveSettings();
+    renderOverlay();
+    return;
+  }
+  if (action.startsWith('rebind:')) {
+    g.rebinding = action.slice(7);
+    g.rebindNote = null;
+    renderOverlay();
+    return;
+  }
   if (action.startsWith('pick:')) { g.hangarPick = action.slice(5); renderOverlay(); return; }
   if (action.startsWith('buy:')) {
     const id = action.slice(4);
@@ -1136,7 +1424,8 @@ function act(action) {
     if (g.state === 'checkpoint') {
       // A checkpoint banks everything and restores the expedition.
       const settled = settleHaul(run.haul, { completed: true });
-      meta = Save.bankRun(meta, run, { completed: true, settled });
+      meta = Save.bankRun(meta, run, { completed: true, settled, id: `sector-${run.sector}` });
+      Save.saveRun(run);
       Save.saveMeta(meta);
       run.haul = { salvageSafe: 0, salvageCargo: 0, data: 0, cores: 0, materials: {} };
       run.sector++;
@@ -1156,7 +1445,8 @@ function act(action) {
   if (action === 'abandon-run') {
     if (g.run) {
       const settled = settleHaul(g.run.haul, { completed: false });
-      meta = Save.bankRun(meta, g.run, { completed: false, settled });
+      meta = Save.bankRun(meta, g.run, { completed: false, settled, id: 'final' });
+      Save.saveRun(g.run);
     }
     Save.saveMeta(meta);
     Save.clearRun();
@@ -1168,7 +1458,10 @@ function act(action) {
   }
   if (action.startsWith('set:')) {
     const [, key, raw] = action.split(':');
-    settings[key] = raw === 'true' ? true : raw === 'false' ? false : raw;
+    // Numeric settings have to come back as numbers: the option buttons compare
+    // against the value with ===, and "0.5" is not 0.5.
+    const numeric = raw !== '' && !Number.isNaN(Number(raw));
+    settings[key] = raw === 'true' ? true : raw === 'false' ? false : numeric ? Number(raw) : raw;
     saveSettings();
     renderOverlay();
     return;
@@ -1198,8 +1491,13 @@ function act(action) {
     case 'select': setState('select'); break;
     case 'hangar': setState('hangar'); break;
     case 'outfit': setState('outfit'); break;
-    case 'settings': g.settingsFrom = g.state; setState('settings'); break;
+    case 'settings':
+      if (g.state !== 'keys') g.settingsFrom = g.state;
+      g.rebinding = null;
+      setState('settings');
+      break;
     case 'help': setState('help'); break;
+    case 'stats': setState('stats'); break;
     case 'back': setState(g.settingsFrom === 'paused' ? 'paused' : 'menu'); g.settingsFrom = null; break;
     case 'launch': launch(); break;
     case 'next':
@@ -1210,7 +1508,13 @@ function act(action) {
       else startLevel(g.levelIndex + 1);
       break;
     case 'retry': startLevel(g.levelIndex, !g.run); break;
-    case 'menu': g.level = null; setState('menu'); break;
+    case 'menu':
+      // Bump the token: a landing or a crash may still have a settle timer in
+      // flight, and it must not fire into a menu with no level under it.
+      g.token++;
+      g.level = null;
+      setState('menu');
+      break;
     case 'restart':
       g.score = 0; g.lives = 3; g.combo = 0; g.newRecord = false;
       startLevel(g.endless ? LEVELS.length : 0);
@@ -1245,6 +1549,10 @@ const pause = () => {
 };
 input.bind('p', pause);
 input.bind('escape', () => {
+  // While a control is listening for its new key, escape cancels the listening
+  // rather than the screen - otherwise the one key everybody presses to back
+  // out of a mistake throws away the whole rebinding session.
+  if (g.state === 'keys' && g.rebinding) { g.rebinding = null; renderOverlay(); return; }
   if (g.state === 'play' || g.state === 'paused') pause();
   else if (g.state !== 'menu') act('menu');
 });
@@ -1262,8 +1570,24 @@ const useAbility = () => {
     audio.blip(180, 0.06, 'square', 0.06);
   }
 };
-input.bind('e', useAbility);
-input.bind('q', useAbility);
+input.bindAction('ability', useAbility);
+// While the CONTROLS screen is listening, the next key press lands on the
+// selected control instead of doing whatever it normally does.
+input.bind('*', (key) => {
+  if (g.state !== 'keys' || !g.rebinding) return;
+  const action = g.rebinding;
+  const next = input.rebind(action, key);
+  if (!next) {
+    g.rebindNote = `${keyLabel(key)} is reserved for the interface — pick another key.`;
+  } else {
+    settings.keys = next;
+    g.rebindNote = null;
+    saveSettings();
+  }
+  g.rebinding = null;
+  renderOverlay();
+});
+
 input.bind('m', () => {
   audio.unlock();
   audio.setMuted(!audio.muted);

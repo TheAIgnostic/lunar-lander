@@ -252,6 +252,33 @@ scheduled until the MVP is stable — the spec says the same.
   - Combat tree ungated on first contact, every node moving a value the simulation reads
   - enemy placement, telegraph timing, cover, muzzle safety, shields, kills and the module runtime
     under 67 unit tests; both fixtures byte-identical, so the flight model did not move
+- [x] **M13 — balance, accessibility and the MVP regression** (this commit)
+  - **the Mars balance problem was the pilot.** Every Mars mission landed on 0-10% fuel and mars-2
+    crashed 15/20. A fuel sweep at five budgets proved more fuel changed nothing — the control law
+    climbed away from the pad while correcting and burned whatever it had. One rule ("in an
+    atmosphere, sink gently while off-target instead of climbing") took the 15 missions from
+    254/300 landings to 266/300, crashes 46 to 34, and Mars fuel margins from 0-10% to 17-35%,
+    with the Moon and Europa unchanged. No mission content was retuned
+  - **landing bands deliberately left alone** — the only recorded data is an autopilot, which lands
+    74% PERFECT and is not a proxy for a person. Recorded as awaiting human playtest data
+  - **accessibility**: motion, flashing, instrument size, contrast and full key rebinding, all
+    presentation-only — a test flies the same mission with every one of them changed and asserts a
+    byte-identical result
+  - **one hazard warning at a time**, ranked by urgency, the rest as quiet chips; and eight audio
+    warning voices with right of way, so a charging turret and a low tank never shout together
+  - **the logbook**: attempts, landings, losses, fuel efficiency, chapters cleared, best grade per
+    mission, threats destroyed *and* flown past, most-flown gear
+  - **anti-frustration, per section 13**: a failed expedition always files a debrief worth the
+    cheapest skill rank; Tech Core bad-luck protection; three landers lost on the same ground offers
+    a named tip and a loaner module for the expedition; no settlement can pay twice
+  - **the route screen always offers four bodies** — it did not, and a sweep over every cleared-set
+    and sector found it
+  - `test/mvp-regression.js`: all 27 missions × 20 seeds, every one with a landable seed;
+    performance under four machines firing (1.3 µs/step); a sixty-mission session; determinism
+  - `test/autopilot.js` had drifted three milestones behind its own control law; it adapts the
+    shared one now instead of reimplementing it
+  - `serve.js`: a no-store dev server, so the module-caching gotcha that has cost time in three
+    milestones is fixed rather than documented
 
 ## Decisions (Tom, 2026-08-16)
 
@@ -270,10 +297,17 @@ None.
 
 ## Next task
 
-**M13 — MVP polish.** Balance from the recorded data, accessibility (screen shake and flash
-controls, text scaling, remapping — the telegraphs already carry timing in shape as well as colour),
-the statistics screen (`meta.stats` records threats seen, destroyed and hits taken but shows none of
-it), and a full autopilot regression across all 15 missions. That completes the spec's own MVP.
+**The MVP is complete.** M0-M13 delivers everything section 18 asks for: Moon, Mars and Europa at 15
+missions, improved landing grades, the terrain grammar, the three-shuttle loop, salvage and research,
+the hangar, three skill trees, five active and four passive modules, two enemies, and the four-choice
+route screen — plus accessibility, a logbook and a regression that covers all 27 missions.
+
+**M14+ is content**, and the spec's own production order (section 16, Phase 7) is: Titan and
+Enceladus for atmosphere and plume contrast, then Mercury and Io for heat and timing, then Venus,
+then Pluto, then Ganymede as the combined-systems finale. Each body is five authored missions
+replacing its generated survey chapter, one rare-material loop, and planet-specific feedback. The
+enemy roster's remaining six designs and the moving landing platforms are the two systems still
+owed; everything else those chapters need already exists.
 
 ### Known findings
 
@@ -294,8 +328,18 @@ it), and a full autopilot regression across all 15 missions. That completes the 
 - **europa-4 UNDER-ICE SIGNAL** — 17/20 seeds quiet, 14/20 under fire. Geometry sound; the pilot
   still clips ice on three, and the tight corridor keeps a drone in sight longer than anywhere else
   in the game (worst hull in the MVP, 12%).
+- **Landing bands are untuned by choice.** Phase 8 asks for bands tuned from playtest data; the only
+  recorded data is an autopilot that lands 74% PERFECT, and it is not a proxy for a person. The M1
+  bands stand, their boundary tests still pass, and this waits on a human playtest.
+- **No controller support.** Every flight control is rebindable from the keyboard, but there is no
+  gamepad backend to remap. That is a missing input source, not a missing accessibility option.
+- **No achievements.** The spec gates them behind stable progression, and the statistics they would
+  be built on only started being recorded in M13.
+- **Sustained crosswind is still the pilot's weak ground.** mars-2 VALLES CROSSWIND lands 7/20 and
+  classic 11 CROSSWIND 12/20 — both reachable and structurally clean on every seed. The M13 sink
+  rule traded some of the pilot's crosswind precision for far bigger fuel margins everywhere; a
+  human with the fuel now available has a much easier time than the numbers suggest.
 - **Sector checkpoints** — delivered in M9.
-- **Crosswind (missions 11-12)** — resolved in M6. The pilot now lands 18/20 and 19/20.
 
 ### Done, for reference
 

@@ -3,9 +3,9 @@
   "configurations": [
     {
       "name": "lander",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8781"],
-      "port": 8781
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["serve.js", "8791"],
+      "port": 8791
     }
   ]
 }

@@ -27,13 +27,19 @@ Everything under `src/` is a plain ES module, loaded directly in the browser and
 | `src/modules.js` | 5 active + 4 passive modules, blueprint guarantee list | M11/M12 |
 | `src/enemies.js` | enemy roster, deterministic placement, telegraphs, projectiles, damage, rewards | M12 |
 | `src/abilities.js` | the active-module runtime: charges, duration, cooldown, effects | M12 |
-| `src/render.js` | background, world, ship, dust, pad beacons, hangar ship, HUD | — |
+| `src/render.js` | background, world, ship, dust, pad beacons, enemies, hangar ship, HUD | —/M12 |
 | `src/debug.js` | F3 telemetry overlay, F4 landing-envelope bars, F5 enemy ranges | M0/M12 |
 | `src/particles.js` | pooled particles, debris, rings, floating text | — |
 | `src/audio.js` | synthesized engines, impacts, chimes | — |
-| `src/input.js` | keyboard + touch into an intent object | — |
+| `src/input.js` | rebindable key map, touch, and the intent object the sim reads | —/M13 |
 | `src/levels.js` | the original 12 classic missions, endless generator, world palettes | — |
 | `src/util.js` | math, seeded RNG, `safeStore` | — |
+| `serve.js` | the dev server, `no-store` so an edit always reaches the browser | M13 |
+
+**The rule that holds accessibility honest:** every accessibility setting changes *presentation*
+only — shake, flashing, instrument size, contrast and key bindings never reach the simulation.
+`test/settings-tests.js` flies the same mission with all of them changed and asserts the result is
+byte-identical, so a player who needs the motion turned off is flying the same game as everyone else.
 
 **The rule that holds combat fair:** every mission keeps a *sanctuary* — its lowest-multiplier pad
 and the 420 px column above it — outside every machine's engagement range. `placeEnemies` and
@@ -52,16 +58,20 @@ object. Hazards apply through the shared force interface, so a new body is data,
 ## Tests
 
 ```bash
-./test/run-all.sh 20                 # everything: 8 unit suites, 2 fixtures, validation, build
+./test/run-all.sh 20                 # everything: 9 unit suites, 2 fixtures, 2 sweeps, build
 node test/validate-missions.js 20    # structural + flown validation of every mission family
+node test/mvp-regression.js 20       # all 27 missions, performance, long session, determinism
 node test/enemies-tests.js           # enemies, combat rules, the active-module runtime
+node test/settings-tests.js          # key bindings, accessibility, presentation neutrality
 node test/physics-fixture.js         # physics drift, no pilot in the loop
 node test/flight-fixture.js          # mission outcomes flown by the autopilot
 ./macos/build.sh                     # bundles, then self-tests the app
 ```
 
 `test/pilot.js` is the control law as a pure module, shared by the node validator and the browser
-harness so both fly identically. `test/autopilot.js` is the browser wrapper.
+harness so both fly identically. `test/autopilot.js` is the browser wrapper — it *adapts* the shared
+law rather than reimplementing it, which it used to, having quietly drifted three milestones behind.
+Load it with `await __autopilotReady` before flying, since it imports the law as a module.
 
 `flyMission` keeps enemies **off** unless `{ enemies: true }` asks for them. The terrain sweep and
 the flight fixture measure whether the ground can be flown; mixing gunfire into them would turn a
@@ -87,36 +97,45 @@ game or the pilot changes. Improving the pilot should move the second and leave 
 | `__goMission('LUNA', 3)` | jump straight to any mission of any chapter |
 | `__field()` | the live enemy field: machines, shots, kills, suppressed shots |
 | `__useAbility()` | fire the equipped active module |
+| `__runChapter('MARS')` | fly a whole chapter headlessly (after `await __autopilotReady`) |
 | `__settleNow()` | resolve a pending landing or crash immediately |
 
 ## Environment notes that cost real time
 
 - **`requestAnimationFrame` does not fire while the browser pane is hidden.** Timed test sweeps stall
   silently. Use `__advance` / `__flyHeadless`, and check `document.hidden` before blaming the game.
-- **ES modules cache hard.** After editing `src/`, a reload may still serve the old file. Restart the
-  static server on a **new port** to force a fresh load.
+- **ES modules cache hard**, which is why `serve.js` exists: it is a 40-line static server that sends
+  everything `no-store`, so a reload after editing `src/` always lands. `.claude/launch.json` runs
+  it. Reaching for `python3 -m http.server` again means reaching for the old bug, where the fix was
+  restarting on a new port every time.
 - **Screenshots misreport at emulated viewport sizes.** If one looks half-painted, re-issue
   `resize_window` (nudge the height by 1 px) and shoot again.
 - **The macOS self-test is the bundling canary.** It has caught a duplicate `const` across modules, a
   module missing from the bundler list, and a namespace import that vanished from the bundle. Run it
   before calling any milestone done.
 
-## For M13 (balance, accessibility, polish)
+## After the MVP (M14+)
 
-Combat is in and measured (`test/BASELINE.md`, M12 section). What M13 inherits:
+The MVP is complete and measured (`test/BASELINE.md`, M13 section). What the next milestones inherit:
 
 - **Two of eight enemies exist.** Coil Cannon, Patrol Drone, Mortar Platform, Magnetic Mine, Solar
-  Sentry and Shielded Guardian are roster entries with no implementation. Adding one is a
+  Sentry and Shielded Guardian are roster entries with no implementation. Adding one is an
   `ENEMY_TYPES` entry plus a draw function; the field, telegraph, projectile, damage and reward
   systems are shared. `PlanetDefinition.eligibleEnemySets` is where a new design joins the bodies
   that should field it.
-- **Accessibility is the open item.** Telegraphs already carry timing in shape (a growing line, a
-  closing ring) as well as colour, but screen shake, flash reduction, text scaling and remapping are
-  all still to do.
-- **Statistics exist but are not shown.** `meta.stats` now records `threatsSeen`, `threatsDestroyed`
-  and `hitsTaken` alongside landings and crashes.
-- **The numbers to tune** are all in two config objects: `COMBAT` in `enemies.js` and `ABILITY` in
-  `abilities.js`, plus the per-type entries in `ENEMY_TYPES`.
+- **Seven bodies still fly generated survey chapters** rather than authored missions: Mercury,
+  Venus, Titan, Enceladus, Io, Pluto, Ganymede. `src/missions.js` is where authored content goes,
+  and `generateChapter` is what it replaces.
+- **Landing bands await human playtest data.** They were deliberately not retuned in M13 — the only
+  recorded data is an autopilot, which is not a proxy for a person.
+- **Moving landing platforms** are still deferred (Europa 5, Io 5): `padAt` and the landing check
+  would have to become time-aware.
+- **Controller support does not exist.** Keyboard remapping does, and every flight control is
+  rebindable, but there is no gamepad backend to remap.
+- **Achievements** are deliberately not built. The spec gates them behind stable progression, and
+  the statistics they would be built on only started being recorded in M13.
+- **The numbers to tune** live in config objects: `COMBAT` in `enemies.js`, `ABILITY` in
+  `abilities.js`, `LANDING` in `landing.js`, `CORE_PITY`/`DEBRIEF` in `economy.js`.
 
 ## Baseline physics constants (do not drift without a measured reason)
 
@@ -163,3 +182,8 @@ This is a precondition for every later validation test.
 - `F4` — landing-envelope bars showing each criterion against its perfect/good/hard/crash zones
 - `F5` — enemy engagement rings: outer range in red, the minimum range a ground gun cannot shoot
   inside in green
+
+Accessibility settings live on the settings screen, not behind a debug key: motion, flashing,
+instrument size, contrast and key bindings. They are stored in `meta.settings` and applied by
+`applyPresentation()` in `main.js` (a CSS variable and two root classes) plus the `flash`/`contrast`
+options passed into the renderer.

@@ -20,6 +20,14 @@ export const SHIP = {
 export const DEFAULT_SETTINGS = {
   steering: 'classic',    // 'classic' = burners rotate | 'direct' = burners translate
   invertRotation: false,  // classic only: swap which burner spins which way
+  // Accessibility. None of these touch the simulation - they change how it is
+  // presented, which is the point: the flight model must feel the same to
+  // everyone, and only the presentation should have to adapt.
+  shake: 1,               // screen shake scale: 0 off, 0.5 reduced, 1 full
+  flash: 1,               // pulsing and strobing: 1 full, 0.35 reduced, 0 steady
+  uiScale: 1,             // instrument and text size: 0.85, 1, 1.2
+  highContrast: false,    // heavier, colour-independent pad and threat marks
+  keys: null,             // null = default bindings, else an action -> keys map
 };
 
 // Derived from the landing config so the HUD, the tilt gauge and the debug

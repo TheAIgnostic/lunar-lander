@@ -22,11 +22,13 @@ No dependencies, no build step, no image or audio assets — one canvas, ES modu
 ## Run
 
 ```bash
-python3 -m http.server 8781
+node serve.js
 ```
 
-Then open <http://localhost:8781>. (Any static server works; the `src/*.js` modules need `http://`,
-not `file://`.)
+Then open <http://localhost:8791>. Any static server works — the `src/*.js` modules only need
+`http://` rather than `file://` — but this one sends everything `no-store`, which matters when you
+are editing: browsers cache ES modules hard enough that a reload will happily serve the file you
+just changed away.
 
 ### Or build one file you can double-click
 
@@ -68,6 +70,21 @@ else without that step requires an Apple Developer account to sign and notarize.
 | `R` | Retry · `P`/`Esc` pause · `M` mute |
 
 Touch devices get the same controls as on-screen pads in landscape, including the module button.
+Every flight control can be rebound in **Settings → Controls**; retry, pause, mute and escape are
+reserved so the menu is always reachable.
+
+### Accessibility
+
+**Settings** also carries motion, flashing, instrument size and contrast. All four change how the
+game is *presented* and nothing about how it behaves — there is a test that flies the same mission
+with every one of them changed and asserts a byte-identical result.
+
+- **Motion** — screen shake at full, half or off.
+- **Flashing** — pulsing and strobing at full, reduced or held steady. A warning never disappears
+  when you turn this down; it stops moving.
+- **Instrument size** — the HUD and every menu at 85%, 100% or 125%.
+- **Contrast** — pads get a white bar and squared ends, threats get a white ring and a letter, so
+  every marker in the game is readable without relying on colour.
 
 ### Steering modes
 
@@ -90,6 +107,8 @@ file owns, the dev hooks on `window`, the environment gotchas, and the baseline 
 - `DESIGN.md` — the research the original design came from
 - `ROADMAP_STATUS.md` — the roguelite expansion: milestones, decisions, open findings, next task
 - `test/BASELINE.md` — measured behaviour at every milestone
+- `LOGBOOK` in the main menu — your own statistics: landings, losses, fuel efficiency, best grade
+  per mission, threats destroyed and threats flown past
 
 ## Testing
 
@@ -98,8 +117,10 @@ load the autopilot in the browser console and fly the campaign unattended:
 
 ```js
 const s = document.createElement('script'); s.src = '/test/autopilot.js'; document.head.appendChild(s);
+await __autopilotReady;          // it imports the shared control law as a module
 // then
-await __runAll(12)   // [{lvl, outcome, quality, fuelLeft, secs}, ...]
+await __runAll(12)               // [{lvl, outcome, quality, fuelLeft, secs}, ...]
+__runChapter('MARS')             // one expedition chapter, headlessly
 ```
 
 Or run every check at once:
@@ -112,11 +133,11 @@ The autopilot flies the highest-multiplier pad on each mission (`__runAll(12, 0)
 That is the fuel-budget regression test: a mission that comes back `outcome: "crash"` with
 `fuelLeft: 0` is a budget that got too tight.
 
-Last full run of the classic campaign — every mission lands:
+The full regression is `node test/mvp-regression.js 20`: all 27 missions at 20 seeds each, enemies
+live where a mission has them, flown with nothing equipped. Every mission has a seed the autopilot
+lands on; 92% of flights land overall. It also measures the simulation under its worst intended load
+(four machines firing and a laser burning: 1.3 µs per 120 Hz step), a sixty-mission session, and that
+a seed reproduces its flight exactly.
 
-| 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-
-The autopilot's old crosswind and ceiling weaknesses were fixed in M6 and M7; see `test/BASELINE.md`
-for the before/after numbers.
+The autopilot's crosswind and ceiling weaknesses were worked on in M6, M7 and M13; see
+`test/BASELINE.md` for the before/after numbers.

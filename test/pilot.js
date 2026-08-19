@@ -31,6 +31,16 @@ export function makeControl(ship, terrain, level, opts = {}) {
   const bias = opts.approach === 'left' ? -1 : opts.approach === 'right' ? 1 : 0;
   const kP = opts.kP != null ? opts.kP : 0.0016;   // position hold, rad per px
   const kD = opts.kD != null ? opts.kD : 0.012;    // velocity damping, rad per px/s
+  // Sink rate to hold while still off-target on final. This used to be -8, a
+  // *climb*, and on a windy body it was the whole ball game: the pilot rose
+  // away from the pad, corrected in a headwind, rose again, and landed on
+  // fumes or not at all. Descending gently while correcting keeps the engine
+  // doing useful work and ends the flight. Measured over 15 missions x 20
+  // seeds: 254 -> 265 landings, 46 -> 35 crashes, Mars 60 -> 72 out of 100.
+  // On an airless body, holding station is cheap and works, so the old rule
+  // stands. In an atmosphere it is a losing game and the sink rate applies.
+  const windy = !!(level.drag || level.wind || level.gust);
+  const holdVy = opts.holdVy != null ? opts.holdVy : (windy ? 16 : -8);
   let phase = 'ACCEL';
   let staged = bias !== 0;
 
@@ -111,7 +121,7 @@ export function makeControl(ship, terrain, level, opts = {}) {
       // than hover to death once fuel runs short.
       const desperate = ship.fuel < ship.maxFuel * 0.22;
       const holdAltitude = !lined && alt < 130 && !desperate;
-      thrust = ship.vy > (holdAltitude ? -8 : vyMax);
+      thrust = ship.vy > (holdAltitude ? holdVy : vyMax);
       if (adx > 60 && alt < 220) phase = 'ACCEL';
     }
 

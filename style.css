@@ -10,7 +10,23 @@
   --panel: rgba(8, 14, 26, 0.82);
   --line: rgba(95, 245, 255, 0.28);
   --font: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* Set from the settings screen. The stylesheet is sized in px throughout, so
+     the overlay is scaled as a whole rather than by rewriting a hundred
+     declarations - `zoom` reflows properly, unlike a transform. */
+  --ui-scale: 1;
 }
+
+/* High contrast: heavier borders and brighter text on every panel. The canvas
+   has its own high-contrast pass; this is the half that lives in the DOM. */
+.high-contrast {
+  --panel: rgba(2, 5, 12, 0.94);
+  --line: rgba(255, 255, 255, 0.55);
+}
+.high-contrast .screen { border-width: 2px; color: #ffffff; }
+.high-contrast .body, .high-contrast .opt-blurb, .high-contrast .best { color: #d8e8f2; }
+
+/* Reduced motion also stills the overlay's entrance. */
+.reduce-motion #overlay { animation: none; }
 
 * { box-sizing: border-box; }
 
@@ -44,6 +60,7 @@ html, body {
 @keyframes fade { from { opacity: 0; transform: translateY(6px); } }
 
 .screen {
+  zoom: var(--ui-scale);
   width: min(560px, 100%);
   max-height: calc(100vh - 48px);
   overflow-y: auto;
@@ -264,6 +281,23 @@ table.metrics tr.m-total .m-val { color: var(--cyan); font-size: 14px; }
   background: rgba(255, 179, 71, .07); border: 1px solid rgba(255, 179, 71, .3); color: #e8d3b0;
 }
 .objective span { font-size: 10px; letter-spacing: .2em; color: var(--amber); margin-right: 8px; }
+/* The repeated-failure assist is help, not a scolding: cyan, not warning red. */
+.objective.assist {
+  background: rgba(95, 245, 255, .07); border-color: rgba(95, 245, 255, .32); color: #cfe6f2;
+}
+.objective.assist span { color: var(--cyan); }
+
+/* The logbook table reuses the post-landing metrics styling, but its rows are
+   label/value/note rather than bars. */
+table.stats-table td:first-child { color: #a9c6d8; }
+table.stats-table .m-val { text-align: right; white-space: nowrap; }
+table.stats-table .m-w { text-align: right; color: #7f9db0; font-size: 11px; }
+
+/* The CONTROLS list: one row per flight control, click then press a key. */
+.keys-list { display: grid; gap: 8px; }
+.opt.keyrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.opt.keyrow .opt-blurb { text-align: right; }
+.opt.keyrow.on { border-color: var(--amber); color: var(--amber); }
 
 /* Hostile systems on the briefing: what is out there, and how to beat it
    without shooting back. Red-tinted so it reads as a warning at a glance. */

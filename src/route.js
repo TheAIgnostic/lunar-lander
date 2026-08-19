@@ -5,6 +5,9 @@
 import { PLANETS, gravityFor } from './planets.js';
 import { makeRng } from './util.js';
 
+/** The route screen always shows this many cards when the pool can fill them. */
+export const MIN_OFFERS = 4;
+
 export const TIERS = {
   opening: ['LUNA'],
   A: ['MARS', 'TITAN', 'EUROPA', 'ENCELADUS'],
@@ -26,9 +29,12 @@ export function eligibleBodies(clearedChapters = []) {
   if (total >= 5) pool.push(...TIERS.C);
 
   const unfinished = pool.filter((id) => !cleared.has(id));
-  // Once nothing new is left, everything comes back as a repeat pool rather
-  // than leaving the player with no route at all.
-  return unfinished.length ? unfinished : pool;
+  if (unfinished.length >= MIN_OFFERS) return unfinished;
+  // "Never remove all four useful planet choices through randomization": when
+  // the unexplored pool runs thin - clearing Mars early leaves only three tier-A
+  // bodies - already-visited bodies come back to fill the card slots. A repeat
+  // leg is a real choice in a roguelite; three cards instead of four is not.
+  return [...unfinished, ...pool.filter((id) => cleared.has(id))];
 }
 
 const DIFFICULTY = {

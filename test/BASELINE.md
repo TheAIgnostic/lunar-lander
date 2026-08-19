@@ -354,3 +354,109 @@ cold, Energy on Kill returns the spent charge.
 - europa-4 remains the hardest ground in the game: 14/20 landed under fire, 17/20 quiet.
 - The reward is 26 salvage for a turret and 34 for a drone — a nudge, not a living. A cleared
   mission pays roughly 50-325 depending on pad and grade.
+
+---
+
+## M13 — balance, accessibility and the MVP regression
+
+### The pilot was the balance problem, not the fuel
+
+Mars looked badly tuned: every Mars mission landed with **0–10% fuel left** where the Moon and
+Europa landed with 41–53%, and mars-2 crashed on 15 of 20 seeds. The obvious reading was that the
+Mars fuel budgets were too tight, so the first thing measured was a fuel sweep — every mission at
+×1, ×1.15, ×1.3, ×1.45 and ×1.6:
+
+| | ×1 | ×1.15 | ×1.3 | ×1.45 | ×1.6 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| moon-1 | 20/20, 48% | 20/20, 55% | 20/20, 60% | 20/20, 64% | 20/20, 68% |
+| mars-1 | 20/20, **1%** | 2/20, 5% | 20/20, 5% | 5/20, 7% | 18/20, **9%** |
+| mars-4 | 12/20, 1% | 14/20, 2% | 8/20, 4% | 12/20, 5% | 11/20, 7% |
+
+More fuel changed nothing: Mars flights landed on fumes at *every* budget, and the landing rate
+wobbled at random. The pilot was **spending whatever it had**. A trace showed why — on final
+approach the control law held station 50–60 px downwind of the pad and *climbed* (`vy` target −8)
+while it tried to correct, burning 50 units over twelve seconds, and only committed once fuel fell
+under 22%. On an airless body that is nearly free. In an atmosphere it is the whole tank.
+
+The fix is one line: while off-target on final in an atmosphere, **sink gently instead of climbing**.
+An integral term was tried first and rejected — it converged the offset but arrived with a standing
+tilt, trading 16 PERFECT landings for 11 GOOD ones. Measured over 15 missions × 20 seeds:
+
+| | before | after |
+| --- | ---: | ---: |
+| landed | 254/300 | **266/300** |
+| crashes | 46 | **34** |
+| Mars landings | 60/100 | **72/100** |
+| Mars fuel left | 0–10% | **17–35%** |
+| Moon and Europa | unchanged | unchanged |
+| classic campaign crashes | 9/240 | **8/240** |
+
+The sink rule is gated on `level.drag || level.wind || level.gust`, because holding station *does*
+work where there is no air, and applying it everywhere cost the Moon and Europa 12 perfect landings.
+
+**No mission content was retuned.** The numbers that looked like a content problem were a pilot
+problem, and changing the fuel budgets would have hidden it.
+
+### Landing bands: deliberately not retuned
+
+Phase 8 asks for landing bands tuned from recorded playtest data. The recorded data available here
+is an autopilot, which lands 74% PERFECT — and an autopilot is not a proxy for a human: it descends
+slowly, arrives level, and never panics. Tightening the bands against it would punish players for a
+precision the test pilot has and they do not. The bands stay as M1 set them, their boundary tests
+still pass, and this is recorded as *awaiting human playtest data* rather than done.
+
+### The MVP regression
+
+`node test/mvp-regression.js 20` — all 27 missions, 20 seeds each, enemies live where the mission
+has them, flown with nothing equipped:
+
+- **every mission has a successful automated seed** — the Phase 8 acceptance criterion
+- 498/540 flights landed (92%): PERFECT 74%, GOOD 23%, HARD 3%
+- weakest ground: mars-2 VALLES CROSSWIND 7/20 and classic 11 CROSSWIND 12/20, both sustained
+  crosswind, both long-standing pilot limits rather than mission defects
+- **performance**: 0.6 µs per physics step, 1.3 µs with four machines firing and a laser burning —
+  0.016% of a 120 Hz budget, and projectiles stay capped at 24
+- **long session**: sixty missions back to back, last ten as fast as the first ten
+- **determinism**: the same seed reproduces the same flight, enemies included
+
+### Accessibility
+
+Every one of these changes presentation only, and there is a test that says so: the same flight flown
+with shake off, flashing off, high contrast on and text at 125% produces a byte-identical result.
+
+| Setting | What it does |
+| --- | --- |
+| Motion | screen shake at full, half, or off |
+| Flashing | pulsing and strobing at full, reduced, or held steady — a warning never *disappears*, it stops moving |
+| Instrument size | HUD and every overlay at 85%, 100% or 125% |
+| Contrast | pads get a white bar and squared ends, threats get a white ring and a letter (T/D) — every marker readable without colour |
+| Controls | all five flight controls rebindable; retry, pause, mute and escape are reserved so the menu is always reachable |
+
+Also here: **one hazard warning at a time**. Mars under a dust front with the wind up and the heat
+building used to stack three full-size panels over the sky; hazards are now ranked by urgency, the
+most urgent keeps its instrument and the rest collapse into quiet chips. And **ranked audio**: eight
+warning voices with right of way, so a turret charging, a low tank and a heat build do not all shout
+at once.
+
+### Anti-frustration, measured against section 13
+
+- **A failed expedition always files a debrief** — a floor of 60 salvage and 40 research, the price
+  of the cheapest skill rank. A run that ends badly still ends with a decision. A good run is never
+  topped up.
+- **Tech Core bad-luck protection** — cores normally need a perfect landing on a small pad; eight
+  missions without one and the next clear pays anyway.
+- **The route always offers four bodies.** It did not: clearing Mars early left only three tier-A
+  bodies and the route screen silently shrank to three cards. Found by a test that sweeps every
+  cleared-set and sector.
+- **Repeated failure offers help, never a secret discount.** Three landers lost on the same ground
+  and the crash screen names what is killing you and offers to lend the module for it. The loaner
+  lasts the expedition and never touches permanent gear.
+- **No settlement pays twice.** Each payout carries an id the run records, so a reload between the
+  payout and the run being cleared cannot bank it again.
+
+### The autopilot, unified
+
+`test/autopilot.js` carried its own copy of the control law, and it had drifted: no position hold,
+no wall guard, no scaled ceiling guard. The browser and the node validator had been flying
+differently for several milestones. There is one law now, in `test/pilot.js`, and the browser file
+only adapts it to the live game objects.

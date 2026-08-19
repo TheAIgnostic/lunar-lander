@@ -1,11 +1,31 @@
 // All drawing: parallax background, world, ship, and the flight HUD.
 
-import { clamp, lerp, TAU, DEG, makeRng } from './util.js';
+import { clamp, TAU, makeRng } from './util.js';
 import { HULL, LEGS, ENVELOPE, normalizeAngle } from './ship.js';
 import { WORLDS } from './levels.js';
 import { ENEMY_TYPES } from './enemies.js';
 
 const FONT = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+
+/**
+ * How much a warning is allowed to pulse, from the player's flashing setting.
+ * Everything that blinks asks this first, so "reduced" is one switch rather
+ * than a dozen forgotten special cases.
+ */
+function flashOf(g) {
+  const f = g && g.settings && g.settings.flash;
+  return f == null ? 1 : f;
+}
+
+/**
+ * A 0..1 throb for markers that breathe. `flash` scales how deep the breath is
+ * and 0 holds it steady at full brightness, so a warning never disappears -
+ * reducing flashing must never reduce information.
+ */
+function throb(t, speed, flash = 1, low = 0.6) {
+  if (flash <= 0) return 1;
+  return low + (1 - low) * (0.5 + 0.5 * Math.sin(t * speed)) * flash + (1 - flash) * (1 - low);
+}
 const GREEN = '#4dff9f';
 const RED = '#ff3b5c';
 const CYAN = '#5ff5ff';
@@ -104,7 +124,7 @@ function shade(hex, amt) {
   return `rgb(${r},${g},${b})`;
 }
 
-export function drawTerrain(ctx, cam, W, H, terrain, level, time) {
+export function drawTerrain(ctx, cam, W, H, terrain, level, time, opts = {}) {
   const w = WORLDS[level.world];
   const half = W / 2 / cam.scale;
   const x0 = clamp(cam.x - half - 60, 0, terrain.width);
@@ -189,14 +209,31 @@ export function drawTerrain(ctx, cam, W, H, terrain, level, time) {
   // Pads
   for (const p of terrain.pads) {
     if (p.x2 < x0 - 200 || p.x1 > x1 + 200) continue;
-    const pulse = 0.6 + 0.4 * Math.sin(time * 3.4 + p.x1 * 0.01);
+    const pulse = throb(time + p.x1 * 0.003, 3.4, opts.flash != null ? opts.flash : 1);
     ctx.save();
+    const py1 = p.y1 != null ? p.y1 : p.y;
+    const py2 = p.y2 != null ? p.y2 : p.y;
+    // High contrast lays a white bar under the pad and squares off its ends, so
+    // the landing zone reads as a shape rather than as a colour.
+    if (opts.contrast) {
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 8 / cam.scale + 3;
+      ctx.beginPath();
+      ctx.moveTo(p.x1, py1);
+      ctx.lineTo(p.x2, py2);
+      ctx.stroke();
+      ctx.lineWidth = 3 / cam.scale + 1;
+      for (const [ex, ey] of [[p.x1, py1], [p.x2, py2]]) {
+        ctx.beginPath();
+        ctx.moveTo(ex, ey + 6);
+        ctx.lineTo(ex, ey - 22);
+        ctx.stroke();
+      }
+    }
     ctx.strokeStyle = p.used ? '#4dff9f' : MAG;
     ctx.shadowColor = p.used ? '#4dff9f' : MAG;
     ctx.shadowBlur = 18 * pulse;
     ctx.lineWidth = 4 / cam.scale + 1.4;
-    const py1 = p.y1 != null ? p.y1 : p.y;
-    const py2 = p.y2 != null ? p.y2 : p.y;
     ctx.beginPath();
     ctx.moveTo(p.x1, py1);
     ctx.lineTo(p.x2, py2);
@@ -290,7 +327,7 @@ export function drawDust(ctx, W, H, level, visibility, time) {
 }
 
 /** Pad markers only, drawn above the dust so the target never disappears. */
-export function drawPadBeacons(ctx, cam, W, H, terrain, level, time, strength) {
+export function drawPadBeacons(ctx, cam, W, H, terrain, level, time, strength, opts = {}) {
   if (strength <= 0.02) return;
   const half = W / 2 / cam.scale;
   ctx.save();
@@ -299,7 +336,7 @@ export function drawPadBeacons(ctx, cam, W, H, terrain, level, time, strength) {
   ctx.translate(-cam.x, -cam.y);
   for (const p of terrain.pads) {
     if (p.x2 < cam.x - half - 200 || p.x1 > cam.x + half + 200) continue;
-    const pulse = 0.6 + 0.4 * Math.sin(time * 3.4 + p.x1 * 0.01);
+    const pulse = throb(time + p.x1 * 0.003, 3.4, opts.flash != null ? opts.flash : 1);
     const py1 = p.y1 != null ? p.y1 : p.y;
     const py2 = p.y2 != null ? p.y2 : p.y;
     ctx.globalAlpha = clamp(strength, 0, 1) * (0.65 + 0.35 * pulse);
@@ -423,10 +460,11 @@ export function drawEnemies(ctx, field, ship, time, opts = {}) {
   for (const e of field.enemies) {
     const type = ENEMY_TYPES[e.type];
     if (e.dead) { drawWreck(ctx, e, type); continue; }
-    if (type.kind === 'ground') drawTurret(ctx, e, type, time);
-    else drawDrone(ctx, e, type, time);
+    if (type.kind === 'ground') drawTurret(ctx, e, type, time, opts);
+    else drawDrone(ctx, e, type, time, opts);
     drawTelegraph(ctx, e, type, time, opts);
     if (e.hp < e.maxHp) drawEnemyHealth(ctx, e, type);
+    if (opts.contrast) drawThreatMark(ctx, e, type);
     if (opts.showPaths) drawEnemyRange(ctx, e, type);
   }
   for (const p of field.shots) drawShot(ctx, p, time);
@@ -436,7 +474,7 @@ function threatAlpha(e) {
   return e.hitFlash > 0 ? 1 : 0.85;
 }
 
-function drawTurret(ctx, e, type, time) {
+function drawTurret(ctx, e, type, time, opts = {}) {
   ctx.save();
   ctx.translate(e.x, e.y);
   const hot = e.state === 'telegraph';
@@ -468,7 +506,8 @@ function drawTurret(ctx, e, type, time) {
   if (eye > 0.05) {
     ctx.fillStyle = col;
     ctx.shadowColor = col;
-    ctx.shadowBlur = 10 * eye * (hot ? 1.4 + Math.sin(time * 18) * 0.4 : 1);
+    const f = opts.flash != null ? opts.flash : 1;
+    ctx.shadowBlur = 10 * eye * (hot ? 1.4 + Math.sin(time * 18) * 0.4 * f : 1);
     ctx.beginPath();
     ctx.arc(0, -type.radius * 0.55, 3.2, 0, TAU);
     ctx.fill();
@@ -477,7 +516,7 @@ function drawTurret(ctx, e, type, time) {
   ctx.restore();
 }
 
-function drawDrone(ctx, e, type, time) {
+function drawDrone(ctx, e, type, time, opts = {}) {
   ctx.save();
   ctx.translate(e.x, e.y);
   const hot = e.state === 'telegraph';
@@ -511,6 +550,25 @@ function drawDrone(ctx, e, type, time) {
   ctx.arc(0, 0, 2.6, 0, TAU);
   ctx.fill();
   ctx.shadowBlur = 0;
+  ctx.restore();
+}
+
+/**
+ * High contrast: a white ring and a letter, so a threat is identifiable by
+ * shape and glyph with no colour perception at all. T for the ground gun, D for
+ * the drone - the same letters the briefing uses.
+ */
+function drawThreatMark(ctx, e, type) {
+  ctx.save();
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.arc(e.x, e.y, type.radius + 8, 0, TAU);
+  ctx.stroke();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `700 11px ${FONT}`;
+  ctx.textAlign = 'center';
+  ctx.fillText(type.kind === 'ground' ? 'T' : 'D', e.x, e.y - type.radius - 14);
   ctx.restore();
 }
 
@@ -831,7 +889,8 @@ function value(ctx, text, x, y, size = 20, color = '#dff6ff') {
 
 export function drawHUD(ctx, W, H, g) {
   const { ship, terrain, level, score, lives, combo, time, compact } = g;
-  const s = compact ? 0.8 : 1;
+  const uiScale = (g.settings && g.settings.uiScale) || 1;
+  const s = (compact ? 0.8 : 1) * uiScale;
   const alt = Math.max(0, (terrain.heightAt(ship.x) - ship.y - 16) / 6);
   const st = ship.status();
   const fuelPct = ship.fuel / ship.maxFuel;
@@ -856,7 +915,7 @@ export function drawHUD(ctx, W, H, g) {
   const fc = fuelPct > 0.4 ? CYAN : fuelPct > 0.18 ? AMBER : RED;
   ctx.fillStyle = fc;
   ctx.shadowColor = fc;
-  ctx.shadowBlur = fuelPct < 0.18 && Math.sin(time * 8) > 0 ? 18 : 8;
+  ctx.shadowBlur = fuelPct < 0.18 ? 8 + 10 * (flashOf(g) > 0 ? (Math.sin(time * 8) > 0 ? 1 : 0) : 1) : 8;
   ctx.fillRect(bx, by, bw * fuelPct, bh);
   ctx.shadowBlur = 0;
   ctx.strokeStyle = 'rgba(255,255,255,0.18)';
@@ -931,52 +990,8 @@ export function drawHUD(ctx, W, H, g) {
     ctx.stroke();
   }
 
-  // ---- wind vane, tucked under the mission bar so it never sits over the pad
-  if (level.wind || level.gust) {
-    const wx = W / 2;
-    const wy = py + 60 * s;
-    const w = ship.windNow || 0;
-    const mag = clamp(Math.abs(w) / 70, 0.12, 1);
-    panel(ctx, wx - 80, wy - 22, 160, 44, 'rgba(255,179,71,0.3)');
-    ctx.fillStyle = 'rgba(160,190,215,0.75)';
-    ctx.font = `600 10px ${FONT}`;
-    ctx.textAlign = 'center';
-    ctx.fillText('WIND', wx, wy - 8);
-    ctx.strokeStyle = AMBER;
-    ctx.shadowColor = AMBER;
-    ctx.shadowBlur = 10;
-    ctx.lineWidth = 2.4;
-    const dir = Math.sign(w) || 1;
-    const len = 54 * mag;
-    ctx.beginPath();
-    ctx.moveTo(wx - dir * len * 0.5, wy + 8);
-    ctx.lineTo(wx + dir * len * 0.5, wy + 8);
-    ctx.lineTo(wx + dir * len * 0.5 - dir * 8, wy + 3);
-    ctx.moveTo(wx + dir * len * 0.5, wy + 8);
-    ctx.lineTo(wx + dir * len * 0.5 - dir * 8, wy + 13);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-  }
-
-  // ---- radiation state
-  if (ship.env && (ship.env.radiationSweep > 0.02 || rad > 1)) {
-    const rx = W / 2 - 80;
-    const ry = py + (level.wind || level.gust ? 104 * s : 60 * s);
-    panel(ctx, rx, ry - 22, 160, 44, 'rgba(126,242,208,0.35)');
-    ctx.textAlign = 'center';
-    ctx.font = `600 10px ${FONT}`;
-    ctx.fillStyle = 'rgba(160,190,215,0.75)';
-    ctx.fillText(ship.env.shielded ? 'RADIATION · SHIELDED' : 'RADIATION', W / 2, ry - 8);
-    const bw = 132;
-    ctx.fillStyle = 'rgba(255,255,255,0.08)';
-    ctx.fillRect(W / 2 - bw / 2, ry + 2, bw, 8);
-    const col = ship.env.shielded ? '#7ef2d0' : rad > 60 ? RED : AMBER;
-    ctx.fillStyle = col;
-    ctx.shadowColor = col;
-    ctx.shadowBlur = ship.env.radiationSweep > 0.4 && !ship.env.shielded ? 14 : 4;
-    ctx.fillRect(W / 2 - bw / 2, ry + 2, bw * clamp(rad / 100, 0, 1), 8);
-    ctx.shadowBlur = 0;
-  }
+  // ---- hazards: one loud warning, the rest quiet
+  drawHazardStack(ctx, W, H, g, s, py, rad);
 
   // ---- hull, once there is something in the world that can dent it
   const threats = g.field && !g.field.empty;
@@ -1012,7 +1027,7 @@ export function drawHUD(ctx, W, H, g) {
   // ---- proximity alarm vignette
   const danger = alt < 60 && ship.vy > ENVELOPE.GOOD.vy * 1.4 && ship.alive && !ship.landed;
   if (danger) {
-    const a = 0.18 + 0.14 * Math.sin(time * 14);
+    const a = 0.18 + 0.14 * (flashOf(g) > 0 ? Math.sin(time * 14) * flashOf(g) : 1);
     const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.7);
     vg.addColorStop(0, 'rgba(255,59,92,0)');
     vg.addColorStop(1, `rgba(255,59,92,${a})`);
@@ -1208,4 +1223,111 @@ function drawThreatPointers(ctx, W, H, g) {
     ctx.stroke();
     ctx.restore();
   }
+}
+
+/**
+ * Hazard warnings, ranked. The spec asks for "one readable hazard warning at a
+ * time, with secondary warnings visually quieter", and on Mars under a dust
+ * front with the wind up that used to mean three full-size panels stacked over
+ * the sky. The most urgent one keeps its instrument; everything else collapses
+ * to a labelled chip that still shows its level.
+ */
+function drawHazardStack(ctx, W, H, g, s, py, rad) {
+  const { ship, level, time } = g;
+  const flash = flashOf(g);
+  const entries = [];
+
+  if (level.wind || level.gust) {
+    const w = ship.windNow || 0;
+    entries.push({
+      id: 'wind', label: 'WIND', urgency: clamp(Math.abs(w) / 70, 0, 1),
+      level: clamp(Math.abs(w) / 70, 0, 1), color: AMBER, value: w,
+    });
+  }
+  if (ship.env && ship.env.visibility < 0.985) {
+    const d = 1 - ship.env.visibility;
+    entries.push({ id: 'dust', label: 'VISIBILITY', urgency: d, level: d, color: AMBER });
+  }
+  if (ship.env && (ship.env.radiationSweep > 0.02 || rad > 1)) {
+    entries.push({
+      id: 'rad', label: ship.env.shielded ? 'RADIATION · SHIELDED' : 'RADIATION',
+      urgency: clamp(rad / 100, 0, 1) + (ship.env.radiationSweep > 0.4 && !ship.env.shielded ? 0.3 : 0),
+      level: clamp(rad / 100, 0, 1),
+      color: ship.env.shielded ? '#7ef2d0' : rad > 60 ? RED : AMBER,
+    });
+  }
+  const heat = ship.statusLevels ? ship.statusLevels.heat : 0;
+  const cold = ship.statusLevels ? ship.statusLevels.cold : 0;
+  if (heat > 2) entries.push({ id: 'heat', label: 'ENGINE HEAT', urgency: heat / 100, level: heat / 100, color: heat > 60 ? RED : AMBER });
+  if (cold > 2) entries.push({ id: 'cold', label: 'COLD SOAK', urgency: cold / 100, level: cold / 100, color: cold > 60 ? RED : CYAN });
+
+  if (!entries.length) return;
+  entries.sort((a, b) => b.urgency - a.urgency);
+  const primary = entries[0];
+  let y = py + 60 * s;
+
+  // The loud one.
+  panel(ctx, W / 2 - 80, y - 22, 160, 44, `rgba(255,255,255,0.18)`);
+  ctx.textAlign = 'center';
+  ctx.font = `600 ${10 * s}px ${FONT}`;
+  ctx.fillStyle = 'rgba(160,190,215,0.75)';
+  ctx.fillText(primary.label, W / 2, y - 8);
+  if (primary.id === 'wind') {
+    drawWindArrow(ctx, W / 2, y + 8, primary.value);
+  } else {
+    const bw = 132;
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(W / 2 - bw / 2, y + 2, bw, 8);
+    ctx.fillStyle = primary.color;
+    ctx.shadowColor = primary.color;
+    ctx.shadowBlur = primary.urgency > 0.6 ? 6 + 8 * throb(time, 6, flash, 0.4) : 4;
+    ctx.fillRect(W / 2 - bw / 2, y + 2, bw * primary.level, 8);
+    ctx.shadowBlur = 0;
+  }
+
+  // The quiet ones: a row of chips, half the height and no glow.
+  const rest = entries.slice(1);
+  if (!rest.length) return;
+  y += 34;
+  const cw = 96;
+  let x = W / 2 - (rest.length * (cw + 6) - 6) / 2;
+  for (const e of rest) {
+    ctx.fillStyle = 'rgba(6,10,18,0.7)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, cw, 18, 5); else ctx.rect(x, y, cw, 18);
+    ctx.fill();
+    ctx.stroke();
+    ctx.textAlign = 'left';
+    ctx.font = `600 9px ${FONT}`;
+    ctx.fillStyle = 'rgba(150,175,195,0.8)';
+    ctx.fillText(e.label.split(' ')[0], x + 7, y + 12);
+    ctx.fillStyle = e.color;
+    ctx.globalAlpha = 0.55;
+    ctx.fillRect(x + cw - 34, y + 7, 27 * e.level, 4);
+    ctx.globalAlpha = 1;
+    x += cw + 6;
+  }
+  ctx.textAlign = 'left';
+}
+
+/** The wind vane, as its own piece so the hazard stack can place it. */
+function drawWindArrow(ctx, wx, wy, w) {
+  const mag = clamp(Math.abs(w) / 70, 0.12, 1);
+  ctx.save();
+  ctx.strokeStyle = AMBER;
+  ctx.shadowColor = AMBER;
+  ctx.shadowBlur = 10;
+  ctx.lineWidth = 2.4;
+  const dir = Math.sign(w) || 1;
+  const len = 54 * mag;
+  ctx.beginPath();
+  ctx.moveTo(wx - dir * len * 0.5, wy);
+  ctx.lineTo(wx + dir * len * 0.5, wy);
+  ctx.lineTo(wx + dir * len * 0.5 - dir * 8, wy - 5);
+  ctx.moveTo(wx + dir * len * 0.5, wy);
+  ctx.lineTo(wx + dir * len * 0.5 - dir * 8, wy + 5);
+  ctx.stroke();
+  ctx.restore();
 }

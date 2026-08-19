@@ -3,6 +3,8 @@ import {
   SAVE_VERSION, KEYS, defaultMeta, migrateLegacy, loadMeta, saveMeta,
   newRun, loadRun, saveRun, clearRun, bankRun,
 } from '../src/save.js';
+import { settleHaul } from '../src/economy.js';
+import { purchase } from '../src/components.js';
 
 let pass = 0, fail = 0;
 const check = (name, cond, extra = '') => {
@@ -128,7 +130,11 @@ console.log('save, migration and recovery');
   check('a lost run does not mark the chapter cleared', !lost.clearedChapters.includes('moon'));
   check('a lost run still records the score', lost.stats.bestScore === 4200);
   check('materials bank too', lost.banked.materials['Ilmenite alloy stock'] === 30);
-  const won = bankRun(meta, run, { completed: true, settled });
+  // A separate run for the winning path: one expedition cannot both fail and
+  // complete, and since M13 the same run can only be banked once.
+  const wonRun = newRun('moon', 1);
+  wonRun.score = 4200;
+  const won = bankRun(meta, wonRun, { completed: true, settled });
   check('a completed run marks the chapter cleared', won.clearedChapters.includes('moon'));
   check('visiting a body discovers it', won.discoveredPlanets.includes('moon'));
   check('permanent upgrades are never touched by banking',
@@ -157,6 +163,84 @@ console.log('save, migration and recovery');
   let runThrew = false;
   try { loadRun(hostile); } catch { runThrew = true; }
   check('a hostile run read does not throw', !runThrew);
+}
+
+// --- the progression checklist (roadmap section 17)
+{
+  // Prevent double rewards when reloading: banking the same run twice pays once.
+  const run = newRun('moon', 4242);
+  run.haul = { salvageSafe: 100, salvageCargo: 100, data: 50, cores: 1, materials: {} };
+  run.score = 900;
+  const settled = settleHaul(run.haul, { completed: true });
+  const once = bankRun(defaultMeta(), run, { completed: true, settled });
+  const twice = bankRun(once, run, { completed: true, settled });
+  check('a run banks once', once.banked.salvage === settled.salvage);
+  check('banking the same settlement again pays nothing', twice.banked.salvage === once.banked.salvage);
+  check('the run records what it has been paid for', run.banked.includes('final'));
+
+  // A checkpoint is a different settlement, so it pays even though the run has
+  // already banked once - that is the whole point of a checkpoint.
+  const mid = bankRun(twice, run, { completed: true, settled, id: 'sector-1' });
+  check('a checkpoint settlement still pays', mid.banked.salvage > twice.banked.salvage);
+  check('and it too pays only once',
+    bankRun(mid, run, { completed: true, settled, id: 'sector-1' }).banked.salvage === mid.banked.salvage);
+
+  // A fresh run is unaffected by the previous one's stamp.
+  const next = newRun('mars', 99);
+  next.haul = { salvageSafe: 10, salvageCargo: 0, data: 0, cores: 0, materials: {} };
+  const after = bankRun(twice, next, { completed: false, settled: settleHaul(next.haul, { completed: false }) });
+  check('the next run banks normally', after.banked.salvage > twice.banked.salvage);
+}
+
+{
+  // Crash with 2, 1 and 0 shuttles: the run survives the first two and only the
+  // last one settles. This is the shape main.js drives; the save is what has to
+  // stay coherent across it.
+  const s = mkStore();
+  let run = newRun('moon', 7);
+  for (const remaining of [2, 1, 0]) {
+    run.shuttles = remaining;
+    run.missionIndex = 2;
+    saveRun(run, s);
+    const back = loadRun(s);
+    check(`a crash with ${remaining} left keeps the run readable`, !!back && back.shuttles === remaining);
+    check(`the seed is kept for the retry (${remaining} left)`, back.seed === 7);
+  }
+  clearRun(s);
+  check('an ended expedition leaves no run behind', loadRun(s) === null);
+}
+
+{
+  // Quit during flight, on the result screen, in the hangar, mid-purchase and
+  // on the route screen. Each is "the run is persisted, then the tab closes".
+  const s = mkStore();
+  const stages = ['flight', 'result', 'hangar', 'purchase', 'route'];
+  let meta = defaultMeta();
+  meta.banked.salvage = 1000;
+  meta.banked.materials['Ilmenite alloy stock'] = 100;
+  let ok = true;
+  for (const stage of stages) {
+    const run = newRun('moon', 1234);
+    run.missionIndex = 3;
+    run.haul = { salvageSafe: 40, salvageCargo: 40, data: 20, cores: 0, materials: {} };
+    saveRun(run, s);
+    if (stage === 'purchase') {
+      // A purchase completes against the *saved* meta, so quitting after the
+      // write can never deduct twice.
+      const bought = purchase('rcs', meta.componentLevels, meta.banked);
+      meta = { ...meta, banked: bought.banked, componentLevels: bought.componentLevels };
+      saveMeta(meta, s);
+    }
+    saveMeta(meta, s);
+    const reloadedRun = loadRun(s);
+    const reloadedMeta = loadMeta(s).meta;
+    if (!reloadedRun || reloadedRun.missionIndex !== 3) ok = false;
+    if (reloadedMeta.banked.salvage !== meta.banked.salvage) ok = false;
+    if (reloadedMeta.componentLevels.rcs !== meta.componentLevels.rcs) ok = false;
+  }
+  check('quitting at any stage reloads to the same place', ok);
+  check('a completed purchase is deducted exactly once', meta.banked.salvage === 1000 - 260, String(meta.banked.salvage));
+  check('the bought level stuck', meta.componentLevels.rcs === 2);
 }
 
 console.log(`\n  ${pass} passed, ${fail} failed`);

@@ -1,6 +1,6 @@
 // Route eligibility and economy rules:  node test/route-tests.js
 import { eligibleBodies, routeOffers, isCheckpoint, TIERS } from '../src/route.js';
-import { missionReward, addReward, settleHaul, bankHaul, freshHaul } from '../src/economy.js';
+import { missionReward, addReward, settleHaul, bankHaul, freshHaul, CORE_PITY, DEBRIEF } from '../src/economy.js';
 import { PLANET_IDS } from '../src/planets.js';
 
 let pass = 0, fail = 0;
@@ -18,7 +18,17 @@ check('tier C stays shut before five chapters',
   !eligibleBodies(['LUNA', 'MARS', 'EUROPA', 'TITAN']).some((b) => TIERS.C.includes(b)));
 check('tier C opens after five',
   eligibleBodies(['LUNA', 'MARS', 'EUROPA', 'TITAN', 'ENCELADUS']).some((b) => TIERS.C.includes(b)));
-check('a cleared body drops out of the pool', !eligibleBodies(['LUNA', 'MARS']).includes('MARS'));
+// A cleared body steps aside for anything unexplored, but comes back rather
+// than letting the route screen shrink below four cards.
+{
+  const thin = eligibleBodies(['LUNA', 'MARS']);
+  check('unexplored bodies come first', thin.slice(0, 3).every((b) => b !== 'MARS'), thin.join());
+  check('a cleared body returns only to fill the card slots',
+    thin.includes('MARS') && thin.indexOf('MARS') === thin.length - 1, thin.join());
+  const wide = eligibleBodies(['LUNA', 'MARS', 'EUROPA']);
+  check('with enough unexplored bodies, cleared ones stay out',
+    !wide.includes('MARS') && !wide.includes('EUROPA'), wide.join());
+}
 check('the pool is never empty', eligibleBodies(PLANET_IDS).length > 0);
 
 // --- offers
@@ -70,9 +80,9 @@ check('checkpoint every second chapter', isCheckpoint(2) && !isCheckpoint(3) && 
     Math.abs(haul.salvageSafe - haul.salvageCargo) <= 1, `${haul.salvageSafe}/${haul.salvageCargo}`);
 
   const kept = settleHaul(haul, { completed: false });
-  check('a lost expedition keeps transmitted salvage', kept.salvage === haul.salvageSafe);
+  check('a lost expedition keeps transmitted salvage', kept.salvage >= haul.salvageSafe);
   check('a lost expedition loses the cargo', kept.lost.salvage === haul.salvageCargo);
-  check('research is never lost', kept.data === haul.data);
+  check('research is never lost', kept.data >= haul.data);
   check('cores need a safe landing', kept.cores === 0);
   check('materials are cargo too', Object.keys(kept.materials).length === 0);
 
@@ -85,6 +95,51 @@ check('checkpoint every second chapter', isCheckpoint(2) && !isCheckpoint(3) && 
   const banked = bankHaul({ salvage: 10, data: 0, cores: 0, materials: { Ore: 5 } }, won);
   check('banking adds to what was there', banked.salvage === 10 + won.salvage);
   check('banking merges materials', banked.materials.Ore === 5 + (won.materials.Ore || 0));
+}
+
+// --- anti-frustration (roadmap section 13)
+{
+  // A run that ends with almost nothing still files a debrief, so the player
+  // always leaves with a decision to make rather than an empty hangar.
+  const thin = settleHaul(freshHaul(), { completed: false });
+  check('a failed expedition still transmits a debrief', thin.salvage >= DEBRIEF.salvage && thin.data >= DEBRIEF.data,
+    `${thin.salvage}/${thin.data}`);
+  check('the debrief is reported, not smuggled in', !!thin.debrief);
+  check('the cheapest skill rank is affordable after one failure', thin.data >= 40);
+
+  // A good run is never topped up - the floor is a floor, not a subsidy.
+  let rich = freshHaul();
+  for (let i = 0; i < 6; i++) rich = addReward(rich, missionReward({ grade: 'PERFECT', padMultiplier: 3, fuelLeft: 60, maxFuel: 120, firstClear: true }));
+  const settledRich = settleHaul(rich, { completed: false });
+  check('a good run gets no top-up', settledRich.debrief === null);
+
+  // Tech Core bad-luck protection.
+  const dry = missionReward({ grade: 'GOOD', padMultiplier: 2, fuelLeft: 10, maxFuel: 100, firstClear: false, coreDrought: CORE_PITY });
+  check('a long core drought eventually pays out', dry.cores === 1 && dry.pityCore === true);
+  const early = missionReward({ grade: 'GOOD', padMultiplier: 2, fuelLeft: 10, maxFuel: 100, firstClear: false, coreDrought: 2 });
+  check('a short drought does not', early.cores === 0);
+  const earned = missionReward({ grade: 'PERFECT', padMultiplier: 5, fuelLeft: 10, maxFuel: 100, firstClear: false, coreDrought: 0 });
+  check('an earned core is still an earned core', earned.cores === 1 && !earned.pityCore);
+}
+
+// --- the route always offers a real choice (section 13: never remove all four)
+{
+  const shapes = [[], ['LUNA'], ['LUNA', 'MARS'], ['LUNA', 'MARS', 'EUROPA', 'TITAN', 'ENCELADUS'],
+    ['LUNA', 'MARS', 'EUROPA', 'TITAN', 'ENCELADUS', 'MERCURY', 'VENUS', 'IO', 'PLUTO', 'GANYMEDE']];
+  let ok = true;
+  for (const cleared of shapes) {
+    for (let sector = 1; sector <= 5; sector++) {
+      for (const seed of [1, 99, 12345, 777777]) {
+        const offers = routeOffers(cleared, seed, sector);
+        const ids = offers.map((o) => o.planet);
+        if (offers.length < 4 || new Set(ids).size !== ids.length) {
+          ok = false;
+          console.log(`  ...  cleared ${cleared.length}, sector ${sector}, seed ${seed}: ${ids.join()}`);
+        }
+      }
+    }
+  }
+  check('every route screen offers four distinct bodies, at every stage', ok);
 }
 
 console.log(`\n  ${pass} passed, ${fail} failed`);
