@@ -608,3 +608,152 @@ M14 made that number scale with distance — which is invisible. A player who fl
 bigger figure on the results screen and nothing at all in the world. Tom's report was not "the
 numbers are wrong", it was "I never saw any material to pick up", twice. That is a design fault,
 not a content gap, and M15 is the fix.
+
+---
+
+## M15 — reward you can see and have to take (2026-08-19)
+
+Tom's two rules, from playing M14: every mission except a chapter's first should have enemies, and
+**material should be picked up, not awarded**. The encounter audit is the measurement both came from
+and the measurement both are checked against, so it is a script now — `node test/encounter-audit.js
+[seeds]`, part of `run-all.sh`. Re-running it against the M14 build reproduced the recorded numbers
+exactly (safe 27/300, deep 119/300, nine unarmed missions, Europa 0/5), which is what made it
+trustworthy as a before-and-after.
+
+### Before and after
+
+|  | M14 | M15 |
+| --- | ---: | ---: |
+| missions with no enemies at all | 9 of 15 | **3 of 15** (each chapter's first, by design) |
+| missions with nothing to recover | 11 of 15 | **0 of 15** |
+| Europa missions with anything to recover | 0 of 5 | **5 of 5** |
+| flights shot at, safe route | 27/300 (9%) | 62/300 (21%) |
+| flights shot at, deep route | 119/300 (40%) | **232/300 (77%)** |
+| engaged on the deep route, armed missions only | — | **232/240 (97%)** |
+
+The enemy ramp is one rule, written into `missions.js` and into `generateChapter` so authored and
+survey chapters agree: mission 1 quiet, then 1, 1–2, 2, 2–3. Europa 5 takes 2 rather than the 3 the
+ramp allows — its drones ram, its plate is fragile, and at 3 an unarmed flight to the prize fell
+from 20/20 to 5/20. The ramp is a shape, not a quota.
+
+The sanctuary rule is untouched and still proved the same way: **all 12 armed missions, 40 seeds,
+sanctuary 40/40 and survived-fire 40/40**, flown with no weapon, no shield and no evasive logic.
+Arming six more missions cost three deep landings across 300 flights (prize 259/300 → 256/300) and
+nothing on the way home (521/540, unchanged).
+
+### Material is an object now
+
+`missionReward` used to compute material from grade and pad tier. It counts what was carried home
+instead, the grade multiplies that haul (`HAUL_GRADE`: PERFECT 1, GOOD 0.9, HARD 0.75), and what
+remains computed is a stipend — enough that a flight which collects nothing is still paid, never
+enough to be the point. Salvage moved the same way, less far: the computed part keeps 65% of its old
+value and loses its depth bonus, because depth is expressed by where the ore lies now.
+
+Measured on a deep ×3 landing at Mars, PERFECT, in the live game:
+
+| | collects nothing | full deep hold |
+| --- | ---: | ---: |
+| material | 25 (stipend only) | **97** (25 stipend + 72 carried) |
+| salvage | 196 | **456** |
+
+Deposits come in two kinds, both drawn in violet with a light shaft so they read from altitude and
+through Mars dust at 22% visibility:
+
+- **the crossing** — floating 90–170 px *below* the fuel road's glide line, so reaching one costs
+  altitude on the leg where altitude is what keeps you out of reach
+- **the seam** — 60–130 px above the ground around the deep landing zone, two of three past it, on
+  the ground the machines are placed to cover
+
+Never in the near band, never within 150 px of a landing zone, never in the sanctuary approach
+corridor, and never within 150 px of a fuel cell or a cargo crate — two pickups on one pass is one
+decision, and the ore is meant to be its own. All four rules are enforced in `validate.js` and hold
+on every seed of every mission family.
+
+**Ore to the nearest machine: median 427 px, 65% within 600 px.** One rule serves both — guards on
+the prize, ore on the prize.
+
+### What collecting costs
+
+| route | lands | deposits taken | material home |
+| --- | ---: | ---: | ---: |
+| safe, near zone on the tank | 300/300 | 0 | 0 |
+| deep, by way of the road | 256/300 | 0.4 of 3.8 | 5 |
+| deep, detouring to every deposit | **156/300** | 2.8 of 3.8 | **50** |
+
+The middle row is the honest one: the autopilot has no reason to detour, so it flies past the ore.
+The third row is what a player who wants all of it is signing up for — and on `mars-2` and
+`europa-4` it lands **0/20**, because sweeping a crosswind canyon or a tight ice corridor costs more
+fuel than either mission carries. Taking only the deposits that lie on the road is the affordable
+middle: **236/300 landings with 27–55% fuel left**. Mission fuel budgets were deliberately not
+re-authored here — they are a known finding of their own, and moving them would have moved every
+number above.
+
+### Two faults this found in its own first version
+
+- **Ore resting on the surface was unreachable.** At `ground - 18` px, taking a deposit meant
+  landing, lifting off and landing again; a collector sweep managed 158/300 landings and 0.4 of 2
+  deposits. Raised to 60–130 px it became a low pass on the way in: 2.8 of 3.8 taken.
+- **Seam-before-crossing starved the short maps.** Placed first, the seam took the ground the
+  crossing needed, and `moon-2`, `mars-2`, `europa-2` and `europa-4` shipped 0.1–0.2 floating
+  deposits apiece. Crossing first fixed it.
+
+### Two faults this found elsewhere
+
+- **The test pilot was refuelling on cargo.** `flyMission` added a fuel cell's worth for *anything*
+  `terrain.collect` returned, so every mission with a crate quietly handed the pilot 22 extra fuel.
+  Fixed, and it is the only reason the flight fixture moved: `moon-1` seed 12345 and `moon-3` seed
+  777 land exactly as before, with 16–18 less fuel in the tank. **The physics fixture is still
+  unchanged since M0.**
+- **The bundler boots terrain before economy.** A module-level `const X = MATERIAL_NODE.padGuard` in
+  `terrain.js` throws "cannot access before initialization" in the single-file build and nowhere
+  else. The macOS self-test caught it, as it has caught every bundling fault in this project;
+  the config is read inside the methods now.
+
+### The performance check was measuring the wrong thing
+
+`node test/mvp-regression.js` failed on `combat costs less than the physics it rides on`
+(`loaded < bare * 3`), reporting 2.3 µs against 0.6. It was not a combat regression: material
+placement runs once per level, adds nothing to any per-step path, and in a cold process the loaded
+loop moved 1.73 → 1.78 µs. `bare` runs after the whole mission sweep has thoroughly warmed
+`ship.step`, so the denominator tracks the JIT's history rather than the engine's cost.
+
+Replaced with the check the comment always claimed: cost per machine as machines are added, which is
+what an accidental all-pairs loop would actually show.
+
+| machines | µs/step | per machine |
+| ---: | ---: | ---: |
+| 1 | 0.56 | 0.56 |
+| 4 | 1.94 | 0.48 |
+
+Linear, and the absolute budget check still passes with 3,500× headroom.
+
+### The audit, after
+
+```
+                       SAFE ROUTE                  DEEP ROUTE                        COLLECTING
+mission             land  secs  shot-at  mat     land  secs  shot-at  cells  nodes   mat  cargo  land  nodes   mat
+moon-1 FIRST SCAR   20/20   25s     0/20    0    20/20   45s     0/20    2.9 0.3/2.7     4  yes   19/20 1.7/2.7   31
+moon-2 RILLE RUN    19/20   27s     1/20    1    20/20   35s    13/20    1.8 0.0/2.8     0   no   12/20 1.8/2.8   31
+moon-3 FAR-SIDE REL 20/20   24s     0/20    0    20/20   49s    20/20    2.6 0.3/3.4     5  yes   18/20 1.8/3.4   34
+moon-4 SILENT BATTE 20/20   24s     0/20    0    20/20   49s    20/20    3.1 0.3/4.4     4   no   14/20 3.3/4.4   62
+moon-5 TYCHO DESCEN 20/20   25s     0/20    0    20/20   51s    20/20    3.5 0.6/4.6    10   no   11/20 3.2/4.6   59
+mars-1 RED VEIL     16/20   23s     0/20    0    17/20   42s     0/20    3.1 0.5/4.5     7   no    4/20 4.5/4.5   82
+mars-2 VALLES CROSS 11/20   28s     5/20    1     9/20   33s    19/20    2.0 0.0/3.0     0   no    0/20 2.5/3.0   39
+mars-3 BURIED ARRAY 20/20   23s     2/20    0    15/20   45s    20/20    3.1 0.3/3.9     5  yes    2/20 3.1/3.9   55
+mars-4 IRON RAIN    20/20   22s     1/20    0    14/20   46s    20/20    3.3 0.5/4.2     7  yes    4/20 3.9/4.2   68
+mars-5 STORM EYE    19/20   26s     7/20    0    10/20   50s    20/20    3.6 0.8/4.8    10   no    2/20 4.1/4.8   74
+europa-1 GLASS LAND 20/20   26s     0/20    0    20/20   49s     0/20    2.9 0.1/4.5     1   no   20/20 3.5/4.5   65
+europa-2 BLUE FRACT 19/20   30s    17/20    1    20/20   39s    20/20    1.9 0.0/2.5     0  yes   16/20 1.4/2.5   23
+europa-3 RADIATION  20/20   24s     4/20    0    20/20   52s    20/20    2.6 0.3/4.2     5   no   19/20 2.4/4.2   48
+europa-4 UNDER-ICE  19/20   35s    20/20    1    14/20   42s    20/20    2.0 0.1/2.6     3  yes    0/20 1.3/2.6   20
+europa-5 DRIFTING P 20/20   26s     5/20    0    17/20   52s    20/20    3.6 0.6/4.7     9   no   15/20 3.3/4.7   61
+```
+
+### Verified in the running game, not only in node
+
+A live expedition on Mars: two deposits taken, a HARD landing, and the results screen reading
+*"RECOVERED 2 of 4 deposits — 26 material · 68 salvage × 0.75 landing · 48 material still out
+there"* — 20 of the 24 material banked came from the hold, 4 from the stipend. Crashing the next
+lander with the same hold aboard printed *"CARGO LOST — 26 MATERIAL · 68 SALVAGE"* and banked
+nothing, per the existing cargo rules. The HOLD instrument sits below the threat panel whether or
+not a machine has woken yet, so it never jumps mid-flight.

@@ -31,6 +31,7 @@ const RED = '#ff3b5c';
 const CYAN = '#5ff5ff';
 const MAG = '#ff4fd8';
 const AMBER = '#ffb347';
+const VIOLET = '#c9a4ff';        // material: the one colour ore is drawn in
 
 export function buildBackdrop(level, terrain, seed) {
   const rng = makeRng(seed ^ 0x9e3779b9);
@@ -317,6 +318,88 @@ export function drawTerrain(ctx, cam, W, H, terrain, level, time, opts = {}) {
     ctx.fillText(c.label, 0, 22);
     ctx.restore();
   }
+
+  // Material deposits. The reward used to be a figure computed at touchdown,
+  // which the player could not see, could not reach for and could not lose.
+  // These are the same reward as an object, so they are drawn to be spotted
+  // from altitude: a crystal at the size of the pickup, a shaft of light on the
+  // ones sitting on the ground, and a heavier facet on the deep ones.
+  for (const m of terrain.materialNodes || []) {
+    if (m.taken) continue;
+    if (m.x < cam.x - half - 200 || m.x > cam.x + half + 200) continue;
+    const deep = m.tier >= 2;
+    const bob = Math.sin(time * 1.7 + m.phase) * (m.kind === 'float' ? 7 : 3);
+    const pulse = throb(time * 0.9 + m.x * 0.004, 2.6, opts.flash != null ? opts.flash : 1, 0.7);
+    ctx.save();
+    ctx.translate(m.x, m.y + bob);
+    // A shaft of light, so a deposit on the ground reads from a long way up.
+    ctx.globalAlpha = 0.30 * pulse;
+    ctx.fillStyle = VIOLET;
+    ctx.beginPath();
+    ctx.moveTo(-9, 0);
+    ctx.lineTo(9, 0);
+    ctx.lineTo(4, -150 - (deep ? 60 : 0));
+    ctx.lineTo(-4, -150 - (deep ? 60 : 0));
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    const r = deep ? 15 : 12;
+    ctx.rotate(Math.sin(time * 0.5 + m.phase) * 0.25);
+    ctx.strokeStyle = VIOLET;
+    ctx.shadowColor = VIOLET;
+    ctx.shadowBlur = 18 * pulse;
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.moveTo(0, -r);
+    ctx.lineTo(r * 0.78, 0);
+    ctx.lineTo(0, r);
+    ctx.lineTo(-r * 0.78, 0);
+    ctx.closePath();
+    ctx.stroke();
+    if (deep) {                       // the far band is worth about double
+      ctx.beginPath();
+      ctx.moveTo(0, -r);
+      ctx.lineTo(0, r);
+      ctx.moveTo(-r * 0.78, 0);
+      ctx.lineTo(r * 0.78, 0);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+/**
+ * Material markers that survive the weather, drawn with the pad beacons after
+ * the dust. Mars mission 5 drops visibility to 22%, and a reward you cannot see
+ * in the storm is the M14 fault again in a different costume.
+ */
+export function drawMaterialBeacons(ctx, cam, W, H, terrain, time, strength, opts = {}) {
+  if (strength <= 0.02) return;
+  const half = W / 2 / cam.scale;
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+  ctx.scale(cam.scale, cam.scale);
+  ctx.translate(-cam.x, -cam.y);
+  for (const m of terrain.materialNodes || []) {
+    if (m.taken) continue;
+    if (m.x < cam.x - half - 200 || m.x > cam.x + half + 200) continue;
+    const pulse = throb(time + m.x * 0.003, 3.0, opts.flash != null ? opts.flash : 1);
+    ctx.globalAlpha = clamp(strength, 0, 1) * (0.6 + 0.4 * pulse);
+    ctx.strokeStyle = VIOLET;
+    ctx.shadowColor = VIOLET;
+    ctx.shadowBlur = 22 * pulse;
+    ctx.lineWidth = 3 / cam.scale + 1;
+    const r = 16;
+    ctx.beginPath();
+    ctx.moveTo(m.x, m.y - r);
+    ctx.lineTo(m.x + r * 0.78, m.y);
+    ctx.lineTo(m.x, m.y + r);
+    ctx.lineTo(m.x - r * 0.78, m.y);
+    ctx.closePath();
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 /**
@@ -1016,11 +1099,33 @@ export function drawHUD(ctx, W, H, g) {
     ctx.stroke();
   }
 
+  // ---- the hold: what has actually been picked up, and what is still out there
+  const nodes = terrain.materialNodes || [];
+  const armed = g.field && !g.field.empty;
+  if (nodes.length) {
+    const carried = g.carried || { material: 0, salvage: 0, nodes: 0 };
+    const left = nodes.filter((m) => !m.taken).length;
+    // Below the threat slot, whether or not a machine has been seen yet: a
+    // panel that jumps when the first turret wakes up is worse than one that
+    // sits a little lower all mission.
+    const hy2 = py + 92 * s + 26 + (armed ? 44 * s + 10 : 0);
+    panel(ctx, rx, hy2, rw, 40 * s, carried.nodes ? 'rgba(201,164,255,0.35)' : 'rgba(95,245,255,0.18)');
+    label(ctx, 'HOLD', rx + 14, hy2 + 18 * s, 10 * s);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = carried.material ? VIOLET : 'rgba(200,220,235,0.6)';
+    ctx.font = `700 ${15 * s}px ${FONT}`;
+    ctx.fillText(`${carried.material}`, rx + rw - 14, hy2 + 20 * s);
+    ctx.fillStyle = 'rgba(200,220,235,0.55)';
+    ctx.font = `600 ${10 * s}px ${FONT}`;
+    ctx.fillText(`${left} deposit${left === 1 ? '' : 's'} left`, rx + rw - 14, hy2 + 33 * s);
+    ctx.textAlign = 'left';
+  }
+
   // ---- hazards: one loud warning, the rest quiet
   drawHazardStack(ctx, W, H, g, s, py, rad);
 
   // ---- hull, once there is something in the world that can dent it
-  const threats = g.field && !g.field.empty;
+  const threats = armed;
   if (ship.hullMax && (ship.hull < ship.hullMax || threats)) {
     const hy = py + ph + 8;
     panel(ctx, px, hy, pw, 40 * s, ship.hull < ship.hullMax * 0.35 ? 'rgba(255,59,92,0.4)' : 'rgba(95,245,255,0.25)');
@@ -1048,6 +1153,7 @@ export function drawHUD(ctx, W, H, g) {
 
   // ---- off-screen pad chevrons
   drawPadPointers(ctx, W, H, g);
+  drawMaterialPointers(ctx, W, H, g);
   if (threats) drawThreatPointers(ctx, W, H, g);
 
   // ---- proximity alarm vignette
@@ -1142,6 +1248,51 @@ function drawPadPointers(ctx, W, H, g) {
     ctx.font = `700 11px ${FONT}`;
     ctx.textAlign = 'center';
     ctx.fillText(`x${p.mult} ${dist.toFixed(0)}m`, cx - Math.cos(ang) * 22, cy - Math.sin(ang) * 22 + 4);
+  }
+}
+
+/**
+ * Where the ore is, when it is off the edge of the screen. A deposit you cannot
+ * see is a deposit you will not go and get, and the whole of M15 is the claim
+ * that the reward should be somewhere you decided to fly to. Only the nearest
+ * three are pointed at, so the rim does not become a fence.
+ */
+function drawMaterialPointers(ctx, W, H, g) {
+  const { ship, terrain, cam } = g;
+  if (!ship.alive || ship.landed) return;
+  const nodes = (terrain.materialNodes || [])
+    .filter((m) => !m.taken)
+    .sort((a, b) => Math.hypot(a.x - ship.x, a.y - ship.y) - Math.hypot(b.x - ship.x, b.y - ship.y))
+    .slice(0, 3);
+  for (const m of nodes) {
+    const sx = W / 2 + (m.x - cam.x) * cam.scale;
+    const sy = H / 2 + (m.y - cam.y) * cam.scale;
+    const edge = 26;
+    if (sx > edge && sx < W - edge && sy > edge && sy < H - edge) continue;
+    const ang = Math.atan2(sy - H / 2, sx - W / 2);
+    const rx = Math.min(W / 2 - 70, Math.abs(Math.cos(ang)) > 0.001 ? Math.abs((W / 2 - 70) / Math.cos(ang)) : 1e9);
+    const ry = Math.min(H / 2 - 70, Math.abs(Math.sin(ang)) > 0.001 ? Math.abs((H / 2 - 70) / Math.sin(ang)) : 1e9);
+    const d = Math.min(rx, ry);
+    const cx = W / 2 + Math.cos(ang) * d;
+    const cy = H / 2 + Math.sin(ang) * d;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(ang);
+    ctx.fillStyle = VIOLET;
+    ctx.shadowColor = VIOLET;
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.moveTo(8, 0);
+    ctx.lineTo(0, -6);
+    ctx.lineTo(-8, 0);
+    ctx.lineTo(0, 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = VIOLET;
+    ctx.font = `700 10px ${FONT}`;
+    ctx.textAlign = 'center';
+    ctx.fillText(`${m.material}`, cx - Math.cos(ang) * 20, cy - Math.sin(ang) * 20 + 4);
   }
 }
 

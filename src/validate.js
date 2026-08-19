@@ -8,6 +8,7 @@ import { DEG, clamp } from './util.js';
 import { SHIP } from './ship.js';
 import { spawnFor } from './spawn.js';
 import { COMBAT, ENEMY_TYPES, placeEnemies, sanctuaryPad, sanctuaryGates, lineOfSight } from './enemies.js';
+import { MATERIAL_NODE } from './economy.js';
 
 export const VALIDATION = {
   shipHalfWidth: 20,
@@ -18,6 +19,7 @@ export const VALIDATION = {
   minCorridor: 150,        // ground-to-ceiling gap a lander can pass through
   maxPadSlope: 8 * DEG,
   minPadWidth: 56,         // both feet plus a margin
+  materialClearance: 70,   // air a deposit must sit in, so it can be flown to
   fuelCellValue: 22,       // what one cell on the road is worth, for the range bound
 };
 
@@ -124,6 +126,43 @@ export function validateTerrain(level, terrain, cfg = VALIDATION) {
   }
   if (deepPad !== nearPad && road < deepNeed) {
     problems.push(`the deep landing zone is unreachable even with the fuel road: ~${Math.round(deepNeed)} needed, ${Math.round(road)} available`);
+  }
+
+  // --- material must be an invitation, never a requirement
+  //
+  //     The rule this enforces is the same one the sanctuary enforces for
+  //     enemies: the mission has to be completable while collecting nothing.
+  //     The delta-v bound above is measured on the tank and the fuel road
+  //     alone - deposits carry no fuel - so a mission can never come to depend
+  //     on ore. What is left to check is that the ore is somewhere a player can
+  //     actually get to, and nowhere that turns the safe landing into a detour.
+  const nodes = terrain.materialNodes || [];
+  notes.material = { count: nodes.length, tiers: [0, 1, 2].map((t) => nodes.filter((n) => n.tier === t).length) };
+  const safePad = sanctuaryPad(terrain);
+  const gates = safePad ? sanctuaryGates(safePad) : null;
+  for (const m of nodes) {
+    const label = `material@${Math.round(m.x)}`;
+    if (!m.tier) problems.push(`${label} sits in the near band - collecting must be a detour, not a freebie`);
+    for (const p of terrain.pads) {
+      if (m.x > p.x1 - MATERIAL_NODE.padGuard && m.x < p.x2 + MATERIAL_NODE.padGuard) {
+        problems.push(`${label} is within ${MATERIAL_NODE.padGuard} px of a landing zone`);
+        break;
+      }
+    }
+    // Reachable: in open air, with room to fly a lander into it.
+    const ground = terrain.heightAt(m.x);
+    if (m.y > ground + 1) problems.push(`${label} is below the surface`);
+    if (terrain.ceiling && m.y < terrain.ceilingAt(m.x) + cfg.materialClearance) {
+      problems.push(`${label} is inside or against the ceiling`);
+    }
+    // And never sitting in the corridor the safe landing descends through: the
+    // safe route stays the safe route, with nothing on it to tempt a diversion.
+    if (gates && gates.some((pt) => Math.hypot(m.x - pt.x, m.y - pt.y) < MATERIAL_NODE.radius + 60)) {
+      problems.push(`${label} sits in the sanctuary approach corridor`);
+    }
+  }
+  if (terrain.entry && terrain.pads.length > 1 && !nodes.length) {
+    problems.push('no material deposits placed - the mission pays only on the results screen');
   }
 
   return { ok: problems.length === 0, problems, notes };

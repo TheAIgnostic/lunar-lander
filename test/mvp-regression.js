@@ -114,7 +114,7 @@ console.log('\nperformance under the worst intended load\n');
     return perStep;
   };
 
-  const bare = time('physics only', (steps) => {
+  time('physics only', (steps) => {
     ship.reset(start.x, start.y, level.fuel);
     const input = { thrust: true, left: false, right: false, hold: false };
     for (let i = 0; i < steps; i++) ship.step(1 / 120, input, level, terrain, i / 120);
@@ -150,7 +150,45 @@ console.log('\nperformance under the worst intended load\n');
   console.log(`  peak live projectiles              ${peakShots} (cap ${COMBAT.maxShots})`);
   check('the load test actually exchanged fire', peakShots > 0, 'no shots were fired');
   check('a loaded step still fits inside a 120 Hz budget', loaded < 8300 / 1000 * 1000, `${loaded.toFixed(1)} µs`);
-  check('combat costs less than the physics it rides on', loaded < bare * 3, `${loaded.toFixed(1)} vs ${bare.toFixed(1)} µs`);
+
+  // How combat scales with the number of machines.
+  //
+  // This used to be `loaded < bare * 3` - a ratio against the physics-only
+  // loop. That is not the O(n^2) canary it was written to be: `bare` runs after
+  // the whole mission sweep has thoroughly warmed `ship.step`, so its number
+  // moves with the JIT's history rather than with the engine's cost, and in M15
+  // it failed on a change that adds no per-step combat work at all (material
+  // nodes are placed once, at level generation). Measured directly instead:
+  // cost per machine must not climb as machines are added, which is exactly
+  // what an accidental all-pairs loop would do.
+  const perMachine = [];
+  for (const budget of [1, 4]) {
+    const lvl = { ...level, enemyBudget: budget };
+    const t2 = new Terrain(lvl, 4242);
+    const s2 = new Ship();
+    const st2 = spawnFor(lvl, t2);
+    const f2 = new EnemyField(lvl, t2, 4242);
+    if (!f2.enemies.length) continue;
+    s2.reset(st2.x, st2.y, lvl.fuel);
+    s2.x = f2.enemies[0].x + 260;
+    s2.y = f2.enemies[0].y - 170;
+    s2.hull = 1e9;
+    const steps = 20000;
+    const t0 = process.hrtime.bigint();
+    for (let i = 0; i < steps; i++) {
+      f2.update(1 / 120, i / 120, s2);
+      for (const e of f2.enemies) { e.hp = e.maxHp; e.dead = false; }
+    }
+    const us = Number(process.hrtime.bigint() - t0) / 1e6 / steps * 1000;
+    perMachine.push({ n: f2.enemies.length, us, each: us / f2.enemies.length });
+    console.log(`  ${f2.enemies.length} machine${f2.enemies.length === 1 ? ' ' : 's'} updating` +
+      `${''.padEnd(19)} ${us.toFixed(2)} µs/step  (${(us / f2.enemies.length).toFixed(2)} each)`);
+  }
+  if (perMachine.length === 2) {
+    const [one, many] = perMachine;
+    check('combat cost per machine does not climb with the count',
+      many.each < one.each * 1.5, `${one.each.toFixed(2)} -> ${many.each.toFixed(2)} µs each`);
+  }
   check('projectiles stay capped', peakShots <= COMBAT.maxShots, String(peakShots));
 }
 

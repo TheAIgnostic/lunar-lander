@@ -5,6 +5,12 @@
 // Fields that later milestones consume (enemyBudget, optionalObjective) are
 // carried now so the content does not need rewriting when those land.
 //
+// **Enemy budgets follow one ramp**, set in M15 after the encounter audit found
+// nine of fifteen missions with nothing hostile on them at all: mission 1 of a
+// chapter is always quiet, and 2-5 climb 1, 1-2, 2, 2-3. That stays inside the
+// spec's "1-3 at once, rarely 4" rule while making the empty two thirds of the
+// game the exception rather than the default.
+//
 // **Pads are authored prize-first.** Index 0 is placed in the deepest distance
 // band - the far end of the map, past the fuel road, worth the most material -
 // and the last pad is the near zone that can always be reached on the starting
@@ -31,7 +37,7 @@ export const MOON_MISSIONS = [
     terrain: { archetype: 'canyon' },
     pads: [{ mult: 3, width: 120 }],
     optionalObjective: { id: 'fuel-25', text: 'Land with at least 25% fuel', reward: { salvage: 40 } },
-    enemyBudget: 0,
+    enemyBudget: 1,
   },
   {
     id: 'moon-3', planet: 'LUNA', index: 3, name: 'FAR-SIDE RELAY',
@@ -40,7 +46,7 @@ export const MOON_MISSIONS = [
     terrain: { archetype: 'ridge' },
     pads: [{ mult: 3, width: 110 }, { mult: 2, width: 180 }],
     optionalObjective: { id: 'power-relay', text: 'Power the relay for extra research data', reward: { data: 35 } },
-    enemyBudget: 0,
+    enemyBudget: 1,
   },
   {
     id: 'moon-4', planet: 'LUNA', index: 4, name: 'SILENT BATTERY',
@@ -58,7 +64,7 @@ export const MOON_MISSIONS = [
     terrain: { archetype: 'caldera' },
     pads: [{ mult: 5, width: 78 }, { mult: 2, width: 170 }],
     optionalObjective: { id: 'centre', text: 'Touch down inside the central bonus area', reward: { cores: 1 } },
-    enemyBudget: 1, enemySets: ['sentry-turret'],
+    enemyBudget: 2, enemySets: ['sentry-turret'],
   },
 ];
 
@@ -131,7 +137,7 @@ export const MARS_MISSIONS = [
     pads: [{ mult: 3, width: 130 }],
     hazards: [{ type: 'windChannels', bandHeight: 190, strength: 44 }],
     optionalObjective: { id: 'hull-10', text: 'Keep hull damage below 10%', reward: { data: 30 } },
-    enemyBudget: 0,
+    enemyBudget: 1, enemySets: ['sentry-turret'],
   },
   {
     id: 'mars-3', planet: 'MARS', index: 3, name: 'BURIED ARRAY',
@@ -141,7 +147,7 @@ export const MARS_MISSIONS = [
     pads: [{ mult: 3, width: 130 }, { mult: 2, width: 180 }],
     hazards: ['atmosphere', { type: 'dust', period: 13, minVisibility: 0.32, duty: 0.5 }],
     optionalObjective: { id: 'power-array', text: 'Restore a sensor tower for a stronger beacon', reward: { data: 40 } },
-    enemyBudget: 0, fuelCells: 2,
+    enemyBudget: 2, enemySets: ['sentry-turret', 'seeker-drone'], fuelCells: 2,
   },
   {
     id: 'mars-4', planet: 'MARS', index: 4, name: 'IRON RAIN',
@@ -161,7 +167,7 @@ export const MARS_MISSIONS = [
     pads: [{ mult: 5, width: 84 }, { mult: 2, width: 175 }],
     hazards: ['atmosphere', { type: 'dust', period: 11, minVisibility: 0.22, duty: 0.55 }],
     optionalObjective: { id: 'centre', text: 'Touch down inside the central bonus area', reward: { cores: 1 } },
-    enemyBudget: 1, enemySets: ['seeker-drone'], fuelCells: 3,
+    enemyBudget: 3, enemySets: ['seeker-drone', 'sentry-turret'], fuelCells: 3,
   },
 ];
 
@@ -183,8 +189,8 @@ export const EUROPA_MISSIONS = [
     width: 3000, relief: 300, detail: 1.2, rough: 190, fuel: 118,
     terrain: { archetype: 'canyon' },
     pads: [{ mult: 5, width: 120, fragile: 16 }],
-    optionalObjective: { id: 'perfect', text: 'Set down without cracking the bridge', reward: { cores: 1 } },
-    enemyBudget: 0,
+    optionalObjective: { id: 'core-ice', text: 'Recover an ice core from the crevasse floor', reward: { data: 40 } },
+    enemyBudget: 1,
   },
   {
     id: 'europa-3', planet: 'EUROPA', index: 3, name: 'RADIATION PASS',
@@ -194,7 +200,7 @@ export const EUROPA_MISSIONS = [
     pads: [{ mult: 3, width: 125 }, { mult: 2, width: 175 }],
     hazards: [{ type: 'radiation', period: 15, duty: 0.45, rate: 30 }],
     optionalObjective: { id: 'low-rads', text: 'Land with radiation exposure under 30%', reward: { data: 45 } },
-    enemyBudget: 0, fuelCells: 2,
+    enemyBudget: 2, fuelCells: 2,
   },
   {
     id: 'europa-4', planet: 'EUROPA', index: 4, name: 'UNDER-ICE SIGNAL',
@@ -203,7 +209,7 @@ export const EUROPA_MISSIONS = [
     terrain: { archetype: 'canyon' }, cave: true, clearance: 290,
     pads: [{ mult: 3, width: 130 }],
     hazards: [{ type: 'radiation', period: 18, duty: 0.35, rate: 22 }],
-    optionalObjective: { id: 'no-ability', text: 'Complete without using the active ability', reward: { cores: 1 } },
+    optionalObjective: { id: 'probe-lost', text: 'Recover the probe that went quiet under the shelf', reward: { salvage: 80 } },
     enemyBudget: 2, enemySets: ['seeker-drone'], fuelCells: 2,
   },
   {
@@ -214,7 +220,10 @@ export const EUROPA_MISSIONS = [
     pads: [{ mult: 5, width: 96, fragile: 14 }, { mult: 2, width: 180 }],
     hazards: [{ type: 'radiation', period: 13, duty: 0.5, rate: 32 }],
     optionalObjective: { id: 'perfect', text: 'Set down on the plate without cracking it', reward: { cores: 2 } },
-    enemyBudget: 1, enemySets: ['seeker-drone'], fuelCells: 3,
+    // Two, not the three the ramp allows: Europa's drones ram, the plate is
+    // fragile, and at three an unarmed flight to the prize fell from 20/20 to
+    // 5/20. The ramp is a shape, not a quota.
+    enemyBudget: 2, enemySets: ['seeker-drone'], fuelCells: 3,
   },
 ];
 
@@ -271,8 +280,12 @@ export function generateChapter(planetId, seed = 1, sector = 1) {
         : [{ mult: mult + 1, width: Math.round(padWidth * 0.7) }, { mult, width: padWidth + 40 }],
       hazards: planet.hazards.length ? undefined : [],   // undefined = inherit the planet's
       fuelCells: i >= 2 ? 2 : 0,
-      enemyBudget: planet.eligibleEnemySets.length
-        ? Math.min(3, Math.max(0, i - 1 + Math.floor(depth)))
+      // The same ramp the authored chapters use (M15): the first mission of a
+      // chapter is always quiet, and the rest climb. Depth makes a later sector
+      // harder but can never arm mission one - "somewhere to learn the body"
+      // has to survive the difficulty curve.
+      enemyBudget: planet.eligibleEnemySets.length && i > 0
+        ? Math.min(3, [0, 1, 2, 2, 3][i] + Math.floor(depth))
         : 0,
       enemySets: planet.eligibleEnemySets,
       optionalObjective: null,

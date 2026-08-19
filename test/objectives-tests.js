@@ -60,7 +60,13 @@ const report = (over = {}) => ({
 // --- cargo objectives get a real object, deep in the map
 {
   const cargoLevels = AUTHORED.filter((l) => cargoFor(l));
-  check('the cargo objectives are the four that ask for a thing', cargoLevels.length === 4,
+  // M15 added Europa's two: the chapter had five missions of conditions and
+  // nothing at all to fly to, which is what the encounter audit measured.
+  check('every chapter has something to recover',
+    ['moon', 'mars', 'europa'].every((ch) => cargoLevels.some((l) => l.id.startsWith(ch))),
+    cargoLevels.map((l) => l.id).join());
+  check('every cargo objective names an object the game knows how to place',
+    cargoLevels.every((l) => cargoFor(l) && cargoFor(l).label),
     cargoLevels.map((l) => l.id).join());
   for (const lvl of cargoLevels) {
     let placed = 0;
@@ -113,14 +119,65 @@ const report = (over = {}) => ({
   console.log(`       home ${nearOk}/${total} · prize direct ${deepDirect}/${total} · prize via the road ${deepRoad}/${total}`);
 }
 
-// --- distance pays
+// --- distance pays, and it pays through the hold
+//
+// Until M15 depth was a multiplier on a number computed at touchdown. It is the
+// ore lying further out now, so these check the new shape: the stipend still
+// leans on depth, but the hold is where the money is, and a flight that takes
+// nothing still gets paid.
 {
-  const shallow = missionReward({ grade: 'PERFECT', padMultiplier: 3, fuelLeft: 50, maxFuel: 100, rareMaterial: 'Ore', firstClear: true, padTier: 0 });
-  const deep = missionReward({ grade: 'PERFECT', padMultiplier: 3, fuelLeft: 50, maxFuel: 100, rareMaterial: 'Ore', firstClear: true, padTier: 2 });
-  check('the deep zone pays more material', deep.material > shallow.material * 2, `${shallow.material} -> ${deep.material}`);
-  check('the deep zone pays more salvage', deep.salvage > shallow.salvage);
+  const base = { grade: 'PERFECT', padMultiplier: 3, fuelLeft: 50, maxFuel: 100, rareMaterial: 'Ore', firstClear: true };
+  const shallow = missionReward({ ...base, padTier: 0 });
+  const deep = missionReward({ ...base, padTier: 2 });
+  const deepFull = missionReward({ ...base, padTier: 2, carried: { material: 81, salvage: 176, nodes: 4 } });
+
+  check('a flight that collects nothing is still paid', shallow.material > 0 && shallow.salvage > 0,
+    `${shallow.material} material, ${shallow.salvage} salvage`);
+  check('the deep stipend still beats the near one', deep.material > shallow.material,
+    `${shallow.material} -> ${deep.material}`);
+  check('but most of the material comes from picking it up',
+    deepFull.hauledMaterial > deepFull.stipend * 2, `${deepFull.stipend} stipend vs ${deepFull.hauledMaterial} carried`);
+  check('and most of the salvage does too',
+    deepFull.hauledSalvage > deepFull.salvage * 0.4, `${deepFull.hauledSalvage} of ${deepFull.salvage}`);
+  check('collecting beats not collecting, by a lot', deepFull.material > deep.material * 3,
+    `${deep.material} -> ${deepFull.material}`);
+
+  // The grade multiplies the haul; it does not create it and cannot erase it.
+  const hard = missionReward({ ...base, grade: 'HARD', padTier: 2, carried: { material: 81, salvage: 176, nodes: 4 } });
+  check('a hard landing keeps most of the haul', hard.hauledMaterial > deepFull.hauledMaterial * 0.7
+    && hard.hauledMaterial < deepFull.hauledMaterial, `${deepFull.hauledMaterial} -> ${hard.hauledMaterial}`);
+  check('an empty hold cannot be multiplied into a reward',
+    missionReward({ ...base, padTier: 2, carried: { material: 0, salvage: 0, nodes: 0 } }).hauledMaterial === 0);
+  check('the results screen can show what was left behind',
+    deepFull.leftBehind !== null && deepFull.nodesTaken === 4);
   check('an off-pad landing gets no depth bonus',
-    missionReward({ grade: 'PERFECT', padMultiplier: 3, fuelLeft: 50, maxFuel: 100, rareMaterial: 'Ore', offPad: true, padTier: 2 }).depth === 0);
+    missionReward({ ...base, offPad: true, padTier: 2 }).depth === 0);
+}
+
+// --- material nodes: the reward as an object
+{
+  const withNodes = AUTHORED.filter((l) => new Terrain(l, 1000).materialNodes.length);
+  check('every authored mission has ore in the ground', withNodes.length === AUTHORED.length,
+    `${withNodes.length}/${AUTHORED.length}`);
+  for (const lvl of AUTHORED) {
+    for (const seed of SEEDS) {
+      const t = new Terrain(lvl, seed);
+      check(`${lvl.id}: no deposit in the near band`, t.materialNodes.every((m) => m.tier > 0));
+      check(`${lvl.id}: no deposit on a landing zone`, t.materialNodes.every((m) => !t.padAt(m.x)));
+      check(`${lvl.id}: the deep band pays more per deposit`,
+        t.materialNodes.every((m) => m.material === (m.tier === 2 ? 24 : 13)));
+    }
+  }
+  // Collecting one is the terrain's rule, like every other pickup.
+  const t = new Terrain(MOON_LEVELS[0], 1000);
+  const node = t.materialNodes[0];
+  check('a deposit is collected when touched', (() => {
+    const got = t.collect(node.x, node.y);
+    return got.length === 1 && got[0].kind === 'material' && got[0].material > 0;
+  })());
+  check('and only once', t.collect(node.x, node.y).length === 0);
+  check('what is left is countable', t.materialLeft().nodes === t.materialNodes.length - 1);
+  check('a legacy level has no deposits', new Terrain(LEVELS[0], 1000).materialNodes.length === 0);
 }
 
 // --- tiers exist where they should, and nowhere else

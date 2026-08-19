@@ -47,6 +47,10 @@ export const OBJECTIVES = {
   'power-relay': { kind: 'cargo', short: 'RELAY', label: 'RELAY', place: 'deep' },
   'power-array': { kind: 'cargo', short: 'ARRAY', label: 'ARRAY', place: 'deep' },
   'salvage-iron': { kind: 'cargo', short: 'SALVAGE', label: 'SALVAGE', place: 'offRoute' },
+  // Europa had no recoveries at all - five missions of conditions, nothing to
+  // fly to. Measured in the M14 encounter audit; these are the fix.
+  'core-ice': { kind: 'cargo', short: 'ICE CORE', label: 'CORE', place: 'deep' },
+  'probe-lost': { kind: 'cargo', short: 'PROBE', label: 'PROBE', place: 'offRoute' },
 };
 
 export function objectiveDef(id) {

@@ -213,8 +213,16 @@ export function flyMission(level, terrain, opts = {}) {
   // The road: fly the cells in the order they lie between the entry and the
   // target, then land. This is what proves the deep pad is reachable at all -
   // without it the far half of every map is decoration.
-  const road = opts.viaCells
-    ? [...terrain.fuelCells].sort((a, b) => Math.abs(a.x - start.x) - Math.abs(b.x - start.x))
+  //
+  // `viaMaterial` adds the ore to that route. It is the only way to measure the
+  // claim M15 rests on - that a player who wants the reward can go and get it -
+  // because the control law will never detour for something it is not told to
+  // fly to, and "the pilot did not collect any" is not evidence about the map.
+  const road = opts.viaCells || opts.viaMaterial
+    ? [
+      ...(opts.viaCells ? terrain.fuelCells : []),
+      ...(opts.viaMaterial ? (terrain.materialNodes || []) : []),
+    ].sort((a, b) => Math.abs(a.x - start.x) - Math.abs(b.x - start.x))
     : [];
   let leg = 0;
   let legStarted = 0;
@@ -232,12 +240,18 @@ export function flyMission(level, terrain, opts = {}) {
   const maxT = opts.maxSeconds || 120;
   let t = 0;
   let event = null;
+  const carried = { material: 0, salvage: 0, nodes: 0 };
 
   while (t < maxT) {
     control(input);
     event = ship.step(step, input, level, terrain, t, settings);
     const got = terrain.collect(ship.x, ship.y);
-    if (got.length) ship.fuel = Math.min(ship.maxFuel, ship.fuel + FUEL_CELL * got.length);
+    // Only the road refuels. Cargo and material are payload - counting them as
+    // fuel would have quietly handed the pilot a bigger tank on every mission
+    // that had ore in it, and every flight number here would have been a lie.
+    const cells = got.filter((c) => c.kind === 'fuel').length;
+    if (cells) ship.fuel = Math.min(ship.maxFuel, ship.fuel + FUEL_CELL * cells);
+    for (const m of got) if (m.kind === 'material') { carried.material += m.material; carried.salvage += m.salvage; carried.nodes++; }
     if (leg < road.length) {
       // Move on when the cell is taken, or when this leg has plainly failed -
       // a cell in a hole the pilot cannot reach must not strand the flight.
@@ -277,5 +291,7 @@ export function flyMission(level, terrain, opts = {}) {
     combat: field ? field.summary() : null,
     cellsTaken: terrain.fuelCells.filter((c) => c.taken).length,
     cells: terrain.fuelCells.length,
+    carried,
+    nodes: (terrain.materialNodes || []).length,
   };
 }

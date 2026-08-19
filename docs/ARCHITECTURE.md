@@ -12,7 +12,7 @@ Everything under `src/` is a plain ES module, loaded directly in the browser and
 | `src/main.js` | state machine, camera, run loop, every overlay screen, persistence glue | — |
 | `src/ship.js` | integration, collision, the touchdown settling window, hull, per-run spec | — |
 | `src/landing.js` | severity score, band thresholds, gear tier, every landing constant | M1 |
-| `src/terrain.js` | heightmap, the entry point, distance-banded pads, the fuel road, cargo, ceilings, rocks | —/M14 |
+| `src/terrain.js` | heightmap, the entry point, distance-banded pads, the fuel road, cargo, material deposits, ceilings, rocks | —/M14/M15 |
 | `src/archetypes.js` | 7 macro silhouettes and their landing-zone anchors | M2 |
 | `src/spawn.js` | the starting position and momentum rule (the terrain owns the entry since M14) | M3/M14 |
 | `src/validate.js` | structural mission checks: spawn clearance, approach corridors, delta-v bound | M3 |
@@ -20,15 +20,15 @@ Everything under `src/` is a plain ES module, loaded directly in the browser and
 | `src/missions.js` | authored Moon/Mars/Europa chapters, survey-chapter generator, `chapterFor` | M4-M9 |
 | `src/forces.js` | force/status interface: atmosphere, dust, wind channels, thermal, cryo, plumes, radiation | M5-M7 |
 | `src/save.js` | versioned MetaSave + RunState, legacy migration, corruption recovery | M8 |
-| `src/economy.js` | rewards, the transmitted/cargo split, settlement and banking | M9 |
+| `src/economy.js` | rewards, the carried haul, deposit worth, the transmitted/cargo split, settlement and banking | M9/M15 |
 | `src/route.js` | discovery tiers, four-card offers, checkpoint rule | M9 |
 | `src/components.js` | 5 component tracks, `deriveLoadout` / `deriveFull`, purchase rules | M10/M11 |
 | `src/skills.js` | 3 skill trees, `deriveSkills`, purchase and gating rules | M11 |
 | `src/modules.js` | 5 active + 4 passive modules, blueprint guarantee list | M11/M12 |
 | `src/enemies.js` | enemy roster, placement around the prize, telegraphs, projectiles, damage, rewards | M12/M14 |
-| `src/objectives.js` | the fifteen optional objectives: eleven conditions and four cargo recoveries | M14 |
+| `src/objectives.js` | the optional objectives: conditions judged at touchdown, and six cargo recoveries | M14/M15 |
 | `src/abilities.js` | the active-module runtime: charges, duration, cooldown, effects | M12 |
-| `src/render.js` | background, world, ship, dust, pad beacons, enemies, hangar ship, HUD | —/M12 |
+| `src/render.js` | background, world, ship, dust, pad and material beacons, enemies, hangar ship, HUD | —/M12/M15 |
 | `src/debug.js` | F3 telemetry overlay, F4 landing-envelope bars, F5 enemy ranges | M0/M12 |
 | `src/particles.js` | pooled particles, debris, rings, floating text | — |
 | `src/audio.js` | synthesized engines, impacts, chimes | — |
@@ -50,6 +50,15 @@ only — shake, flashing, instrument size, contrast and key bindings never reach
 `test/settings-tests.js` flies the same mission with all of them changed and asserts the result is
 byte-identical, so a player who needs the motion turned off is flying the same game as everyone else.
 
+**The rule that makes reward a decision:** material is a physical deposit in the world, not a figure
+computed at touchdown. `missionReward` counts what the lander carried home and the landing grade
+*multiplies* that haul; what stays computed is a stipend, so a flight that collects nothing is still
+paid and is paid about a quarter as much. Deposits are placed by the same rule that places the
+guards — around the deep landing zone and back along the fuel road — and never in the near band,
+never within 150 px of a landing zone, never in the sanctuary approach corridor, and never close
+enough to a fuel cell to be swept up with it. `validate.js` enforces all four, which is what keeps
+"a mission is always completable while collecting nothing" a statement about geometry.
+
 **The rule that holds combat fair:** every mission keeps a *sanctuary* — its lowest-multiplier pad
 and the 420 px column above it — outside every machine's engagement range. `placeEnemies` and
 `validateEnemies` measure against the same points (`sanctuaryGates`), so the rule cannot drift
@@ -67,12 +76,13 @@ object. Hazards apply through the shared force interface, so a new body is data,
 ## Tests
 
 ```bash
-./test/run-all.sh 20                 # everything: 10 unit suites, 2 fixtures, 2 sweeps, build
+./test/run-all.sh 20                 # everything: 10 unit suites, 2 fixtures, 2 sweeps, the audit, build
 node test/validate-missions.js 20    # structural + flown validation of every mission family
 node test/mvp-regression.js 20       # all 27 missions, performance, long session, determinism
 node test/enemies-tests.js           # enemies, combat rules, the active-module runtime
 node test/settings-tests.js          # key bindings, accessibility, presentation neutrality
-node test/objectives-tests.js        # objectives, distance tiers, the fuel road, cargo
+node test/objectives-tests.js        # objectives, distance tiers, the fuel road, cargo, deposits
+node test/encounter-audit.js 20      # what a player actually meets: enemies, ore, both routes
 node test/physics-fixture.js         # physics drift, no pilot in the loop
 node test/flight-fixture.js          # mission outcomes flown by the autopilot
 ./macos/build.sh                     # bundles, then self-tests the app
@@ -84,9 +94,11 @@ law rather than reimplementing it, which it used to, having quietly drifted thre
 Load it with `await __autopilotReady` before flying, since it imports the law as a module.
 
 `flyMission` takes `{ padIndex }` to choose a landing zone and `{ viaCells: true }` to fly the fuel
-road — the two routes every tiered mission has, and both sweeps check both. It keeps enemies **off**
-unless `{ enemies: true }` asks for them. The terrain sweep and
-the flight fixture measure whether the ground can be flown; mixing gunfire into them would turn a
+road — the two routes every tiered mission has, and both sweeps check both. `{ viaMaterial: true }`
+adds the ore to that route: the control law never detours for something it was not told to fly to,
+so "the autopilot collected nothing" is evidence about the pilot and not about the map. The
+encounter audit flies all three. It keeps enemies **off** unless `{ enemies: true }` asks for them:
+the terrain sweep and the flight fixture measure whether the ground can be flown; mixing gunfire into them would turn a
 terrain regression into a combat regression. The combat section of `validate-missions.js` turns them
 on and flies with nothing equipped, because what it has to prove is that nothing is needed.
 
@@ -108,6 +120,7 @@ game or the pilot changes. Improving the pilot should move the second and leave 
 | `__preview(archetype, relief, detail)` | rebuild the current mission with another terrain shape |
 | `__goMission('LUNA', 3)` | jump straight to any mission of any chapter |
 | `__field()` | the live enemy field: machines, shots, kills, suppressed shots |
+| `__game.carried` | what the hold has picked up this mission; `__game.terrain.materialLeft()` is what is still out there |
 | `__useAbility()` | fire the equipped active module |
 | `__runChapter('MARS')` | fly a whole chapter headlessly (after `await __autopilotReady`) |
 | `__settleNow()` | resolve a pending landing or crash immediately |
@@ -123,8 +136,14 @@ game or the pilot changes. Improving the pilot should move the second and leave 
 - **Screenshots misreport at emulated viewport sizes.** If one looks half-painted, re-issue
   `resize_window` (nudge the height by 1 px) and shoot again.
 - **The macOS self-test is the bundling canary.** It has caught a duplicate `const` across modules, a
-  module missing from the bundler list, and a namespace import that vanished from the bundle. Run it
-  before calling any milestone done.
+  module missing from the bundler list, a namespace import that vanished from the bundle, and (M15)
+  a module-level `const X = SOME_IMPORT.field` that throws "cannot access before initialization"
+  because the bundler emits that module first. Read imported config **inside** functions, not at
+  module load. Run the self-test before calling any milestone done.
+- **Ratio-based performance checks measure the JIT.** The MVP regression compared the combat loop
+  against a physics-only loop that runs after the whole mission sweep has warmed it; the denominator
+  tracked warm-up history rather than cost. Measure the property you mean — for combat, cost *per
+  machine* as machines are added.
 
 ## Reading order for a new session
 
@@ -153,12 +172,10 @@ The MVP is complete and measured (`test/BASELINE.md`, M13 section). What the nex
   recorded data is an autopilot, which is not a proxy for a person.
 - **Moving landing platforms** are still deferred (Europa 5, Io 5): `padAt` and the landing check
   would have to become time-aware.
-- **The economy is about to change shape.** M15 moves material from a figure computed at touchdown
-  (`missionReward` in `economy.js`) to objects collected in the world through `terrain.collect`.
-  Anything that reads `reward.material` today will need to read a carried tally instead.
-- **Mission fuel budgets have not been re-authored** since the map grew. They still work — the near
-  zone lands with 19–50% left — but they were written for a 900 px traverse and the numbers are
-  ripe for a pass now that the road carries the deep run.
+- **Mission fuel budgets have not been re-authored** since the map grew, and M15 gave the gap a
+  number: taking the deposits that lie on the fuel road is comfortable (236/300 landings, 27–55%
+  left), but sweeping every deposit lands 156/300 and 0/20 on `mars-2` and `europa-4`. Written for a
+  900 px traverse, now flown across 2,000–2,600 px with a road and an ore field in between.
 - **Controller support does not exist.** Keyboard remapping does, and every flight control is
   rebindable, but there is no gamepad backend to remap.
 - **Achievements** are deliberately not built. The spec gates them behind stable progression, and

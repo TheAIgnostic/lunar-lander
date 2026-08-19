@@ -303,6 +303,43 @@ scheduled until the MVP is stable — the spec says the same.
     generated survey chapters home 29-30/30
   - 114 new tests; the physics fixture is still unchanged since M0
 
+- [x] **M15 — reward you can see and have to take** (this commit)
+  - Tom's two rules, from playing M14: arm the empty two thirds of the game, and make material
+    something you pick up rather than something a screen tells you about afterwards
+  - **the encounter audit is a script now** — `node test/encounter-audit.js [seeds]`, in
+    `run-all.sh`. Re-run against M14 it reproduced the recorded numbers exactly, which is what made
+    it usable as a before-and-after rather than a fresh opinion
+  - **enemies on twelve of fifteen missions** (was six): one ramp — mission 1 quiet, then 1, 1-2, 2,
+    2-3 — written into `missions.js` and into `generateChapter` so authored and survey chapters
+    agree. Deep-route engagement went 40% to 77%, and 97% on the missions that have machines
+  - **the sanctuary rule is untouched and re-proved**: all 12 armed missions at 40 seeds, sanctuary
+    40/40 and survived-fire 40/40, flown with no weapon and no evasive logic. Arming six more
+    missions cost three deep landings in 300 and nothing at all on the way home
+  - **material is an object**. `missionReward` counts what was carried home; the landing grade
+    multiplies that haul; what stays computed is a stipend, so a flight that collects nothing is
+    still paid but is paid a quarter as much. On a deep Mars landing: 25 material collecting
+    nothing, 97 with a full hold
+  - deposits come in two kinds — floating *below* the fuel road's glide line, and on the seam around
+    the deep zone, two thirds of them past it. Never in the near band, never within 150 px of a
+    landing zone, never in the sanctuary corridor, never close enough to a fuel cell to be swept up
+    with it. All four are enforced in `validate.js` on every seed
+  - **ore lies where the guards do**: median 427 px to the nearest machine, 65% within 600 px
+  - **Europa has recoveries at last** — it had none: `core-ice` on BLUE FRACTURE and `probe-lost`
+    under the shelf on UNDER-ICE SIGNAL. Every mission now has something physical in it
+  - the results screen shows what came home *and* what was left out there; the crash screen names
+    what the lander was carrying when it was lost
+  - **the first version of the ore was unreachable** and measuring it said so: resting on the
+    surface, taking a deposit meant landing, lifting off and landing again — 158/300 landings, 0.4
+    of 2 taken. Raised 60-130 px it is a low pass on the way in
+  - **the test pilot had been refuelling on cargo** since M14 — `flyMission` added a fuel cell's
+    worth for anything `collect` returned. That is the only reason the flight fixture moved; the
+    physics fixture is still unchanged since M0
+  - **the MVP's performance check was measuring the JIT**, not combat: `loaded < bare * 3` compares
+    a fully-warm physics loop against the combat loop. Replaced with cost per machine as machines
+    are added, which is the O(n^2) canary the comment always claimed — 0.56 µs each at one machine,
+    0.48 at four
+
+
 ## Decisions (Tom, 2026-08-16)
 
 1. **Gravity** — compressed mapping is the *baseline*, then a per-body hand-tuned offset so each
@@ -320,64 +357,22 @@ None.
 
 ## Next task
 
-**M15 — reward you can see and have to take.** Two decisions from Tom (2026-08-19), both from
-playing M14 and finding nothing out there. Read the encounter audit in `test/BASELINE.md` first:
-it is the measurement these come from.
+**M16 — Titan, and the fuel budgets.** Nothing is blocking it; two things are ready to be picked up.
 
-### The two rules
+The spec's production order (section 16, Phase 7) puts **Titan** next: five authored missions
+replacing its generated survey chapter, one rare-material loop, and planet-specific feedback. Thick
+atmosphere makes it the hardest deep run already measured in the game (`prize 15/30` on the survey
+chapter), so it is the body that will test whether the fuel road carries a real atmosphere.
 
-1. **Every mission except the first of a chapter has enemies.** Today nine of fifteen missions have
-   none — every chapter arms only missions 4 and 5 — so two thirds of the game is empty. The ramp
-   should be roughly `m1: 0, m2: 1, m3: 1-2, m4: 2, m5: 2-3`, staying inside the spec's "1-3 at
-   once, rarely 4" rule (section 12).
+Do the **fuel budget pass** first, or alongside. It has been a known finding since M14 and M15 gave
+it a number: sweeping every deposit lands 156/300, and on `mars-2` and `europa-4` it lands **0/20**,
+because those budgets were authored for a 900 px traverse and are now flown across 2,000-2,600 px
+with a road and an ore field in between. Taking only the deposits on the road is affordable
+(236/300, 27-55% fuel left), so the shape is right and the numbers are stale. Re-authoring them is a
+deliberate pass with the encounter audit either side of it, not a tweak.
 
-2. **Material is picked up, not awarded.** This is the load-bearing change. Today `missionReward`
-   computes a material figure from grade and pad tier at touchdown; M14 made it scale with distance,
-   which is invisible — the player flies further and sees a bigger number on a screen. Tom's words:
-   *"You need to take active risk for your reward. Reward only on stats is no fun. Most of it should
-   come from picking it up."*
-
-   So: **most of a mission's material and salvage should come from objects the player physically
-   collects**, and those objects must be
-   - **visible** — both the ones sitting at landing zones and the ones floating in the air, drawn
-     and legible at range like fuel cells are;
-   - **placed next to enemies and outside the landing areas**, so collecting is a decision to leave
-     the safe line and take fire;
-   - **weighted by depth**, richer the further out they sit, which is the M14 gradient made
-     physical rather than statistical.
-
-### What that touches
-
-| File | Change |
-| --- | --- |
-| `src/terrain.js` | place material nodes: floating on the road, clustered around the deep zone and beside enemies, never on a pad or the sanctuary approach. `collect()` already returns typed items (`fuel`, `cargo`) — add `material` |
-| `src/economy.js` | `missionReward` shifts from computing material to *counting what was carried home*; the landing grade becomes a multiplier on the haul rather than the source of it |
-| `src/enemies.js` | placement already clusters on the prize; material nodes should be placed *with* the guards, so one rule serves both |
-| `src/render.js` | draw material nodes, and show what is being carried in the HUD |
-| `src/main.js` | pickups already flow through `terrain.collect`; add the material kind and the carried tally |
-| `src/validate.js` | material must never be the only route, and must be reachable — the sanctuary rule extended to "a mission is always completable while collecting nothing" |
-| `src/missions.js` | enemy budgets per the ramp above; Europa needs recoveries, it currently has none |
-
-### Acceptance criteria
-
-- Every mission except each chapter's first has at least one machine, and the encounter audit shows
-  a player is engaged on the deep route on effectively every seed.
-- A flight that collects nothing still completes and still pays *something* — collection is the
-  upside, never the price of admission.
-- Material nodes are visible at range, and the results screen shows what was carried versus what
-  was left behind.
-- Crashing loses what you were carrying, per the existing cargo rules.
-- The encounter audit is re-run and recorded in `test/BASELINE.md`.
-
-### Handover
-
-This chat is out of room. A new one starts by reading, in order: `ROADMAP_STATUS.md` (this file),
-`docs/ARCHITECTURE.md`, and the M12/M13/M14 sections plus the encounter audit in `test/BASELINE.md`.
-Then **re-run the audit before writing any code** — `node test/mvp-regression.js 20`,
-`node test/validate-missions.js 20`, and the encounter measurement described in the audit section —
-so the next session starts from measured ground rather than from this summary.
-
-### Superseded
+Read, in order: this file, `docs/ARCHITECTURE.md`, and the M14/M15 sections of `test/BASELINE.md`.
+Then **measure before editing**: `./test/run-all.sh 20`, which now ends with the encounter audit.
 
 ### Superseded
 
@@ -395,15 +390,19 @@ owed; everything else those chapters need already exists.
 
 ### Known findings
 
-- **Nine of fifteen missions have no enemies, and eleven have nothing to recover.** Europa has
-  nothing to recover at all. Measured in the encounter audit; M15's first rule fixes it.
-- **Reward is a number, not a place.** Material is computed at touchdown rather than collected, so
-  the M14 distance gradient is invisible to the player. M15's second rule fixes it, and it is the
-  larger of the two changes: it moves the economy from "what grade did you get" to "what did you
-  carry home".
-- **Mission fuel budgets predate the bigger maps.** They were authored for a 900 px traverse and are
-  now flown across 2,000-2,600 px with a fuel road in between. Everything validates, but the numbers
-  deserve a deliberate pass rather than continuing to work by accident.
+- **Mission fuel budgets predate the bigger maps, and M15 put a number on it.** They were authored
+  for a 900 px traverse and are now flown across 2,000-2,600 px with a fuel road *and* an ore field
+  in between. Taking the deposits on the road is affordable (236/300 landings, 27-55% fuel left);
+  sweeping every deposit lands 156/300, and **0/20** on `mars-2` and `europa-4`. Everything
+  validates and the shape is right — the numbers are stale. This is the next milestone's first job.
+- **Greed is unaffordable on the two hardest maps.** `mars-2 VALLES CROSSWIND` and `europa-4
+  UNDER-ICE SIGNAL` land 0/20 when every deposit is collected. Partly the fuel budgets above, partly
+  the test pilot, which has no route planning and burns 18 s per missed leg. A human would do
+  better; how much better is unknown, which is the same gap the landing bands are waiting on.
+- **The deposits a mission offers vary with its shape.** A two-zone map carries 4-5 deposits and
+  74-90 material; a single-zone map like `europa-2` or `europa-4` carries 2-3 and 42-49, because the
+  seam and the crossing compete for the same stretch of ground. Every mission has something, and the
+  spread is honest rather than intended — worth a look if single-zone missions start feeling thin.
 - **Six of the eight enemies are deferred.** M12 ships the two the MVP asks for (section 18). Coil
   Cannon, Patrol Drone, Mortar Platform, Magnetic Mine, Solar Sentry and Shielded Guardian are
   roster entries only. Mission data that referenced two of them was pointed at what exists —

@@ -4,6 +4,12 @@
 import { clamp, makeRng } from './util.js';
 import { buildArchetype } from './archetypes.js';
 import { cargoFor } from './objectives.js';
+import { MATERIAL_NODE } from './economy.js';
+
+// Read inside the methods, never at module load. The bundler emits terrain
+// before economy, so a module-level `const X = MATERIAL_NODE.padGuard` throws
+// "cannot access before initialization" the moment the single-file build boots.
+// The macOS self-test caught it; nothing else would have.
 
 export class Terrain {
   constructor(cfg, seed) {
@@ -77,6 +83,12 @@ export class Terrain {
     this.fuelCells = this._placeFuel(cfg, rng);
     this.cargo = this._placeCargo(cfg, rng);
     this.rocks = this._scatterRocks(cfg, rng);
+    // Material runs off its own stream, derived from the seed rather than drawn
+    // from `rng`. Everything above this line - heightmap, pads, road, cargo,
+    // rocks - was generated before M15 existed, and taking draws from the shared
+    // stream would have moved every one of them. The physics fixture has not
+    // changed since M0 and this is not the milestone to change it.
+    this.materialNodes = this._placeMaterial(cfg, seed);
     this._assertSane();
   }
 
@@ -409,6 +421,130 @@ export class Terrain {
   }
 
   /**
+   * How far out a point lies, as a fraction of the run from the entry, and the
+   * distance tier that goes with it. Same three bands the pads use.
+   */
+  bandAt(x) {
+    if (!this.entry) return { frac: 0, tier: 0 };
+    const run = this.entry.dir > 0 ? this.width - this.entry.x : this.entry.x;
+    const frac = run > 0 ? clamp(Math.abs(x - this.entry.x) / run, 0, 1) : 0;
+    return { frac, tier: frac < 0.38 ? 0 : frac < 0.66 ? 1 : 2 };
+  }
+
+  /** Is this point far enough from every landing zone to be a real detour? */
+  _clearOfPads(x, guard) {
+    return !this.pads.some((p) => x > p.x1 - guard && x < p.x2 + guard);
+  }
+
+  /**
+   * Material nodes - the reward as an object rather than a figure.
+   *
+   * Three rules, all of them Tom's, from playing M14 and finding nothing out
+   * there:
+   *
+   *   visible   low over the ground around the deep zone, and floating on the
+   *             crossing where they read against the sky
+   *   outside   never on a pad and never within `padGuard` of one, so taking
+   *             one always means leaving the line you would have flown
+   *   deep      nothing in the near band at all, and the far band pays roughly
+   *             double the crossing - the M14 gradient made physical
+   *
+   * They cluster on the deep landing zone, which is where `placeEnemies` puts
+   * the guards, so one rule about where the map's value lies serves both.
+   */
+  _placeMaterial(cfg, seed) {
+    if (!this.entry || !this.pads.length) return [];
+    const rng = makeRng(((((seed | 0) ^ 0x9e3779b9) >>> 0) + 101) >>> 0);
+    const deep = this.pads.reduce((a, p) => ((p.reach || 0) > (a.reach || 0) ? p : a), this.pads[0]);
+    const mid = (deep.x1 + deep.x2) / 2;
+    const dir = this.entry.dir;
+    const span = Math.abs(mid - this.entry.x);
+    const out = [];
+
+    const add = (x, y, kind) => {
+      const tier = this.bandAt(x).tier;
+      if (!tier) return false;                                  // never in the near band
+      if (!this._clearOfPads(x, MATERIAL_NODE.padGuard)) return false;
+      if (out.some((n) => Math.hypot(n.x - x, n.y - y) < 150)) return false;
+      // Never close enough to a cell or a crate to be swept up with it. Two
+      // pickups on one pass is one decision, and the ore is supposed to be its
+      // own decision - that is the entire point of where it lies.
+      const near = (list) => (list || []).some((c) => Math.hypot(c.x - x, c.y - y) < 150);
+      if (near(this.fuelCells) || near(this.cargo)) return false;
+      out.push({
+        x, y, tier, kind, taken: false, phase: rng.range(0, 6.28),
+        material: MATERIAL_NODE.material[tier],
+        salvage: MATERIAL_NODE.salvage[tier],
+      });
+      return true;
+    };
+
+    // The crossing: ore floating below the glide line, so reaching it costs
+    // altitude on the leg where altitude is what keeps you out of reach.
+    const entryY = this.entry.y != null ? this.entry.y : this.height * 0.14;
+    const road = clamp(Math.round(span / 900), 2, 3);
+    // Spread along the crossing, but expressed in *bands* rather than in
+    // fractions of the span. A single-landing-zone mission puts its pad in the
+    // middle band, so "42% of the way to the pad" fell inside the near band and
+    // every deposit on the crossing was refused: moon-2, mars-2, europa-2 and
+    // europa-4 were shipping 0.2 floating deposits apiece. Start where the near
+    // band ends instead, whatever fraction of this particular map that is.
+    const runLen = this.entry.dir > 0 ? this.width - this.entry.x : this.entry.x;
+    const padFrac = runLen > 0 ? span / runLen : 1;
+    const tMin = Math.min(0.86, padFrac > 0 ? 0.40 / padFrac : 0.42);
+    for (let i = 1; i <= road; i++) {
+      const t = tMin + (i / (road + 1)) * (0.96 - tMin);
+      for (let tries = 0; tries < 20; tries++) {
+        const x = clamp(this.entry.x + dir * span * t + (rng() - 0.5) * span * 0.08, 150, this.width - 150);
+        const ground = this.heightAt(x);
+        const roof = this.ceiling ? this.ceilingAt(x) : this.height * 0.10;
+        const glide = entryY + (deep.y - 170 - entryY) * t + 70;
+        const y = clamp(glide + rng.range(90, 170), roof + 90, ground - 95);
+        if (ground - y < 95 || y - roof < 90) continue;
+        if (add(x, y, 'float')) break;
+      }
+    }
+    // The seam: ore around the deep zone, just outside it - the ground the
+    // machines are placed to cover. Two of the three sit *past* the zone and
+    // one short of it, so overflying the pad and coming back is the shape of
+    // the detour.
+    //
+    // Placed after the crossing, not before: on a short single-zone map the two
+    // compete for the same stretch, and the crossing is the deposit a player
+    // can actually afford. Seam-first left moon-2, mars-2 and europa-2 with 0.1
+    // floating deposits apiece.
+    for (let i = 0; i < 3; i++) {
+      for (let tries = 0; tries < 24; tries++) {
+        const out1 = i !== 1;
+        const x = clamp(mid + (out1 ? dir * rng.range(200, 700) : -dir * rng.range(190, 520)), 140, this.width - 140);
+        const ground = this.heightAt(x);
+        if (Math.abs(this.slopeAt(x)) > 0.85) continue;         // nothing hangs over a cliff
+        // Low over the ground, not resting on it. Sitting on the surface was
+        // the first version and it measured badly: reaching one meant landing,
+        // taking off and landing again, which cost more fuel than the deposit
+        // was worth - a collector sweep fell to 158/300 landings. At this
+        // height it is a low pass on the way in, over the ground the guards
+        // cover, which is the decision this was always supposed to be.
+        const y = ground - rng.range(60, 130);
+        if (this.ceiling && y - this.ceilingAt(x) < 110) continue;
+        if (add(x, y, 'seam')) break;
+      }
+    }
+
+    return out;
+  }
+
+  /** What is still lying out there, for the results screen. */
+  materialLeft() {
+    let material = 0, salvage = 0, nodes = 0;
+    for (const n of this.materialNodes || []) {
+      if (n.taken) continue;
+      material += n.material; salvage += n.salvage; nodes++;
+    }
+    return { material, salvage, nodes };
+  }
+
+  /**
    * Collect anything the lander is touching. Shared by the game loop and the
    * test pilot so both agree on what counts as picked up - the rule used to
    * live in main.js, where no test could reach it.
@@ -422,6 +558,13 @@ export class Terrain {
     for (const c of this.cargo || []) {
       if (c.taken) continue;
       if (Math.hypot(c.x - x, c.y - y) < radius) { c.taken = true; got.push({ ...c, kind: 'cargo', ref: c }); }
+    }
+    for (const m of this.materialNodes || []) {
+      if (m.taken) continue;
+      if (Math.hypot(m.x - x, m.y - y) < Math.max(radius, MATERIAL_NODE.radius)) {
+        m.taken = true;
+        got.push({ ...m, kind: 'material', ref: m });
+      }
     }
     return got;
   }

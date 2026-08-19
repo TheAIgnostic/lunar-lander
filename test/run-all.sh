@@ -16,6 +16,9 @@ echo "=== regression: physics (no pilot) ===" && node test/physics-fixture.js | 
 echo "=== regression: flight outcomes ===" && node test/flight-fixture.js | tail -2
 echo "=== validation: every mission ===" && node test/validate-missions.js "${1:-10}" | tail -4
 echo "=== regression: the MVP ===" && node test/mvp-regression.js "${1:-10}" | tail -3
+# Not a gate - a measurement. What a player actually meets out there: enemies
+# per mission, what there is to pick up, and what each route costs.
+echo "=== audit: what a player meets ===" && node test/encounter-audit.js "${1:-10}" | tail -8
 echo "=== build: single file ==="     && node build.js
 echo
 echo "all checks passed"

@@ -207,6 +207,10 @@ function startLevel(index, freshSeed = true) {
 
   g.levelTime = 0;
   g.combatSalvage = 0;
+  // What the hold is carrying. Material is picked up now rather than awarded,
+  // so this is the mission's reward accumulating in the world, and it is lost
+  // with the lander like any other cargo.
+  g.carried = { material: 0, salvage: 0, nodes: 0 };
   g.gearCued = false;
   g.warn = { low: false, crit: false, dry: false, heat: false, cold: false, radiation: false };
   g.cam.x = sx;
@@ -381,6 +385,16 @@ function pickups() {
       audio.arpeggio([659.25, 880, 1046.5], 0.06);
       continue;
     }
+    if (got.kind === 'material') {
+      g.carried.material += got.material;
+      g.carried.salvage += got.salvage;
+      g.carried.nodes++;
+      particles.sparks(got.x, got.y, 24, 1);
+      particles.ring(got.x, got.y, 150, 0.45, MATERIAL_TINT);
+      particles.text(got.x, got.y - 22, `+${got.material} MATERIAL`, MATERIAL_TINT, 19);
+      audio.arpeggio([523.25, 698.46], 0.05);
+      continue;
+    }
     ship.fuel = Math.min(ship.maxFuel, ship.fuel + FUEL_CELL);
     particles.sparks(got.x, got.y, 22, 1);
     particles.ring(got.x, got.y, 140, 0.4, '#ffb347');
@@ -391,6 +405,9 @@ function pickups() {
 
 /** What one cell on the fuel road is worth. */
 const FUEL_CELL = 22;
+
+/** The one colour material is drawn and announced in, everywhere. */
+export const MATERIAL_TINT = '#c9a4ff';
 
 function effects(dt) {
   // Exhaust + ground interaction
@@ -526,6 +543,8 @@ function onLand() {
     detail: ship.landingResult || null,
     combat: g.field && !g.field.empty ? g.field.summary() : null,
     combatSalvage: g.combatSalvage || 0,
+    carried: { ...g.carried },
+    materialLeft: g.terrain.materialLeft ? g.terrain.materialLeft() : null,
     hull: Math.round(ship.hull), hullMax: ship.hullMax,
     abilityUsed: g.abilities ? g.abilities.used : 0,
   };
@@ -535,11 +554,18 @@ function onLand() {
 
   if (g.run) {
     g.run.missionsCleared++;
+    const left = g.terrain.materialLeft ? g.terrain.materialLeft() : { material: 0, salvage: 0, nodes: 0 };
     const reward = missionReward({
       grade: q, padMultiplier: mult, fuelLeft: ship.fuel, maxFuel: ship.maxFuel,
       rareMaterial: g.level.rareMaterial, firstClear: true, offPad,
       coreDrought: g.run.coreDrought || 0,
       padTier: pad ? pad.tier || 0 : 0,
+      // The hold, and what was left lying out there - the results screen shows
+      // both, because "what you did not take" is the interesting half.
+      carried: {
+        ...g.carried,
+        leftMaterial: left.material, leftSalvage: left.salvage, leftNodes: left.nodes,
+      },
     });
     g.run.coreDrought = reward.cores ? 0 : (g.run.coreDrought || 0) + 1;
     if (reward.pityCore) particles.text(ship.x, ship.y - 92, 'TECH CORE RECOVERED', '#5ff5ff', 20);
@@ -744,6 +770,7 @@ function draw() {
   if (vis < 0.985) {
     R.drawDust(ctx, W, H, g.level, vis, g.time);
     R.drawPadBeacons(ctx, cam, W, H, g.terrain, g.level, g.time, 1 - vis, present);
+    R.drawMaterialBeacons(ctx, cam, W, H, g.terrain, g.time, 1 - vis, present);
   }
 
   if (g.state === 'play' || g.state === 'paused') {
@@ -928,6 +955,7 @@ function screenHTML(s) {
           <span>${r.objective.met ? 'OBJECTIVE MET' : 'OBJECTIVE'}</span> ${r.objective.text}
           — <b>${r.objective.progress}</b>${r.objective.met && r.objective.reward
             ? ` · +${Object.entries(r.objective.reward).map(([k, v]) => `${v} ${k}`).join(', ')}` : ''}</div>` : ''}
+        ${haulPanel(r)}
         ${r.combat ? `<div class="objective"><span>THREATS</span>
           ${r.combat.total} on this ground · ${r.combat.kills} destroyed ·
           ${r.combat.hitsTaken} hit${r.combat.hitsTaken === 1 ? '' : 's'} taken ·
@@ -949,6 +977,7 @@ function screenHTML(s) {
         <div class="verdict bad">LANDER LOST</div>
         <p class="body">${crashReason()}</p>
         <div class="stats"><span>SHUTTLES LEFT</span><b>${g.lives}</b></div>
+        ${g.carried && g.carried.nodes ? `<div class="stats lost"><span>CARGO LOST</span><b>${g.carried.material} MATERIAL · ${g.carried.salvage} SALVAGE</b></div>` : ''}
         ${g.run ? '<p class="body">The same ground, the same seed. Fly it again knowing what it does.</p>' : ''}
         ${assist ? `<div class="objective assist"><span>FLIGHT ASSIST</span> ${assist.tip}</div>` : ''}
         <div class="btns">${btn('retry', 'TRY AGAIN', true, 'SPACE')}${
@@ -1297,6 +1326,24 @@ function threatBrief() {
   const rows = threats.map((t) =>
     `<div><b>${t.name}</b> <i>${t.kind === 'air' ? 'airborne' : 'ground'}</i> — ${t.counterplay}</div>`).join('');
   return `<div class="threats"><span>HOSTILE SYSTEMS</span>${rows}</div>`;
+}
+
+/**
+ * The hold, on the results screen. The point of M15 is that the reward is a
+ * thing you went and got, so what came home is shown next to what was left
+ * lying out there - that gap is the whole invitation to fly it again.
+ */
+function haulPanel(r) {
+  const c = r.carried || { material: 0, salvage: 0, nodes: 0 };
+  const left = r.materialLeft || { material: 0, salvage: 0, nodes: 0 };
+  if (!c.nodes && !left.nodes) return '';
+  const rw = g.lastReward;
+  const mult = rw && rw.haulMult != null ? rw.haulMult : 1;
+  return `<div class="objective haul${c.nodes ? ' met' : ''}">
+    <span>${c.nodes ? 'RECOVERED' : 'NOTHING RECOVERED'}</span>
+    ${c.nodes} of ${c.nodes + left.nodes} deposit${c.nodes + left.nodes === 1 ? '' : 's'} —
+    <b>${c.material} material · ${c.salvage} salvage</b>${mult !== 1 ? ` × ${mult.toFixed(2)} landing` : ''}${
+    left.nodes ? ` · <i>${left.material} material still out there</i>` : ''}</div>`;
 }
 
 function metricsTable(d) {
