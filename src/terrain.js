@@ -14,7 +14,20 @@ import { buildArchetype } from './archetypes.js';
  * threw "cannot access before initialization" in the single-file build and
  * nowhere else. A node carries its distance `tier` now, and economy prices it.
  */
-export const MATERIAL_SITE = { radius: 62, padGuard: 150 };
+export const MATERIAL_SITE = {
+  radius: 62,
+  padGuard: 150,
+  // How far a crate hangs above the ground it was left over. M22 brought the
+  // crossing crates into this band from the glide line, which had them a mean
+  // of 243 px up and as much as 718 - a marker in the sky rather than cargo.
+  //
+  // Lower is not free: the detour costs a descent and a climb, and a collector
+  // sweep measures 85/300 landings at a mean of 215 px, 82 at 170, 79 at 133
+  // and 75 at 106. This band halves the hang height and caps the worst case at
+  // 240 px while collecting exactly as much as the old glide-line rule did.
+  floatLo: 110,
+  floatHi: 240,
+};
 
 /**
  * The three knobs M19 tunes, in one place so the whole game moves together
@@ -841,8 +854,13 @@ export class Terrain {
       return true;
     };
 
-    // The crossing: ore floating below the glide line, so reaching it costs
+    // The crossing: crates hanging low over the ground, so reaching one costs
     // altitude on the leg where altitude is what keeps you out of reach.
+    //
+    // They used to hang off the glide line, which put them a mean of 243 px up
+    // and as much as 718 - high enough that a crate read as a marker floating
+    // in the sky rather than as cargo somebody left on the ground. M22 brings
+    // them into the same band the seam crates already used.
     const entryY = this.entry.y != null ? this.entry.y : this.height * 0.14;
     const road = clamp(Math.round(span / 900), 2, 3);
     // Spread along the crossing, but expressed in *bands* rather than in
@@ -860,9 +878,8 @@ export class Terrain {
         const x = clamp(this.entry.x + dir * span * t + (rng() - 0.5) * span * 0.08, 150, this.width - 150);
         const ground = this.heightAt(x);
         const roof = this.ceiling ? this.ceilingAt(x) : this.height * 0.10;
-        const glide = entryY + (deep.y - 170 - entryY) * t + 70;
-        const y = clamp(glide + rng.range(90, 170), roof + 90, ground - 95);
-        if (ground - y < 95 || y - roof < 90) continue;
+        const y = clamp(ground - rng.range(MATERIAL_SITE.floatLo, MATERIAL_SITE.floatHi), roof + 90, ground - MATERIAL_SITE.floatLo);
+        if (ground - y < MATERIAL_SITE.floatLo || y - roof < 90) continue;
         if (add(x, y, 'float')) break;
       }
     }

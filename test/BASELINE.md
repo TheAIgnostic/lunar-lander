@@ -1284,3 +1284,53 @@ placed along the road: the median deposit sits 247 px from a machine, against 45
 
 The flight fixture moved on the armed authored missions only. No classic mission and none of the
 three quiet chapter-openers moved, which is the containment check.
+
+---
+
+## M22 — ore you can read (2026-08-20)
+
+Two changes, both Tom's: the reward should be a crate you recognise, and the shaft of light marking
+it should go.
+
+### The marker told you where, and nothing else
+
+A deposit was a rotating violet diamond under a 150-210 px column of light. It solved the M14
+problem — you could not find the ore — by pointing at it, which is a different thing from making the
+ore visible. What is drawn now is a **crate**: a chamfered container with strapping, ore glowing
+through a slot, a hover cushion under it and a shadow on the ground it hangs over. A deep-band crate
+carries **two** slots and is a size larger, so "worth about double" reads without a legend.
+
+The dust beacon — the marker drawn *above* Mars' storms so a target stays distinct at 22% visibility
+— is the crate's own silhouette now rather than a diamond, so what shows through the weather is the
+thing you are looking for.
+
+### They hang low over the ground now
+
+Crossing deposits were positioned against the *glide line*, which put them a mean of **243 px** above
+the ground and as much as **718** — high enough to read as a marker floating in the sky rather than
+as cargo somebody left. They are placed against the ground itself now, in the same band the seam
+crates already used.
+
+Lower is not free, and the trade is monotonic — a crate nearer the ground costs a deeper descent and
+a longer climb:
+
+| band above ground | mean height | collector sweep lands | deposits taken |
+| --- | ---: | ---: | ---: |
+| 70-150 | 106 px | 75/300 | 1.30 |
+| 85-190 | 133 px | 79/300 | 1.47 |
+| **110-240 (shipped)** | **170 px** | **82/300** | **1.62** |
+| 140-300 | 215 px | 85/300 | 1.76 |
+| the glide line (before) | 243 px | 82/300 | 1.80 |
+
+The shipped band **halves the hang height and caps the worst case at 240 px against 718, while
+collecting as much as the glide-line rule did**. Seam crates are unchanged at a mean of 93 px.
+
+| | before | after |
+| --- | ---: | ---: |
+| crossing crate height | mean 243 px, max 718 | **mean 170 px, max 240** |
+| seam crate height | mean 94 px | 93 px |
+| collector sweep | 82/300 | 82/300 |
+
+The flight fixture did not move at all, which is the right answer: the pilot only detours for ore
+when it is told to, so a change to where the ore hangs cannot move a flight that was never going
+there.

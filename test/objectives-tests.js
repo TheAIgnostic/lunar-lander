@@ -1,7 +1,7 @@
 // Optional objectives, the distance gradient and the fuel road:
 //   node test/objectives-tests.js
 import { OBJECTIVES, OBJECTIVE_IDS, objectiveDef, cargoFor, evaluateObjective } from '../src/objectives.js';
-import { Terrain } from '../src/terrain.js';
+import { Terrain, MATERIAL_SITE } from '../src/terrain.js';
 import { spawnFor } from '../src/spawn.js';
 import { flyMission } from './pilot.js';
 import { missionReward, nodeWorth, haulOf } from '../src/economy.js';
@@ -164,6 +164,17 @@ const report = (over = {}) => ({
       const t = new Terrain(lvl, seed);
       check(`${lvl.id}: no deposit in the near band`, t.materialNodes.every((m) => m.tier > 0));
       check(`${lvl.id}: no deposit on a landing zone`, t.materialNodes.every((m) => !t.padAt(m.x)));
+      // M22: a crate hangs low over the ground it was left over, not up on the
+      // glide line. High enough to be a low pass rather than a landing, low
+      // enough to read as cargo somebody left rather than a marker in the sky.
+      check(`${lvl.id}: every crate hangs near the ground`,
+        t.materialNodes.every((m) => {
+          const above = t.heightAt(m.x) - m.y;
+          return above >= 55 && above <= MATERIAL_SITE.floatHi + 10;
+        }),
+        t.materialNodes.map((m) => Math.round(t.heightAt(m.x) - m.y)).join(' '));
+      check(`${lvl.id}: and none of them is resting on it`,
+        t.materialNodes.every((m) => t.heightAt(m.x) - m.y > 40));
       check(`${lvl.id}: the deep band pays more per deposit`,
         t.materialNodes.every((m) => nodeWorth(m.tier).material === (m.tier === 2 ? 24 : 13)));
     }

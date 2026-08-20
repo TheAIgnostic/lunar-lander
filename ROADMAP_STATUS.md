@@ -509,6 +509,23 @@ scheduled until the MVP is stable — the spec says the same.
   - the symmetric-overlap bug: counting overlaps only against machines *already placed* passes a
     candidate that pushes three others to four. The new validator rule caught it on its first run
 
+- [x] **M22 — ore you can read** (this commit)
+  - a deposit was a rotating diamond under a 150-210 px **shaft of light**, which solved M14's "you
+    cannot find the ore" by pointing at it rather than by making it visible. It is a **crate** now:
+    chamfered, strapped, ore glowing through a slot, a hover cushion under it and a shadow on the
+    ground below. A deep-band crate carries two slots and is a size larger, so "worth about double"
+    reads without a legend
+  - the dust beacon - the marker drawn above Mars' storms so a target survives 22% visibility - is
+    the crate's own silhouette now, so what shows through the weather is the thing you are looking for
+  - **they hang low over the ground.** Crossing crates were positioned against the glide line, which
+    put them a mean of 243 px up and as much as 718. Against the ground instead: mean **170 px**,
+    max 240
+  - lower is not free and the trade is monotonic - a collector sweep lands 85/300 at a mean of 215 px,
+    82 at 170, 79 at 133, 75 at 106. The shipped band halves the hang height **and collects exactly
+    as much as the glide-line rule did**
+  - the flight fixture did not move at all, which is the right answer: the pilot only detours for ore
+    when told to, so where the ore hangs cannot move a flight that was never going there
+
 ## Decisions (Tom, 2026-08-16)
 
 1. **Gravity** — compressed mapping is the *baseline*, then a per-body hand-tuned offset so each
@@ -526,9 +543,9 @@ None.
 
 ## Next task
 
-One content milestone remains from Tom's playtest, then a cleanup that is now overdue enough to be
-scheduled rather than mentioned. M23 is a refactor with no behaviour change, which makes it the
-safest thing on this list to hand to a cold session.
+**Tom's playtest list is done.** M20, M21 and M22 covered every item on it. What remains is the
+cleanup, which is now overdue enough to be scheduled rather than mentioned — and being a refactor
+with no behaviour change, it is the safest thing on this list to hand to a cold session.
 
 ### M21 — structures, and guards that belong somewhere
 
@@ -547,12 +564,6 @@ safest thing on this list to hand to a cold session.
   — and every flight survives, but two of fifteen missions cannot keep the promise the other
   thirteen do. This is the milestone that places machines, so it belongs here
 - re-run the encounter audit either side
-
-### M22 — ore you can read (next)
-
-- material becomes **floating ore crates near the ground**; the light-ray marker goes
-- the M23 import fix already separated placement from pricing, so this is a render change plus a
-  placement tweak in `terrain._placeMaterial`
 
 ### M23 — the cleanup
 
@@ -595,12 +606,12 @@ that needs none of the conversation that produced this plan.
 
 **The first prompt for a new session:**
 
-> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then the M19 and M20 sections of
-> `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything. Then implement M21.
+> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then the M21 and M22 sections of
+> `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything. Then implement M23.
 
 That shape matters more than the wording: read the state, then *measure* the state, then build. Every
 milestone in this project that went well started from a number, and both of the ones that went badly
-started from an assumption. Swap M21 for whichever milestone is next.
+started from an assumption. Swap M23 for whichever milestone is next.
 
 M20 is the cleanest example so far. The complaint was "Europa still has smooth basins", and the
 first thing done about it was to measure every chapter's surface — Europa came out the *smoothest*

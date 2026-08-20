@@ -525,41 +525,92 @@ export function drawTerrain(ctx, cam, W, H, terrain, level, time, opts = {}) {
     const deep = m.tier >= 2;
     const bob = Math.sin(time * 1.7 + m.phase) * (m.kind === 'float' ? 7 : 3);
     const pulse = throb(time * 0.9 + m.x * 0.004, 2.6, opts.flash != null ? opts.flash : 1, 0.7);
+
+    // A crate on a hover cushion, not a shaft of light.
+    //
+    // The old marker was a 150 px light ray with a diamond at the bottom, which
+    // told you *where* the reward was and nothing about what it was. A crate is
+    // an object in the world: it hangs low over the ground, it throws a shadow
+    // on the ground it hangs over, and the ore glowing in its slot is what you
+    // are actually flying down to collect.
+    const shadow = terrain.heightAt(m.x);
+    if (shadow - m.y < 320) {
+      ctx.save();
+      ctx.globalAlpha = 0.28 * clamp(1 - (shadow - m.y) / 320, 0, 1);
+      ctx.fillStyle = '#05030a';
+      ctx.beginPath();
+      ctx.ellipse(m.x, shadow - 2, (deep ? 22 : 18), 4.5, 0, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+    }
+
     ctx.save();
     ctx.translate(m.x, m.y + bob);
-    // A shaft of light, so a deposit on the ground reads from a long way up.
-    ctx.globalAlpha = 0.30 * pulse;
-    ctx.fillStyle = VIOLET;
+    const halfW = deep ? 16 : 13;
+    const halfH = deep ? 12 : 10;
+    const chamfer = deep ? 5 : 4;
+
+    // The cushion it rides on.
+    ctx.globalAlpha = 0.45 * pulse;
+    const cushion = ctx.createLinearGradient(0, halfH, 0, halfH + 16);
+    cushion.addColorStop(0, VIOLET);
+    cushion.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = cushion;
     ctx.beginPath();
-    ctx.moveTo(-9, 0);
-    ctx.lineTo(9, 0);
-    ctx.lineTo(4, -150 - (deep ? 60 : 0));
-    ctx.lineTo(-4, -150 - (deep ? 60 : 0));
+    ctx.moveTo(-halfW * 0.8, halfH);
+    ctx.lineTo(halfW * 0.8, halfH);
+    ctx.lineTo(halfW * 0.45, halfH + 15);
+    ctx.lineTo(-halfW * 0.45, halfH + 15);
     ctx.closePath();
     ctx.fill();
     ctx.globalAlpha = 1;
 
-    const r = deep ? 15 : 12;
-    ctx.rotate(Math.sin(time * 0.5 + m.phase) * 0.25);
+    // The crate itself, tilting gently rather than spinning: a container that
+    // rotates has nothing holding it up.
+    ctx.rotate(Math.sin(time * 0.6 + m.phase) * 0.09);
+    ctx.beginPath();
+    ctx.moveTo(-halfW + chamfer, -halfH);
+    ctx.lineTo(halfW - chamfer, -halfH);
+    ctx.lineTo(halfW, -halfH + chamfer);
+    ctx.lineTo(halfW, halfH - chamfer);
+    ctx.lineTo(halfW - chamfer, halfH);
+    ctx.lineTo(-halfW + chamfer, halfH);
+    ctx.lineTo(-halfW, halfH - chamfer);
+    ctx.lineTo(-halfW, -halfH + chamfer);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(9,6,18,0.92)';
+    ctx.fill();
     ctx.strokeStyle = VIOLET;
     ctx.shadowColor = VIOLET;
-    ctx.shadowBlur = 18 * pulse;
-    ctx.lineWidth = 2.4;
-    ctx.beginPath();
-    ctx.moveTo(0, -r);
-    ctx.lineTo(r * 0.78, 0);
-    ctx.lineTo(0, r);
-    ctx.lineTo(-r * 0.78, 0);
-    ctx.closePath();
+    ctx.shadowBlur = 14 * pulse;
+    ctx.lineWidth = 2.2;
     ctx.stroke();
-    if (deep) {                       // the far band is worth about double
+
+    // The ore showing through the slot, and the strapping around it. A deep
+    // crate carries two slots, because the far band is worth about double and
+    // that has to read without a legend.
+    ctx.shadowBlur = 16 * pulse;
+    ctx.fillStyle = VIOLET;
+    const slots = deep ? [-halfW * 0.42, halfW * 0.42] : [0];
+    for (const sx of slots) {
       ctx.beginPath();
-      ctx.moveTo(0, -r);
-      ctx.lineTo(0, r);
-      ctx.moveTo(-r * 0.78, 0);
-      ctx.lineTo(r * 0.78, 0);
-      ctx.stroke();
+      ctx.moveTo(sx, -halfH * 0.52);
+      ctx.lineTo(sx + halfW * 0.3, 0);
+      ctx.lineTo(sx, halfH * 0.52);
+      ctx.lineTo(sx - halfW * 0.3, 0);
+      ctx.closePath();
+      ctx.fill();
     }
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 0.55;
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(-halfW, -halfH * 0.42);
+    ctx.lineTo(halfW, -halfH * 0.42);
+    ctx.moveTo(-halfW, halfH * 0.42);
+    ctx.lineTo(halfW, halfH * 0.42);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
     ctx.restore();
   }
 }
@@ -585,13 +636,12 @@ export function drawMaterialBeacons(ctx, cam, W, H, terrain, time, strength, opt
     ctx.shadowColor = VIOLET;
     ctx.shadowBlur = 22 * pulse;
     ctx.lineWidth = 3 / cam.scale + 1;
-    const r = 16;
+    // The same silhouette the crate has, so what shows through the storm is the
+    // thing you are looking for rather than a different symbol for it.
+    const bw = m.tier >= 2 ? 17 : 14;
+    const bh = m.tier >= 2 ? 13 : 11;
     ctx.beginPath();
-    ctx.moveTo(m.x, m.y - r);
-    ctx.lineTo(m.x + r * 0.78, m.y);
-    ctx.lineTo(m.x, m.y + r);
-    ctx.lineTo(m.x - r * 0.78, m.y);
-    ctx.closePath();
+    ctx.rect(m.x - bw, m.y - bh, bw * 2, bh * 2);
     ctx.stroke();
   }
   ctx.restore();
