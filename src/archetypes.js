@@ -9,6 +9,15 @@
 
 import { clamp, smoothstep, TAU } from './util.js';
 
+/**
+ * How wide a macro feature is, as a fraction of the level. M19 pulled these in:
+ * "narrower" is the other half of "bumpier", and a trench you can fly down the
+ * middle of without thinking is scenery rather than terrain. Pads are carved
+ * after the silhouette, so a landing zone is still flat and still wide enough
+ * for the lander's stance - what narrows is the air around it.
+ */
+export const NARROW = 0.85;
+
 const bump = (d, w) => Math.exp(-(d / w) * (d / w));          // gaussian in normalised units
 const plateau = (d, w, sharp = 6) => clamp(1 - Math.pow(Math.abs(d) / w, sharp), 0, 1);
 
@@ -23,7 +32,7 @@ export const ARCHETYPES = {
   /** Bowl with a raised rim and a pad on an offset inner shelf. */
   crater(rng, cfg) {
     const cx = rng.range(0.38, 0.62);
-    const R = rng.range(0.26, 0.34);
+    const R = rng.range(0.26, 0.34) * NARROW;
     const depth = cfg.relief * rng.range(0.9, 1.25);
     const rim = cfg.relief * rng.range(0.28, 0.45);
     const shelfSide = rng() < 0.5 ? -1 : 1;
@@ -50,7 +59,7 @@ export const ARCHETYPES = {
   /** Steep-walled trench; the pad sits on the floor, out of sight from above. */
   canyon(rng, cfg) {
     const cx = rng.range(0.35, 0.65);
-    const halfW = rng.range(0.1, 0.16);
+    const halfW = rng.range(0.1, 0.16) * NARROW;
     const depth = cfg.relief * rng.range(1.1, 1.5);
     const floorOffset = rng.range(-0.5, 0.5) * halfW;
     return {
@@ -105,7 +114,7 @@ export const ARCHETYPES = {
   /** Crater with a central peak - the pad hides on a terrace beside it. */
   caldera(rng, cfg) {
     const cx = rng.range(0.42, 0.58);
-    const R = rng.range(0.28, 0.36);
+    const R = rng.range(0.28, 0.36) * NARROW;
     const depth = cfg.relief * rng.range(1.0, 1.3);
     const peak = cfg.relief * rng.range(0.9, 1.3);
     const side = rng() < 0.5 ? -1 : 1;

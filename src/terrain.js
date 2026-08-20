@@ -11,6 +11,24 @@ import { MATERIAL_NODE } from './economy.js';
 // "cannot access before initialization" the moment the single-file build boots.
 // The macOS self-test caught it; nothing else would have.
 
+/**
+ * The three knobs M19 tunes, in one place so the whole game moves together
+ * rather than fifteen missions moving one at a time.
+ *
+ *   relief  the macro silhouette's amplitude - how deep a canyon, how tall a rim
+ *   rough   the midpoint-displacement amplitude - how broken the surface is
+ *   bite    how much of the archetype's own noise damping to give back, 0..1.
+ *           Archetypes deliberately smooth their interiors so the shape stays
+ *           readable (0.25 inside a canyon, 0.35 in a crater bowl); this lifts
+ *           those floors toward 1 so the inside of a feature is rough too,
+ *           which is where "bumpy" is actually felt.
+ *
+ * Tom asked for three times bumpier. Three times is past the point where the
+ * mission validator can still promise a landing: see test/BASELINE.md for the
+ * sweep and where the wall is.
+ */
+export const TERRAIN = { relief: 1.8, rough: 1.25, bite: 0.25 };
+
 export class Terrain {
   constructor(cfg, seed) {
     const rng = makeRng(seed);
@@ -32,10 +50,14 @@ export class Terrain {
     // The macro silhouette is laid down first; the familiar midpoint noise then
     // rides on top of it, damped wherever the shape needs to stay readable.
     this.shape = buildArchetype(this.archetypeName, rng, {
-      relief: spec.relief != null ? spec.relief : Math.max(180, cfg.rough * 1.4),
+      relief: (spec.relief != null ? spec.relief : Math.max(180, cfg.rough * 1.4)) * TERRAIN.relief,
     });
 
-    this._midpoint(groundBase, cfg.rough, rng);
+    // The roughness multiplier applies to authored and generated missions only.
+    // Legacy levels have no archetype, and the classic twelve have been
+    // byte-identical since M2; roughing them up would quietly rewrite the
+    // campaign this expansion promised not to touch.
+    this._midpoint(groundBase, cfg.rough * (this.shape ? TERRAIN.rough : 1), rng);
 
     if (this.shape) {
       const base = new Float32Array(n);
@@ -56,7 +78,12 @@ export class Terrain {
 
       for (let i = 0; i < n; i++) {
         const nx = i / (n - 1);
-        this.h[i] = groundBase - this.shape.elevation(nx) * fit + base[i] * this.shape.noise(nx);
+        // `bite` gives back some of the damping the archetype applies to its
+        // own interior, so a canyon floor is broken ground rather than a smooth
+        // trough. Pads are carved after this, so a landing zone is still flat.
+        const damp = this.shape.noise(nx);
+        const mix = damp + (1 - damp) * TERRAIN.bite;
+        this.h[i] = groundBase - this.shape.elevation(nx) * fit + base[i] * mix;
       }
       for (let k = 0; k < 2; k++) {
         for (let i = 1; i < n - 1; i++) this.h[i] = (this.h[i - 1] + this.h[i] * 2 + this.h[i + 1]) / 4;
@@ -249,8 +276,15 @@ export class Terrain {
       const y = Math.round(sum / (i2 - i1 + 1));
       for (let k = i1; k <= i2; k++) this.h[k] = y + (k - mid) * this.step * slope;
 
-      for (let k = 1; k <= 5; k++) {
-        const t = k / 6;
+      // Blend the shoulders back into the landscape. The run scales with how
+      // rough the world is: a five-sample blend was fine on gentle ground and
+      // became a step off a cliff once M19 roughened everything, which is what
+      // was costing landings - the pad was flat, but the last thing you flew
+      // over on the way in was not. Roughening the world has to come with a
+      // longer approach, or the roughness lands entirely on the touchdown.
+      const skirt = Math.max(5, Math.round(5 * TERRAIN.rough * (1 + TERRAIN.bite)));
+      for (let k = 1; k <= skirt; k++) {
+        const t = k / (skirt + 1);
         if (i1 - k >= 0) this.h[i1 - k] = this.h[i1 - k] * t + this.h[i1] * (1 - t);
         if (i2 + k < this.n) this.h[i2 + k] = this.h[i2 + k] * t + this.h[i2] * (1 - t);
       }

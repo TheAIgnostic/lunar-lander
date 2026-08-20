@@ -86,8 +86,13 @@ export function missionToLevel(mission) {
 
     gravity: gravityFor(mission.planet),
     width: mission.width,
-    height: 1400,
-    groundBase: 300,
+    // M19 raised the world's vertical budget. `legroom` for a canyon is
+    // `groundBase - 70` and it was 230 px, which meant the fit clamp squashed
+    // every trench to about half its intended depth: raising the relief
+    // multiplier made the compression worse and the canyon no deeper. More
+    // ground base buys depth; more height keeps the rim room that buys it back.
+    height: 1600,
+    groundBase: 520,
     rough: mission.rough,
     fuel: mission.fuel,
 

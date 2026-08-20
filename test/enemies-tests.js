@@ -72,13 +72,19 @@ function shipAt(x, y, loadout = {}) {
 
 // --- inside the minimum range, a ground gun cannot bring the barrel to bear
 {
-  const lvl = MOON_LEVELS[3];
+  // One gun on the map, deliberately. This used to fly at `enemies[0]` on a
+  // two-turret mission and assert that *nothing* fired, which quietly depended
+  // on the second turret being out of range - true until M19's terrain moved
+  // them 253 px apart, at which point the far gun did the shooting and the
+  // rule under test was never exercised at all.
+  const lvl = { ...MOON_LEVELS[3], enemyBudget: 1 };
   const terrain = new Terrain(lvl, 1000);
   const field = new EnemyField(lvl, terrain, 1000);
   const e = field.enemies[0];
   const ship = shipAt(e.x + 20, e.y - 30);   // right on top of it
   for (let i = 0; i < 1200; i++) field.update(1 / 120, i / 120, ship);
-  check('flying inside a turret’s arc silences it', field.shotsFired === 0 && ship.hull === ship.hullMax);
+  check('flying inside a turret’s arc silences it', field.shotsFired === 0 && ship.hull === ship.hullMax,
+    `${field.shotsFired} shots, hull ${ship.hull}`);
 }
 
 // --- a shot is never born already touching the lander
