@@ -273,7 +273,18 @@ export class Ship {
     if (hullHit) return 'crash';
     if (!footHit) return null;
 
-    // First contact opens an aggregation window rather than deciding now.
+    // First contact opens an aggregation window rather than deciding now -
+    // unless the impact is already past saving. The window exists so a
+    // one-frame speed spike cannot fail a good approach; it was never meant to
+    // let a lander arriving at twice the crash limit bounce twice before it
+    // admits what happened. Anything beyond the crash cap on its own axis ends
+    // here, on the frame it touched.
+    const cfg0 = this.gearTier !== 1 ? { ...LANDING, gearTier: this.gearTier } : LANDING;
+    const medVy = Ship.median(this.vyHistory.concat(this.vy));
+    const medVx = Ship.median(this.vxHistory.concat(this.vx));
+    const fatal = medVy > capsFor('vy', cfg0).crash
+      || Math.abs(medVx) > capsFor('vx', cfg0).crash
+      || Math.abs(normalizeAngle(this.angle)) > capsFor('tilt', cfg0).crash;
     this.contact = { x: this.x, y: this.y };
     this.touchdown = {
       t: 0,
@@ -285,6 +296,10 @@ export class Ship {
       bounces: 0,
       hull: false,
     };
+    if (fatal) {
+      this.touchdown.fatal = true;
+      return this.finishTouchdown(terrain);
+    }
     return null;
   }
 
@@ -296,6 +311,18 @@ export class Ship {
   settle(dt, level, terrain) {
     const td = this.touchdown;
     td.t += dt;
+
+    // Flying away cancels the landing. On a low-friction body the window can
+    // stay open for seconds while the lander slides, and control is handed back
+    // during that time - so a player could take off, cross half the map, and
+    // have the mission resolve underneath them. If the gear is clear of the
+    // ground and climbing, this was not a landing.
+    const clearance = terrain.heightAt(this.x) - this.y;
+    if (clearance > LANDING.abortHeight && this.vy < 0) {
+      this.touchdown = null;
+      this.contact = null;
+      return null;
+    }
 
     // The gear owns the first moments of contact. After that, if the lander is
     // still travelling - which on ice it will be - control comes back, because
@@ -392,7 +419,12 @@ export class Ship {
 
     const speed = Math.hypot(this.vx, this.vy);
     const resting = contacts > 0 && speed < LANDING.restSpeed && Math.abs(this.spin) < 0.5;
-    const maxSettle = LANDING.maxSettle / Math.max(0.2, level.surfaceFriction != null ? level.surfaceFriction : 1);
+    // Ice gets longer to come to rest, but not unboundedly: dividing by
+    // Europa's 0.07 friction gave a 7.5 s pending touchdown, which is what let
+    // a landing resolve long after the player had given up on it and flown off.
+    const friction = level.surfaceFriction != null ? level.surfaceFriction : 1;
+    const stretch = Math.min(LANDING.maxSettleStretch, 1 / Math.max(0.2, friction));
+    const maxSettle = LANDING.maxSettle * stretch;
     if ((td.t >= LANDING.aggregationWindow && resting) || td.t >= maxSettle) {
       return this.finishTouchdown(terrain);
     }

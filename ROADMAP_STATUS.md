@@ -340,6 +340,33 @@ scheduled until the MVP is stable — the spec says the same.
     0.48 at four
 
 
+- [x] **M16 — the glitch sweep, and the rules of a run** (this commit)
+  - **wrecks fall.** A dead drone stayed in the sky at the exact point it died, which is what Tom
+    saw hanging over Buried Array. Death starts a fall now; the wreck tumbles, lands and stays put
+  - **the Seeker Drone is a mine guard**, not a diamond: ducted rotor, squat armoured body, hazard
+    stripe, landing skids and a caged sensor head that points where it is looking
+  - **a fatal impact ends on the contact frame.** Measured: past the crash cap resolves in 0.000 s,
+    while survivable landings keep their 0.35-0.75 s window, which is what stops a one-frame spike
+    failing a good approach. Every flight-fixture change was a crash resolving *sooner* — no
+    landing became a crash and no crash became a landing
+  - **Europa's landings register.** `maxSettle` divided by Europa's 0.07 friction gave a **7.5
+    second** pending touchdown, so a landing resolved long after the player had given up on it and
+    flown away. The stretch is capped at 1.8x, and climbing away now cancels the touchdown outright
+  - **the weapon arrives when you are shot at**, not a chapter later. M15 armed twelve of fifteen
+    missions, so the old timing meant meeting drones on Europa 2 with nothing to answer them
+  - **the hangar and the loadout are closed during an expedition**, and there is no mid-mission
+    restart. Losing a lander replays the ground; losing all three ends the run
+  - **switching modes mid-run was leaking state** — pressing CLASSIC CAMPAIGN left `g.run` and
+    `g.chapter` set and kept flying the expedition's mission under a "classic" label. Found while
+    testing the restart rule. Mode switches are refused now, with ABANDON EXPEDITION as the way out
+  - **refusals are audible.** A blocked action says why, in the overlay or in the world — a button
+    that silently does nothing reads as a broken button
+  - **`audio.engines` wrote 240 automation events a second**, forever, including while silent. It
+    only re-schedules on change now. Tom heard a click while holding a key; instrumentation found no
+    repeated triggers, so this is the most likely cause rather than a confirmed one
+  - **`__goMission('EUROPA', 2)` gave Europa 3** — the hook took a 0-based index while its name and
+    the architecture note both say mission number
+
 ## Decisions (Tom, 2026-08-16)
 
 1. **Gravity** — compressed mapping is the *baseline*, then a per-body hand-tuned offset so each
@@ -357,22 +384,101 @@ None.
 
 ## Next task
 
-**M16 — Titan, and the fuel budgets.** Nothing is blocking it; two things are ready to be picked up.
+**M16-M22 — Tom's playtest, 2026-08-20.** One report, seven milestones. Order is chosen so each one
+unblocks the next: fix what is broken, then fix what things are *called*, then make the world
+readable, then rebuild the ground, then the things standing on it.
 
-The spec's production order (section 16, Phase 7) puts **Titan** next: five authored missions
-replacing its generated survey chapter, one rare-material loop, and planet-specific feedback. Thick
-atmosphere makes it the hardest deep run already measured in the game (`prize 15/30` on the survey
-chapter), so it is the body that will test whether the fuel road carries a real atmosphere.
+Four decisions taken with Tom before starting:
 
-Do the **fuel budget pass** first, or alongside. It has been a known finding since M14 and M15 gave
-it a number: sweeping every deposit lands 156/300, and on `mars-2` and `europa-4` it lands **0/20**,
-because those budgets were authored for a 900 px traverse and are now flown across 2,000-2,600 px
-with a road and an ore field in between. Taking only the deposits on the road is affordable
-(236/300, 27-55% fuel left), so the shape is right and the numbers are stale. Re-authoring them is a
-deliberate pass with the encounter audit either side of it, not a tweak.
+1. **Fragile ice pads are removed**, not repaired. Europa's difficulty comes from the surface and
+   the slide, not a hidden speed cap that punishes a landing the player would call clean.
+2. **Radiation damages the hull** over time. It was instrument noise only, which is why it read as
+   meaningless, and it gives Europa the hull bar it never had.
+3. **A fatal impact explodes on contact.** The M1 settle window stays for *survivable* landings,
+   where it exists to stop a one-frame speed spike failing a good approach.
+4. **The Pulse Laser failing on Blue Fracture is a bug**, not a design complaint. Investigate it.
 
-Read, in order: this file, `docs/ARCHITECTURE.md`, and the M14/M15 sections of `test/BASELINE.md`.
-Then **measure before editing**: `./test/run-all.sh 20`, which now ends with the encounter audit.
+---
+
+### M16 — the glitch sweep, and the rules of a run  ✅ done (this commit)
+
+Nothing new; only things that are wrong. This goes first because several later milestones would
+otherwise be built on top of it.
+
+- dead drones leave a wreck **hanging exactly where they died** — an air unit's wreck never falls.
+  Confirmed in `drawWreck`: it draws at `e.x, e.y` forever. Wrecks should fall and settle.
+- the Seeker Drone is a plain diamond; redraw it as a **guard drone for an abandoned mine**
+- **Europa 1**: landed inside the x2 zone and the game did not register it, then resolved the
+  mission seconds after drifting off the pad entirely
+- **Europa 2**: the Pulse Laser does not work
+- a fatal impact **bounces before it explodes**; it should destroy on the contact frame
+- **a clicking noise while a key is held** (S especially, sometimes space)
+- **the hangar and the loadout must be closed during an expedition** — permanent upgrades are
+  between runs, not mid-run
+- **no restarting a mission mid-expedition.** Losing a lander replays that mission; losing all three
+  ends the run and returns to the start, like any roguelite
+
+### M17 — what things are called
+
+Cheap, wide, no physics. Doing it before the content work means the content is authored with the
+right names.
+
+- **OUTFIT becomes LOADOUT** everywhere
+- **mission names get simpler** and briefs get rewritten: natural, spoken, game-like. No dashes as
+  connectors — that habit is all over the current text
+- **expeditions run in sectors 1-5**, matching the classic campaign's shape
+- **the route screen offers two destinations, not four**, each with a themed planet icon; keep the
+  forecast of what a body pays, which Tom said works
+- **the loadout can be changed every two planets**, at the sector checkpoint, and nowhere else
+
+### M18 — hazards you can feel
+
+Tom's line was that the effects are not noticeable enough. Every item here is a number that is too
+small to reach the hand.
+
+- **wind strong enough to fly against**, and a Gyro Stabilizer that is worth the slot
+- **Mars visibility that actually blinds**; the dust currently reads as a tint
+- **radiation damages the hull** on a timer you can watch, shielded by terrain and by the Ray Shield
+- **a hull bar on every body**, not only the ones with machines on them
+
+### M19 — terrain with teeth
+
+The high-risk one, like M2 was. Everything here has to survive the mission validator.
+
+- **three times the relief**: taller, narrower, more to fly around
+- **ceilings closer**, and a cave you *fly into* — open sky at the entry, enclosed by the deep end
+- **rocks at many sizes**, including some far larger than today's
+
+### M20 — Europa, properly icy
+
+- spiky, fractured ice rather than the smooth basins it has now
+- fragile pads removed; the body's identity carried by the surface and the slide instead
+
+### M21 — structures, and guards that belong somewhere
+
+Depends on M19's ground.
+
+- **turrets sit on flat, short ground or on towers**, never half-buried in a slope
+- **two to three times as many machines per mission**
+- **abandoned buildings and towers** where the mission fiction supports them, especially around the
+  turrets
+
+### M22 — ore you can read
+
+- material becomes **floating ore crates near the ground**
+- the light-ray marker goes
+
+---
+
+### Open questions carried into these milestones
+
+- **"Two to three times more turrets" against the spec's "1-3 at once, rarely 4"** (section 12).
+  Read as *more machines across the map*, so a player meets one to three at a time on a route
+  rather than four at once in a fight. The sanctuary rule is not up for negotiation without Tom
+  saying so: the near landing zone stays outside every machine's reach, which is what keeps a
+  weapon optional. To be re-measured with the encounter audit and shown to him.
+- **Mission fuel budgets** are still stale (see Known findings) and M19 makes the ground harder to
+  cross. The budget pass may have to happen inside M19 rather than after it.
 
 ### Superseded
 

@@ -306,10 +306,39 @@ export class EnemyField {
     const target = ship.alive && !ship.landed && !ship.touchdown ? ship : null;
     for (const e of this.enemies) {
       if (e.hitFlash > 0) e.hitFlash = Math.max(0, e.hitFlash - dt);
-      if (!e.dead) this._stepEnemy(e, dt, t, target, events);
+      if (e.dead) this._stepWreck(e, dt);
+      else this._stepEnemy(e, dt, t, target, events);
     }
     this._stepShots(dt, target, events);
     return events;
+  }
+
+  /**
+   * Kill a machine. An air unit's wreck used to stay in the sky at the exact
+   * point it died - Tom saw one hanging over Buried Array - so death now starts
+   * a fall rather than freezing the thing in place.
+   */
+  _kill(e) {
+    e.dead = true;
+    e.state = 'dead';
+    e.fallVy = 0;
+    e.spinWreck = (e.dir || 1) * 1.4;
+    e.tilt = 0;
+    e.grounded = typeOf(e).kind !== 'air';
+  }
+
+  /** Wreckage falls, tumbles, and stops when it reaches the ground. */
+  _stepWreck(e, dt) {
+    if (e.grounded) return;
+    e.fallVy = (e.fallVy || 0) + (this.level.gravity || 28) * dt;
+    e.y += e.fallVy * dt;
+    e.tilt = (e.tilt || 0) + (e.spinWreck || 0) * dt;
+    const ground = this.terrain.heightAt(e.x) - typeOf(e).radius * 0.5;
+    if (e.y >= ground) {
+      e.y = ground;
+      e.grounded = true;
+      e.fallVy = 0;
+    }
   }
 
   _stepEnemy(e, dt, t, ship, events) {
@@ -445,8 +474,7 @@ export class EnemyField {
     if (ship && type.ram && Math.hypot(ship.x - e.x, ship.y - e.y) < type.ram.range) {
       const res = ship.damage(type.ram.damage, 'ram');
       this.hitsTaken++;
-      e.dead = true;
-      e.state = 'dead';
+      this._kill(e);
       events.push({ kind: 'ram', enemy: e, x: e.x, y: e.y, destroyed: res.destroyed });
     }
   }
@@ -500,8 +528,7 @@ export class EnemyField {
     e.hp -= amount;
     e.hitFlash = 0.25;
     if (e.hp > 0) return 0;
-    e.dead = true;
-    e.state = 'dead';
+    this._kill(e);
     this.kills++;
     return typeOf(e).reward;
   }

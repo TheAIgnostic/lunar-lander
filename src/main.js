@@ -583,6 +583,15 @@ function onLand() {
   }
   meta.stats.landings++;
   if (q === 'PERFECT') meta.stats.perfect++;
+  // The weapon arrives once you have survived a mission that shot at you, not
+  // a whole chapter later. M15 armed twelve of fifteen missions, so the old
+  // timing meant meeting drones on Europa 2 with nothing to answer them and no
+  // sign the game intended you to have anything - which is what Tom hit.
+  if (g.field && !g.field.empty && g.field.summary().shotsFired > 0
+      && !meta.unlockedBlueprints.includes(COMBAT_BLUEPRINT)) {
+    meta.unlockedBlueprints = [...meta.unlockedBlueprints, COMBAT_BLUEPRINT];
+    particles.text(ship.x, ship.y - 128, 'WEAPON BLUEPRINT RECOVERED', '#5ff5ff', 20);
+  }
   recordFlight(q);
   if (!g.run) Save.saveMeta(meta);
 
@@ -815,6 +824,24 @@ function setState(s) {
 const btn = (action, text, primary = false, key = '') =>
   `<button class="btn${primary ? ' primary' : ''}" data-action="${action}">${text}${key ? `<span class="key">${key}</span>` : ''}</button>`;
 
+/**
+ * Say no, out loud. Several actions are now refused rather than silently
+ * ignored - the hangar during an expedition, a mid-mission restart - and a
+ * button that does nothing when you press it reads as a broken button.
+ */
+function toast(message) {
+  // In flight the overlay is hidden, so a refusal has to be said in the world
+  // instead - otherwise pressing R mid-mission looks like a dead key.
+  if (g.state === 'play' && ship.alive) {
+    particles.text(ship.x, ship.y - 74, message.toUpperCase(), '#ffb347', 15);
+    return;
+  }
+  g.notice = message;
+  clearTimeout(g.noticeTimer);
+  g.noticeTimer = setTimeout(() => { g.notice = null; renderOverlay(); }, 3200);
+  renderOverlay();
+}
+
 function renderOverlay() {
   const s = g.state;
   if (s === 'play') {
@@ -823,7 +850,7 @@ function renderOverlay() {
     return;
   }
   overlay.className = '';
-  overlay.innerHTML = screenHTML(s);
+  overlay.innerHTML = (g.notice ? `<div class="toast">${g.notice}</div>` : '') + screenHTML(s);
   if (s === 'hangar') drawHangarPreview();
 }
 
@@ -860,12 +887,13 @@ function screenHTML(s) {
         <div class="btns">
           ${chapterName ? btn('resume-run', 'RESUME EXPEDITION', true, 'SPACE') : ''}
           ${btn('chapters', 'EXPEDITION', !chapterName, chapterName ? '' : 'SPACE')}
-          ${btn('campaign', 'CLASSIC CAMPAIGN')}
-          ${btn('select', 'MISSIONS')}
-          ${btn('endless', 'ENDLESS RUN')}
+          ${chapterName || g.run ? '' : btn('campaign', 'CLASSIC CAMPAIGN')}
+          ${chapterName || g.run ? '' : btn('select', 'MISSIONS')}
+          ${chapterName || g.run ? '' : btn('endless', 'ENDLESS RUN')}
+          ${chapterName || g.run ? btn('abandon-run', 'ABANDON EXPEDITION') : ''}
           ${btn('help', 'HOW TO FLY')}
-          ${btn('hangar', 'HANGAR')}
-          ${btn('outfit', 'OUTFIT')}
+          ${chapterName || g.run ? '' : btn('hangar', 'HANGAR')}
+          ${chapterName || g.run ? '' : btn('outfit', 'OUTFIT')}
           ${btn('stats', 'LOGBOOK')}
           ${btn('settings', 'SETTINGS')}
         </div>
@@ -1308,7 +1336,8 @@ function screenHTML(s) {
     case 'paused':
       return `<div class="screen">
         <h2>PAUSED</h2>
-        <div class="btns">${btn('resume', 'RESUME', true, 'P')}${btn('retry', 'RESTART MISSION', false, 'R')}${btn('settings', 'SETTINGS')}${btn('menu', 'MENU')}</div>
+        <div class="btns">${btn('resume', 'RESUME', true, 'P')}${
+          g.run ? '' : btn('retry', 'RESTART MISSION', false, 'R')}${btn('settings', 'SETTINGS')}${btn('menu', 'MENU')}</div>
       </div>`;
   }
   return '';
@@ -1561,20 +1590,40 @@ function act(action) {
   switch (action) {
     case 'chapters': setState('chapters'); break;
     case 'campaign':
+      // Switching modes used to leave the expedition running underneath: the
+      // campaign started, `g.run` and `g.chapter` stayed set, and the "classic"
+      // mission you were flying was still mars-1. An expedition is left
+      // deliberately, through RESUME or ABANDON, or not at all.
+      if (g.run) { toast('Finish or abandon the expedition first.'); break; }
       g.campaign = 'classic';
+      g.chapter = null;
       g.endless = false;
       g.score = 0; g.lives = 3; g.combo = 0; g.newRecord = false;
       startLevel(Math.min(store.unlocked - 1, LEVELS.length - 1));
       break;
     case 'endless':
+      if (g.run) { toast('Finish or abandon the expedition first.'); break; }
       g.campaign = 'classic';
+      g.chapter = null;
       g.endless = true;
       g.score = 0; g.lives = 3; g.combo = 0; g.newRecord = false;
       startLevel(LEVELS.length);
       break;
-    case 'select': setState('select'); break;
-    case 'hangar': setState('hangar'); break;
-    case 'outfit': setState('outfit'); break;
+    case 'select':
+      if (g.run) { toast('Finish or abandon the expedition first.'); break; }
+      setState('select');
+      break;
+    // Permanent upgrades belong between expeditions. Refitting mid-run turns a
+    // lost lander into a shopping trip, which is the opposite of a roguelite.
+    // The one exception is the sector checkpoint, which opens the loadout.
+    case 'hangar':
+      if (g.run) { toast('The hangar is closed while an expedition is under way.'); break; }
+      setState('hangar');
+      break;
+    case 'outfit':
+      if (g.run && !g.loadoutWindow) { toast('Loadout is locked until the next sector checkpoint.'); break; }
+      setState('outfit');
+      break;
     case 'settings':
       if (g.state !== 'keys') g.settingsFrom = g.state;
       g.rebinding = null;
@@ -1591,7 +1640,16 @@ function act(action) {
       }
       else startLevel(g.levelIndex + 1);
       break;
-    case 'retry': startLevel(g.levelIndex, !g.run); break;
+    case 'retry':
+      // In an expedition you do not get to rewind. Losing the lander replays
+      // the mission on the same ground; anything else is a fresh attempt you
+      // have to earn. Outside a run, retry is just a retry.
+      if (g.run && ship.alive && g.state !== 'crash') {
+        toast('No restarts on an expedition. Fly it, or lose the lander.');
+        break;
+      }
+      startLevel(g.levelIndex, !g.run);
+      break;
     case 'menu':
       // Bump the token: a landing or a crash may still have a settle timer in
       // flight, and it must not fire into a menu with no level under it.
@@ -1715,7 +1773,11 @@ window.__preview = (archetype, relief = 260, detail = 1) => {
 };
 
 /** Dev: jump straight to any mission of any chapter, for testing content. */
-window.__goMission = (chapterId, index = 0) => {
+// Mission *number*, 1-5, which is what the name says and what the architecture
+// note documents. It took a 0-based index, so `__goMission('EUROPA', 2)` gave
+// you Europa 3 and every hand-check aimed one mission past the target.
+window.__goMission = (chapterId, mission = 1) => {
+  const index = Math.max(0, (mission | 0) - 1);
   g.run = null;
   g.chapter = chapterFor(chapterId, g.forcedSeed != null ? g.forcedSeed : 1, 1);
   g.campaign = chapterId;
@@ -1727,6 +1789,7 @@ window.__goMission = (chapterId, index = 0) => {
 
 /** Dev: the live enemy field, and a way to fire the module from a test. */
 window.__field = () => g.field;
+window.__audio = audio;   // so a test can count what actually gets played
 window.__useAbility = () => (g.abilities ? g.abilities.trigger(ship) : false);
 
 window.__setSeed = (n) => { g.forcedSeed = n == null ? null : (n | 0); return g.forcedSeed; };

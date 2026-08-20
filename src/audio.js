@@ -55,9 +55,21 @@ export class Audio {
     if (this.master) this.master.gain.value = m ? 0 : 0.9;
   }
 
-  /** Continuous engine levels, called every frame. */
+  /**
+   * Continuous engine levels, called every frame.
+   *
+   * Only re-schedules when something actually changes. It used to write two
+   * automation events per voice on every single frame - 240 a second, forever,
+   * including while the engines were already silent - which re-anchors the
+   * envelope faster than it can settle and is a well-known source of zipper
+   * artefacts. Tom heard a clicking while holding a key, which is exactly the
+   * steady state where this was doing the most pointless work.
+   */
   engines(mainOn, rcsOn) {
     if (!this.ready) return;
+    if (this._mainOn === mainOn && this._rcsOn === rcsOn) return;
+    this._mainOn = mainOn;
+    this._rcsOn = rcsOn;
     const t = this.ctx.currentTime;
     const set = (v, on) => {
       v.g.gain.setTargetAtTime(on ? v.gain : 0, t, on ? 0.02 : 0.08);
@@ -69,6 +81,8 @@ export class Audio {
 
   silence() {
     if (!this.ready) return;
+    this._mainOn = null;
+    this._rcsOn = null;
     if (this.laserVoice) this.laserVoice.g.gain.setTargetAtTime(0, this.ctx.currentTime, 0.02);
     this.engines(false, false);
   }

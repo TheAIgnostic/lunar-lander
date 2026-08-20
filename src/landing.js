@@ -25,6 +25,8 @@ export const LANDING = {
   // single physics spike cannot turn a good landing into a wreck.
   aggregationWindow: 0.20,   // s
   maxSettle: 1.5,            // s - give up waiting for the ship to come to rest
+  maxSettleStretch: 1.8,     // most that a slippery surface may extend that by
+  abortHeight: 26,           // px clear of the ground that cancels a touchdown
   restSpeed: 6,              // px/s below which the ship counts as settled
 
   // Gear response during that window.

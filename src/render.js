@@ -625,6 +625,15 @@ function drawTurret(ctx, e, type, time, opts = {}) {
   ctx.restore();
 }
 
+/**
+ * The Seeker Drone: a mine-site guard, not a spaceship.
+ *
+ * It was a plain diamond, which read as "generic enemy" rather than as a thing
+ * that used to patrol these workings. Now it is a squat armoured body slung
+ * under a ducted rotor, with a caged sensor head and a hazard stripe - the
+ * shape of equipment somebody bolted together to watch a mine, and still
+ * unmistakable at a glance from the ground gun.
+ */
 function drawDrone(ctx, e, type, time, opts = {}) {
   ctx.save();
   ctx.translate(e.x, e.y);
@@ -633,32 +642,80 @@ function drawDrone(ctx, e, type, time, opts = {}) {
   const bob = Math.sin(time * 3 + e.beat) * 2.4;
   ctx.translate(0, bob);
   ctx.strokeStyle = col;
-  ctx.fillStyle = 'rgba(10,14,22,0.9)';
+  ctx.fillStyle = 'rgba(10,14,22,0.92)';
   ctx.lineWidth = 2;
   ctx.globalAlpha = threatAlpha(e);
+  const r = type.radius;
+
+  // Rotor duct above the hull, and the blade blur inside it.
   ctx.beginPath();
-  ctx.moveTo(-type.radius, 0);
-  ctx.lineTo(0, -type.radius * 0.75);
-  ctx.lineTo(type.radius, 0);
-  ctx.lineTo(0, type.radius * 0.75);
+  ctx.ellipse(0, -r * 0.86, r * 0.95, r * 0.26, 0, 0, TAU);
+  ctx.stroke();
+  ctx.save();
+  ctx.globalAlpha = threatAlpha(e) * 0.55;
+  const blade = time * (hot ? 26 : 15) + e.beat;
+  ctx.beginPath();
+  ctx.ellipse(0, -r * 0.86, r * 0.8 * Math.abs(Math.cos(blade)) + 1.5, r * 0.16, 0, 0, TAU);
+  ctx.stroke();
+  ctx.restore();
+  // Mast joining the duct to the body.
+  ctx.beginPath();
+  ctx.moveTo(0, -r * 0.86);
+  ctx.lineTo(0, -r * 0.42);
+  ctx.stroke();
+
+  // Squat armoured body with a chamfered underside.
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.82, -r * 0.40);
+  ctx.lineTo(r * 0.82, -r * 0.40);
+  ctx.lineTo(r * 0.60, r * 0.34);
+  ctx.lineTo(-r * 0.60, r * 0.34);
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
-  // nacelles
+
+  // Hazard stripe along the flank - mine equipment, painted to be seen.
+  ctx.save();
+  ctx.globalAlpha = threatAlpha(e) * 0.7;
+  ctx.lineWidth = 1.2;
+  for (let i = -2; i <= 2; i++) {
+    ctx.beginPath();
+    ctx.moveTo(i * r * 0.28 - 3, -r * 0.36);
+    ctx.lineTo(i * r * 0.28 + 3, -r * 0.06);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Landing skids, so it reads as something that sets down between patrols.
+  ctx.lineWidth = 1.6;
   ctx.beginPath();
-  ctx.moveTo(-type.radius - 6, -3);
-  ctx.lineTo(-type.radius + 2, -3);
-  ctx.moveTo(type.radius - 2, -3);
-  ctx.lineTo(type.radius + 6, -3);
+  ctx.moveTo(-r * 0.66, r * 0.34);
+  ctx.lineTo(-r * 0.80, r * 0.72);
+  ctx.moveTo(r * 0.66, r * 0.34);
+  ctx.lineTo(r * 0.80, r * 0.72);
+  ctx.moveTo(-r * 1.0, r * 0.72);
+  ctx.lineTo(-r * 0.55, r * 0.72);
+  ctx.moveTo(r * 0.55, r * 0.72);
+  ctx.lineTo(r * 1.0, r * 0.72);
   ctx.stroke();
+
+  // Caged sensor head, aimed where the drone is looking.
   const eye = hot ? 1 : Math.max(0.2, e.alert);
+  ctx.save();
+  ctx.translate(0, r * 0.02);
+  ctx.rotate(e.aim || 0);
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 0.30, 0, TAU);
+  ctx.stroke();
   ctx.fillStyle = col;
   ctx.shadowColor = col;
   ctx.shadowBlur = 12 * eye;
   ctx.beginPath();
-  ctx.arc(0, 0, 2.6, 0, TAU);
+  ctx.arc(r * 0.10, 0, 2.4, 0, TAU);
   ctx.fill();
   ctx.shadowBlur = 0;
+  ctx.restore();
   ctx.restore();
 }
 
@@ -684,13 +741,21 @@ function drawThreatMark(ctx, e, type) {
 function drawWreck(ctx, e, type) {
   ctx.save();
   ctx.translate(e.x, e.y);
-  ctx.globalAlpha = 0.45;
+  ctx.rotate(e.tilt || 0);
+  ctx.globalAlpha = e.grounded ? 0.45 : 0.7;
   ctx.strokeStyle = 'rgba(120,135,150,0.7)';
   ctx.lineWidth = 1.6;
+  const r = type.radius;
+  // A broken hull, plus a snapped strut - readable as debris rather than as a
+  // shape hanging in the air, which is what it used to look like.
   ctx.beginPath();
-  ctx.moveTo(-type.radius, type.radius * 0.6);
-  ctx.lineTo(-type.radius * 0.3, -type.radius * 0.2);
-  ctx.lineTo(type.radius * 0.5, type.radius * 0.5);
+  ctx.moveTo(-r * 0.8, r * 0.3);
+  ctx.lineTo(-r * 0.25, -r * 0.25);
+  ctx.lineTo(r * 0.45, r * 0.35);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.1, r * 0.35);
+  ctx.lineTo(r * 0.7, -r * 0.1);
   ctx.stroke();
   ctx.restore();
 }
