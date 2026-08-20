@@ -1626,3 +1626,72 @@ than deleted, because the question they answer is still open: when the remaining
 authored, do they join `PLANET_ORDER` or come back as a tiered choice after the ladder? That is a
 design call. Until it is made this is dead code with passing tests — the exact state the M11 note
 warns about.
+
+---
+
+## M25b — pay before you open the shop (2026-08-20)
+
+Tom cleared the Moon, opened the hangar, and it read **0 salvage**. His playtest log header, copied
+minutes later, read `banked salvage 300 · data 112`. Both were true, and the gap between them is the
+bug.
+
+### The order was inverted
+
+M25 made every body a supply stop, but the banking itself still lived in the **route handler** — the
+code that runs when a card is clicked, which is when the player *leaves* the stop. So the sequence
+was:
+
+1. clear a body → checkpoint screen opens, hangar and loadout unlocked
+2. player spends... nothing. `meta.banked` is still empty; the haul is still in `run.haul`
+3. player gives up, clicks the next body
+4. **now** the haul is banked
+
+The money arrived immediately after the only window in which it could be spent. M25 fixed *when the
+window opens*; it did not fix *when the money lands*, and the second bug was hidden by the first.
+
+Banking happens on the way **in** now, in `main.js`, before `setState('checkpoint')`. Proved at
+runtime by flying the last Moon mission to a landing:
+
+| at the moment the checkpoint screen opens | |
+| --- | ---: |
+| `state` | `checkpoint` |
+| `loadoutWindow` | `true` |
+| banked salvage | **994** |
+| banked data | **197** |
+| `run.haul` | **emptied** |
+
+...and the hangar screen then reads `994 salvage · 197 data · 1 cores`, with a gear purchase taking
+it to 674 and gear level 1 → 2. That is the exact screen from Tom's report, working.
+
+### Three faults found alongside it
+
+- **the log was dropping its machine count.** `summary()` has no `alive` key — it is `total` — so
+  `machines=` was `undefined` and the flat-value filter dropped the line silently. Every
+  `mission-start` after moon-1 was missing it, which is visible in Tom's log and is why moon-1 is the
+  only mission that reports a number.
+- **`bankHaul` already existed in `economy.js`.** The bundler's duplicate-declaration guard caught
+  the collision on the first build — the bundle is one scope, and this is the guard's fifth catch.
+  Renamed `settleAndBank`.
+- **the run-lost screen was reading out two numbers it had just zeroed.** It promised "what you
+  transmitted is still yours" above BANKED SALVAGE and BANKED RESEARCH, both of which `wipeForDeath`
+  empties on the way past. It now says what the run actually cost and lists what the hangar kept,
+  and its only exit is back to the start screen.
+
+### A dead overlay is no longer possible
+
+The toast's 3.2 s timer re-renders whatever state is current when it expires, and several screens
+read `g.level`. The settle timers guard against exactly this with `g.token`; the toast timer never
+did, and a `brief` screen with a null level threw during scripted testing.
+
+Rather than add a fourth guard, `renderOverlay` now falls back to the menu when a screen cannot
+render — the same rule the save loader follows, that the game must never present a blank screen
+because of one bad value. It is **logged, not swallowed**: `screen-failed screen=brief error=...`
+appears in the playtest log, so this hides nothing from a test session.
+
+### From Tom's log, not yet acted on
+
+The Moon is expensive now. Across his two runs he lost **four landers to enemy fire on moon-3, -4
+and -5**, each to two hits about thirty seconds apart, and the first run ended on moon-5 without
+clearing the chapter. A cleared Moon paid 300 salvage; the cheapest hangar level costs 320. Both are
+the M24 lethality and the stale M15-era budgets meeting on the introductory body. Recorded as
+measurement, not changed — the damage figure is Tom's, and the budgets are a separate decision.

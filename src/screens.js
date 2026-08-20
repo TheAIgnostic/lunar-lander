@@ -541,22 +541,29 @@ export function screenHTML(s) {
     }
 
     case 'expedition-over': {
-      const b = meta.banked;
+      // The copy here used to promise "what you transmitted is still yours" and
+      // print the banked totals underneath. Since M24 that is the opposite of
+      // what happens: `wipeForDeath` takes the skills, the salvage and the
+      // research on the way past, so the screen was reading out two numbers it
+      // had just zeroed. It says what the run actually cost now, and what the
+      // hangar kept - which is the only thing that carries.
+      const kept = Object.entries(meta.componentLevels || {})
+        .filter(([, lvl]) => lvl > 1)
+        .map(([id, lvl]) => `${COMPONENTS[id] ? COMPONENTS[id].name : id} ${lvl}`);
       return `<div class="screen">
         <div class="verdict bad">EXPEDITION LOST</div>
-        <p class="body">All three shuttles are gone. What you transmitted is still yours.
-        The expedition ends. The programme does not.</p>
+        <p class="body">All three shuttles are gone. The skills, the salvage and the research go
+        with them, and the route closes back to the Moon. What the hangar has already bolted on
+        is yours for good.</p>
         <table class="score">
           <tr><td>Missions cleared</td><td>${g.lastRunSummary ? g.lastRunSummary.missions : 0}</td></tr>
           <tr><td>Run score</td><td>${formatScore(g.score)}</td></tr>
-          <tr class="tot"><td>BANKED SALVAGE</td><td>${formatScore(b.salvage)}</td></tr>
-          <tr class="run"><td>BANKED RESEARCH</td><td>${formatScore(b.data)}</td></tr>
+          <tr class="tot"><td>KEPT — HANGAR</td><td>${kept.length ? kept.join(' · ') : 'nothing fitted yet'}</td></tr>
+          <tr class="run"><td>LOST — SALVAGE &amp; RESEARCH</td><td>everything unspent</td></tr>
         </table>
-        ${g.lastRunSummary && g.lastRunSummary.settled && g.lastRunSummary.settled.debrief
-          ? `<div class="objective"><span>DEBRIEF</span> The flight recorders came home:
-             +${g.lastRunSummary.settled.debrief.salvage} salvage, +${g.lastRunSummary.settled.debrief.data} research.
-             Enough to change something before the next attempt.</div>` : ''}
-        <div class="btns">${btn('chapters', 'NEW EXPEDITION', true, 'SPACE')}${btn('menu', 'MENU')}</div>
+        <p class="body">Next time out, spend it at a supply stop rather than carrying it. A body you
+        have already cleared can be re-flown to pay for the hangar.</p>
+        <div class="btns">${btn('menu', 'BACK TO START', true, 'SPACE')}</div>
       </div>`;
     }
 

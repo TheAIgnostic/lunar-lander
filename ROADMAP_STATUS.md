@@ -609,6 +609,27 @@ scheduled until the MVP is stable — the spec says the same.
     than deleted, because whether the remaining seven bodies join `PLANET_ORDER` or return as a
     tiered choice is Tom's design call. Dead code with passing tests until it is made
 
+- [x] **M25b — pay before you open the shop** (this commit)
+  - Tom cleared the Moon, opened the hangar, saw **0 salvage**; his log header read 300. Both true:
+    M25 made every body a supply stop but left the banking in the *route handler*, which runs when
+    the player **leaves** the stop. The money arrived immediately after the only window it could be
+    spent in. Banking happens on the way **in** now
+  - proved at runtime: at the moment the checkpoint opens, banked 994 salvage / 197 data, haul
+    emptied, and the hangar buys gear 1 → 2 (994 → 674)
+  - **loadout and hangar after every body**, per Tom, and **game over returns to the start screen**
+  - the run-lost screen was reading out two numbers `wipeForDeath` had just zeroed, under the words
+    "what you transmitted is still yours". It says what was lost and what the hangar kept now
+  - the playtest log was silently dropping `machines=`: `summary()` has no `alive` key, it is
+    `total`, and the flat-value filter discarded the undefined
+  - the bundler's duplicate-declaration guard caught `bankHaul` colliding with `economy.js` on the
+    first build — its fifth catch. Renamed `settleAndBank`
+  - **a dead overlay is no longer possible**: the toast's 3.2 s timer re-renders whatever state is
+    current and several screens read `g.level`, which the settle timers guard with `g.token` and the
+    toast timer never did. A screen that cannot render falls back to the menu and is *logged*
+  - **from Tom's log, recorded not acted on:** four landers lost to fire on moon-3/-4/-5 across two
+    runs, each to two hits ~30 s apart, and a cleared Moon pays 300 against a cheapest hangar level
+    of 320. M24's lethality and the stale M15-era budgets meeting on the introductory body
+
 ## Decisions (Tom, 2026-08-16)
 
 1. **Gravity** — compressed mapping is the *baseline*, then a per-body hand-tuned offset so each

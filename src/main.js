@@ -172,11 +172,28 @@ function beginExpedition() {
  * The ladder is finished. Bank the last haul, record that the game has been
  * carried to its end (which is what opens mission select), and release the run.
  */
-function finishExpedition() {
+/**
+ * Settle the haul into permanent banked resources and empty it. The `id` stamp
+ * is what stops a reload between the write and the payout paying twice.
+ * Returns what was settled, for the screen that reports it.
+ */
+function settleAndBank() {
   const run = g.run;
   const settled = settleHaul(run.haul, { completed: true });
   setMeta(Save.bankRun(meta, run, { completed: true, settled, id: `sector-${run.sector}` }));
   run.haul = { salvageSafe: 0, salvageCargo: 0, data: 0, cores: 0, materials: {} };
+  Save.saveRun(run);
+  Save.saveMeta(meta);
+  Log.log('banked', {
+    salvage: settled.salvage || 0, data: settled.data || 0, cores: settled.cores || 0,
+    total: meta.banked.salvage, totalData: meta.banked.data,
+  });
+  return settled;
+}
+
+function finishExpedition() {
+  const run = g.run;
+  const settled = settleAndBank();
   run.score = g.score;
   Save.saveRun(run);
   g.lastRunSummary = { missions: run.missionsCleared, chapter: run.chapterId, settled, complete: true };
@@ -229,7 +246,7 @@ function launch() {
     // The worst visibility this mission reaches, not the ship's current one:
     // no force has run at launch, so ship.env still reads the default 1.
     visWorst: worstVisibility(lv),
-    machines: g.field && !g.field.empty ? g.field.summary().alive : 0,
+    machines: g.field && !g.field.empty ? g.field.summary().total : 0,
     active: (meta.equipped && meta.equipped.active) || '', passive: (meta.equipped && meta.equipped.passive) || '',
   });
   const active = meta.equipped && meta.equipped.active;
@@ -614,10 +631,23 @@ function onLand() {
         // "replay to farm" cards with no next body, and the win only fired once
         // you clicked one of them.
         if (isExpeditionComplete(g.run.cleared)) { finishExpedition(); return; }
-        // The supply stop after every body: the haul is banked and the loadout
-        // and hangar open. Both close again as soon as the next leg is chosen.
-        g.loadoutWindow = isCheckpoint(g.run.chaptersCleared);
-        setState(g.loadoutWindow ? 'checkpoint' : 'route');
+        // The supply stop after every body. **Bank on the way in.** M25a banked
+        // in the route handler instead - that is, when the player *left* the
+        // stop by choosing the next body - so the hangar and the loadout opened
+        // on a pot that was still empty and filled up behind them once they had
+        // gone. Tom cleared the Moon, opened the hangar, and it read 0 salvage
+        // while his log header read 300. Pay first, then open the doors.
+        if (isCheckpoint(g.run.chaptersCleared)) {
+          settleAndBank();
+          g.lives = g.run.maxShuttles;
+          g.run.shuttles = g.lives;
+          g.loadoutWindow = true;
+          persistRun();
+          setState('checkpoint');
+          return;
+        }
+        g.loadoutWindow = false;
+        setState('route');
         return;
       }
       if (g.level && (g.chapter || CHAPTERS[g.campaign])) {
@@ -859,8 +889,25 @@ function renderOverlay() {
     return;
   }
   overlay.className = '';
-  overlay.innerHTML = (g.notice ? `<div class="toast">${g.notice}</div>` : '') + screenHTML(s);
-  if (s === 'hangar') drawHangarPreview();
+  // Several screens read `g.level`, and a timer can fire into a state where it
+  // is already null: the settle timers guard against that with `g.token`, but
+  // the 3.2 s toast timer re-renders whatever state is current when it expires
+  // and has no such guard. Rather than add a fourth guard and hope it is the
+  // last one, a screen that cannot render falls back to the menu - the same
+  // rule the save loader follows, that the game must never present a blank
+  // screen because of one bad value. It is logged rather than swallowed, so a
+  // playtest still reports it instead of hiding it.
+  let html;
+  try {
+    html = screenHTML(s);
+  } catch (err) {
+    Log.log('screen-failed', { screen: s, error: String(err && err.message) });
+    g.level = null;
+    g.state = 'menu';
+    html = screenHTML('menu');
+  }
+  overlay.innerHTML = (g.notice ? `<div class="toast">${g.notice}</div>` : '') + html;
+  if (g.state === 'hangar') drawHangarPreview();
 }
 
 /** The large lander in the hangar, redrawn whenever the selection changes. */

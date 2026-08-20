@@ -166,19 +166,10 @@ export function act(action) {
     if (!card || !g.run) return;
     const run = g.run;
     if (g.state === 'checkpoint') {
-      // A checkpoint banks everything and restores the expedition. It is also
-      // the only place mid-run where the loadout may be changed, so the window
-      // closes again the moment the next leg is chosen.
-      const settled = settleHaul(run.haul, { completed: true });
-      setMeta(Save.bankRun(meta, run, { completed: true, settled, id: `sector-${run.sector}` }));
-      Save.saveRun(run);
-      Save.saveMeta(meta);
-      run.haul = { salvageSafe: 0, salvageCargo: 0, data: 0, cores: 0, materials: {} };
+      // The haul was banked and the shuttles restored on the way *in* to the
+      // supply stop (main.js), so that the hangar and the loadout open on money
+      // that is actually there. All that is left here is advancing the leg.
       run.sector++;
-      g.lives = run.maxShuttles;
-      // Completion is not decided here any more: main.js ends the expedition on
-      // the frame the last body is cleared, so by the time this screen is
-      // reachable there is always somewhere left to go.
     }
     g.loadoutWindow = false;
     run.chapterId = card.planet;
