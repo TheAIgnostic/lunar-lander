@@ -1695,3 +1695,51 @@ and -5**, each to two hits about thirty seconds apart, and the first run ended o
 clearing the chapter. A cleared Moon paid 300 salvage; the cheapest hangar level costs 320. Both are
 the M24 lethality and the stale M15-era budgets meeting on the introductory body. Recorded as
 measurement, not changed — the damage figure is Tom's, and the budgets are a separate decision.
+
+---
+
+## M26 — the Moon stopped feeling random (2026-08-20)
+
+Tom, after several runs: "terrain on moon does not feel random anymore. why is the shape of
+environment always the same. or am I mistaken."
+
+Not mistaken, and not a bug. Measured across four seeds, moon-1's heightmap hash, pads, entry side
+and boulder count all change — and its archetype is `crater` every time, because `missions.js`
+hardcodes one archetype per authored mission. Fifteen missions, fifteen permanent silhouettes.
+
+It only became a problem when **M25 made the campaign a fixed ladder**. Before that you routed
+between ten bodies; now you replay these same fifteen maps every run, forever. `generateChapter` has
+dealt shapes from the body's palette since M9 — the authored chapters, the only ones on the ladder,
+never did.
+
+### What changed
+
+`chapterFor` rebuilds an authored chapter per run and deals fresh shapes to its **unpinned**
+missions. Pinned means named for its shape (THE CRATER, THE TRENCH, THE CANYON, THE CREVASSE) or a
+**cave** — europa-2 and europa-4 drop a roof over a canyon corridor, and that roof over dunes is not
+a variation, it is a geometry the validator has never seen.
+
+| distinct chapter layouts | before | after |
+| --- | ---: | ---: |
+| Moon | **1** | **24** |
+| Mars | **1** | **24** |
+| Europa | **1** | **24** |
+
+The module-level `MOON_LEVELS` / `MARS_LEVELS` / `EUROPA_LEVELS` are untouched, which is why both
+fixtures and every sweep still measure exactly what they measured before.
+
+### Three things the measurement forced
+
+- **Deal from the palette minus the pinned shapes.** Dealing from the whole palette scored better
+  per slot and read worse: Europa came out basin/canyon/mesa/canyon/**canyon**, three canyons in
+  five, a duller chapter than the fixed shapes it replaced.
+- **The pool is the palette *plus* what the content already wears.** Europa's palette is
+  basin/canyon/mesa, but THE FLOES is authored as a caldera and RADIATION PASS as a ridge. Dealing
+  from the palette alone would have quietly retired two shapes the body demonstrably uses — and
+  Europa's double ridges are the most recognisable landform on the real moon.
+- **`mulberry32`'s first output correlates across nearby seeds.** A two-item pool rides entirely on
+  that first value, and Europa dealt an identical chapter on every seed tried until four draws were
+  discarded. Anything reading only one or two numbers from a fresh `makeRng` wants a warm-up.
+
+`LUNA.terrainPalette` gained `basin` — a lunar mare *is* an impact basin, and without it the Moon had
+only three unpinned shapes to deal from, capping it at 6 layouts instead of 24.

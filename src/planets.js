@@ -41,7 +41,9 @@ export const PLANETS = {
   LUNA: P({
     id: 'LUNA', displayName: 'THE MOON', realGravity: 1.62, world: 'LUNA',
     rareMaterial: 'Ilmenite alloy stock',
-    terrainPalette: ['crater', 'canyon', 'ridge', 'caldera', 'mesa'],
+    // 'basin' belongs here: a lunar mare is an impact basin, and without it
+    // the Moon had only three unpinned shapes to deal from (M26).
+    terrainPalette: ['crater', 'canyon', 'ridge', 'caldera', 'mesa', 'basin'],
     eligibleEnemySets: ['sentry-turret'],
     summary: 'No atmosphere. Inertia, fuel planning and rugged ground.',
   }),

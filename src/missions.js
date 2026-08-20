@@ -39,6 +39,8 @@ export const MOON_MISSIONS = [
     id: 'moon-1', planet: 'LUNA', index: 1, name: 'THE CRATER',
     brief: 'A wide bowl with the pad on a shelf inside it. You cannot just drop in. Carry your speed across the bowl, then set down flat.',
     width: 2700, relief: 250, detail: 1.0, rough: 150, fuel: 124,
+    // THE CRATER is named for its shape, so its shape does not move.
+    pinShape: true,
     terrain: { archetype: 'crater' },
     pads: [{ mult: 3, width: 130 }, { mult: 2, width: 200 }],
     optionalObjective: { id: 'sample-titanium', text: 'Recover a titanium-rich sample', reward: { data: 20 } },
@@ -48,6 +50,7 @@ export const MOON_MISSIONS = [
     id: 'moon-2', planet: 'LUNA', index: 2, name: 'THE TRENCH',
     brief: 'A deep channel with the pad on the floor, tucked under a cliff. Kill your sideways drift early. Down here a late correction costs more than you have.',
     width: 2900, relief: 300, detail: 1.6, rough: 170, fuel: 116,
+    pinShape: true,   // THE TRENCH is named for its shape
     terrain: { archetype: 'canyon' },
     pads: [{ mult: 3, width: 120 }],
     optionalObjective: { id: 'fuel-25', text: 'Land with at least 25% fuel', reward: { salvage: 40 } },
@@ -169,6 +172,7 @@ export const MARS_MISSIONS = [
     id: 'mars-2', planet: 'MARS', index: 2, name: 'THE CANYON',
     brief: 'The wind here stacks in layers, and each layer runs the other way. Drop through them one at a time. Go straight down and it will throw you into a wall.',
     width: 3100, relief: 300, detail: 1.4, rough: 200, fuel: 132,
+    pinShape: true,   // THE CANYON is named for its shape
     terrain: { archetype: 'canyon' },
     pads: [{ mult: 3, width: 130 }],
     hazards: [{ type: 'windChannels', bandHeight: 190, strength: 44 }],
@@ -359,12 +363,101 @@ export function generateChapter(planetId, seed = 1, sector = 1) {
  * Accepts a planet id ('LUNA'); a chapter id ('moon') is tolerated so older
  * saves and links keep working.
  */
+
+/**
+ * Which missions keep their silhouette, and why (M26).
+ *
+ * Two reasons, both content:
+ *  - the mission is **named for its shape** - THE CRATER, THE TRENCH, THE
+ *    CANYON, THE CREVASSE. Reshuffling those makes the name lie.
+ *  - the mission is a **cave**. The roof is dropped over a corridor, and the
+ *    corridor is a canyon; putting that roof over dunes is not a variation, it
+ *    is a geometry the validator has never checked.
+ */
+function shapeIsPinned(mission) {
+  return !!mission.pinShape || !!mission.cave;
+}
+
+/**
+ * Deal fresh macro shapes to a chapter's unpinned missions, from the body's own
+ * palette, deterministically from the run seed.
+ *
+ * Tom played several runs and said the Moon had stopped feeling random. He was
+ * right, and it was not a bug: the authored missions hardcode an archetype
+ * each, so moon-1 was a crater in every run that has ever been played. It only
+ * became obvious once M25 made the campaign a fixed ladder - before that you
+ * routed to different bodies, and now you replay these same fifteen maps every
+ * single run. `generateChapter` had been dealing shapes from the palette since
+ * M9; the authored chapters, the only ones on the ladder, never did.
+ *
+ * The bag is dealt without replacement so one chapter spreads across the
+ * palette rather than handing out three calderas, and refills when a body has
+ * fewer shapes than unpinned missions (Mars has four of each).
+ *
+ * Difficulty does not move: the ramp lives in pad width, pad multiplier, fuel
+ * and enemy budget, all authored per mission and none of them a function of the
+ * silhouette.
+ */
+export function shapedMissions(missions, planetId, seed = 1) {
+  const planet = PLANETS[planetId];
+  const palette = (planet && planet.terrainPalette) || [];
+  if (palette.length < 2) return missions;
+  const rng = makeRng(((seed ^ 0x9e3779b9) >>> 0) + String(planetId).length * 7919);
+  // Warm the generator. mulberry32's *first* output correlates across nearby
+  // seeds, and a two-item pool rides entirely on that first value: Europa dealt
+  // an identical chapter on every seed tried until these four draws were
+  // discarded. Anything reading only one or two numbers from a fresh mulberry32
+  // wants this.
+  for (let i = 0; i < 4; i++) rng();
+  // Deal from the palette *minus* whatever the pinned missions are already
+  // using. Dealing from the whole palette looked more varied per slot and read
+  // worse in the hand: Europa's palette is three deep and both of its caves are
+  // pinned canyons, so a chapter came out basin/canyon/mesa/canyon/canyon -
+  // three canyons in five, which is a duller run than the fixed shapes it
+  // replaced. Luna doubled its craters for the same reason.
+  // The pool is the body's palette *plus* whatever its authored missions
+  // already stand on. Those are not the same set and it matters: Europa's
+  // palette is basin/canyon/mesa, but THE FLOES is a caldera and RADIATION PASS
+  // was authored as a ridge - so dealing from the palette alone would have
+  // quietly retired two shapes the body demonstrably wears. (Europa's double
+  // ridges are the most recognisable thing about the real moon, which is a good
+  // sign the content was right and the palette was short.)
+  const authoredShapes = missions.map((m) => m.terrain && m.terrain.archetype).filter(Boolean);
+  const wardrobe = [...new Set([...palette, ...authoredShapes])];
+  const taken = new Set(missions.filter(shapeIsPinned).map((m) => m.terrain.archetype));
+  const source = wardrobe.filter((a) => !taken.has(a));
+  const pool = source.length ? source : wardrobe;
+  let bag = [];
+  const draw = () => {
+    if (!bag.length) {
+      bag = [...pool];
+      for (let i = bag.length - 1; i > 0; i--) {
+        const j = rng.int(0, i);
+        [bag[i], bag[j]] = [bag[j], bag[i]];
+      }
+    }
+    return bag.pop();
+  };
+  return missions.map((m) => (shapeIsPinned(m)
+    ? m
+    : { ...m, terrain: { ...m.terrain, archetype: draw() } }));
+}
+
 export function chapterFor(planetId, seed = 1, sector = 1) {
   const id = String(planetId);
   const authored = Object.values(CHAPTERS).find(
     (c) => c.planet === id || c.id === id.toLowerCase(),
   );
-  if (authored) return authored;
+  // M26: an authored chapter is rebuilt per run so its unpinned missions get
+  // fresh silhouettes. The module-level MOON_LEVELS / MARS_LEVELS /
+  // EUROPA_LEVELS stay exactly as authored - both fixtures and every sweep
+  // regress against those, and they must not move.
+  if (authored) {
+    return {
+      ...authored,
+      levels: shapedMissions(authored.missions, authored.planet, seed).map(missionToLevel),
+    };
+  }
   if (!PLANETS[id]) throw new Error(`chapterFor: no such planet ${id}`);
   return generateChapter(id, seed, sector);
 }
@@ -378,7 +471,7 @@ export function chapterTitle(planetId) {
 }
 
 export const CHAPTERS = {
-  moon: { id: 'moon', planet: 'LUNA', title: 'THE MOON', levels: MOON_LEVELS },
-  mars: { id: 'mars', planet: 'MARS', title: 'MARS', levels: MARS_LEVELS },
-  europa: { id: 'europa', planet: 'EUROPA', title: 'EUROPA', levels: EUROPA_LEVELS },
+  moon: { id: 'moon', planet: 'LUNA', title: 'THE MOON', levels: MOON_LEVELS, missions: MOON_MISSIONS },
+  mars: { id: 'mars', planet: 'MARS', title: 'MARS', levels: MARS_LEVELS, missions: MARS_MISSIONS },
+  europa: { id: 'europa', planet: 'EUROPA', title: 'EUROPA', levels: EUROPA_LEVELS, missions: EUROPA_MISSIONS },
 };

@@ -630,6 +630,20 @@ scheduled until the MVP is stable — the spec says the same.
     runs, each to two hits ~30 s apart, and a cleared Moon pays 300 against a cheapest hangar level
     of 320. M24's lethality and the stale M15-era budgets meeting on the introductory body
 
+- [x] **M26 — the Moon stopped feeling random** (this commit)
+  - Tom was right and it was not a bug: authored missions hardcode one archetype each, so moon-1 has
+    been a crater in every run ever played. Invisible until **M25 made the campaign a fixed ladder** -
+    you now replay the same fifteen maps forever, where before you routed between ten bodies
+  - `chapterFor` rebuilds an authored chapter per run and deals fresh shapes to unpinned missions.
+    Pinned = named for its shape (THE CRATER, THE TRENCH, THE CANYON, THE CREVASSE) or a **cave**
+  - **1 → 24 distinct chapter layouts** per body. `MOON_LEVELS` and friends untouched, so both
+    fixtures and every sweep still measure what they always did
+  - dealing from the *whole* palette read worse than dealing from palette-minus-pinned (Europa came
+    out with three canyons in five); the pool is palette ∪ what the content already wears, because
+    Europa's authored ridge and caldera are not in its palette
+  - **`mulberry32`'s first output correlates across nearby seeds** - a two-item pool rides on that
+    value alone and Europa dealt an identical chapter on every seed until four draws were discarded
+
 ## Decisions (Tom, 2026-08-16)
 
 1. **Gravity** — compressed mapping is the *baseline*, then a per-body hand-tuned offset so each
