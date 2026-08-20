@@ -838,70 +838,95 @@ that needs none of the conversation that produced this plan.
 
 ### Handover
 
+*Rewritten 2026-08-20, after the session that ran M24–M26, wrote `docs/PROGRESSION.md` and put the
+game online.*
+
 **The first prompt for a new session:**
 
-> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then the M21–M23 sections of
-> `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything. Then build the next
-> milestone Tom picks — the candidates are listed under "Next task".
+> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then `docs/PROGRESSION.md`, then the M24–M26
+> sections of `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything. Then build
+> **M27 — the ten-body ladder**, which is specified under "Next task" along with Tom's four
+> decisions, which are constraints rather than options.
 
-That shape matters more than the wording: read the state, then *measure* the state, then build. Every
-milestone in this project that went well started from a number, and both of the ones that went badly
-started from an assumption.
+That shape matters more than the wording: read the state, then *measure* the state, then build.
+Every milestone here that went well started from a number, and every one that went badly started
+from an assumption. **This session proved it twice more** — see the two entries under "the
+instrument" below.
 
-M20 is the cleanest example so far. The complaint was "Europa still has smooth basins", and the
-first thing done about it was to measure every chapter's surface — Europa came out the *smoothest*
-in the game, which turned a matter of taste into a target. Everything after that was arithmetic.
-
-This session ran M20. The one before it ran M15 through M19 plus the import fix. The reading order,
-in full:
+### Reading order
 
 1. **this file** — what is done, what is next, and the decisions behind both
 2. **`docs/ARCHITECTURE.md`** — what each module owns, which way the imports point, and the
    environment gotchas that have each cost real time at least once
-3. **`docs/PROGRESSION.md`** — the hangar, the skills and the loadout as a system: what a death
-   costs, how difficulty is meant to climb, and the measured blocker that four of the five hangar
-   tracks cannot be climbed on the current ladder. Read it before touching economy, difficulty or
-   the route
-3. **`test/BASELINE.md`**, the M18 and M19 sections — the hazard tuning and the terrain sweep, both
-   of which record *where the wall is* and not just where the setting landed
+3. **`docs/PROGRESSION.md`** — the hangar, the skills and the loadout as one system, and the measured
+   blocker that four of the five hangar tracks cannot be climbed. Read it before touching economy,
+   difficulty or the route. Every figure carries the snippet that reproduces it
+4. **`test/BASELINE.md`**, the **M24–M26** sections — the lethality change and what it cost, the
+   visibility formula and why the obvious one was wrong, and the terrain shuffle
 
 Then **measure before editing**: `./test/run-all.sh 20`. It ends with the encounter audit, so one
 command tells you both that the game still works and what a player currently meets in it.
 
-**Four things worth knowing before touching anything:**
+### What this session did
 
-- **The autopilot is the measuring instrument, and it is the weakest link in every difficulty
-  decision.** It has no terrain lookahead and it is a poor crosswind pilot. In M18 the number that
-  broke under stronger wind was the test pilot, not the mission, and M19 hit the same wall. When a
-  landing rate falls, establish which one moved before tuning anything.
-- **The way-home gate samples six seeds**, which is ±4 points of noise at current margins. It read
-  79–84 out of 90 across settings that all measure 94–95% at twenty seeds. Do not tune against it;
-  measure at twenty and use it only as a gate.
-- **Three tests were passing for the wrong reason** and M19 found all three; M20's new tests found a
-  live bug in the code they were written against on their first run. If a test survives a large
-  change untouched, that is worth a second look rather than relief.
-- **The macOS self-test is the only thing that catches bundling faults.** Run `./macos/build.sh`
-  before calling any milestone done. It has now caught four, most recently a module-level read of an
-  imported config object that throws in the single-file build and nowhere else.
+- **M24** — Tom's own eleven-item list. Two-shot machines, a 0.25 s turret lock, projectiles ×3,
+  visibility ×3, classic and endless gone, no route choice, death keeps the hangar and takes the
+  skills, a NEW GAME reset, and `src/gamelog.js` (the playtest trace Tom pastes into chat)
+- **M25 / M25a / M25b** — the linear ladder, and three economy bugs Tom hit in playtest. The last is
+  the instructive one: M25 opened the hangar at every body but banked the haul when the player
+  *left* the stop, so the shop opened on an empty pot
+- **M26** — authored chapters deal fresh terrain shapes per run: **1 → 24 layouts** per body
+- **`docs/PROGRESSION.md`** — the audit that found the blocker
+- **published** — `main` is live on two GitHub Pages sites; see "Where it is published"
 
-**Open with Tom:**
+### The instrument, and two ways it misled this session
 
-- He asked for wind he can feel and got a modest increase, because more broke the way-home
-  guarantee *as the autopilot measures it*. The numbers and the wall are in `test/BASELINE.md`. If
-  he still wants more weather, that is a human playtest decision, not a bigger number.
-- He asked for terrain three times bumpier and got 2.2×, with the reason recorded: raising `relief`
-  was cancelled by the fit clamp, and the real lever was the world's vertical budget.
-- **Europa is icy now, and it stopped where the other bodies are** rather than becoming the roughest.
-  40.1% of its surface is steeper than 30°, against Luna's 38.5% and Mars' 40.0%. A blunter blade
-  reached 45.5% for the same cost in landings, so the sharper one was kept — but if he wants Europa
-  to be the *hardest* ground rather than the most distinctive, that is one number in `ICE`.
-- **`europa-3 RADIATION PASS` deep route is 5/20** since the ice went in, and the cause is measured:
-  the test pilot flies into blades because it has no terrain lookahead. A human reads a 100 px spike
-  from 700 px away. How much better a person does is the same open question the landing bands wait
-  on, and it is worth a playtest before anything is tuned down.
-- The clicking noise he reported is **not confirmed fixed**. Instrumentation found no repeated audio
-  triggers while a key was held; the change made was to stop `audio.engines` writing 240 automation
-  events a second, which is the likeliest cause rather than a diagnosis.
+- **The autopilot has no evasive logic, no terrain lookahead, and cannot see the screen.** It is
+  still the only measuring instrument. M24 cut unarmed safe-route crossings from 240/240 to 167/240,
+  and that 70% is a **floor** measured by a pilot that does not dodge — not what a person meets. And
+  **no automated test in this project can measure the visibility change at all**, because the pilot
+  flies on state rather than on what is drawn. Both fixtures stayed byte-identical through it.
+- **A recommendation was made from a guess while the measurement was already recorded.** The
+  ten-body ladder was argued against on the grounds that a run is 50 missions ≈ 60–90 minutes. That
+  is the length of a run that *clears all ten bodies*, the rarest outcome in a permadeath game.
+  Tom's own playtest log had the real figure — **~3 minutes per body**, so a typical run that dies at
+  body 4 is about twelve minutes. Tom was right and the recommendation was wrong. Measure before
+  recommending, not just before editing.
+
+### Four things worth knowing before touching anything
+
+- **The bundle cannot catch a missing import**, and M24 produced one within an hour of the M23 note
+  saying so: `obscure()` was called in `main.js`, which does not import `forces.js`. `node build.js`
+  passed. The browser caught it. Only real module loading proves imports.
+- **The macOS self-test is the bundling canary and has now caught five.** The newest: `bankHaul`
+  declared in both `economy.js` and `main.js` — the bundle is one scope. Run `./macos/build.sh`
+  before calling any milestone done, and **commit first**, since it can revoke Desktop access.
+- **`mulberry32`'s first output correlates across nearby seeds.** A two-item pool rides entirely on
+  that value, and M26's Europa dealt an identical chapter on every seed until four draws were
+  discarded. Anything reading one or two numbers from a fresh `makeRng` wants a warm-up.
+- **A test can encode a decision rather than a property.** M24 replaced `telegraph >= 0.8` and
+  `shot.speed < 400` — those were M12's *answer*, not its rule. The rule was the reaction window
+  between lock and hit, and it is asserted as that now. If a test blocks a deliberate change, ask
+  which of the two it is before deleting it.
+
+### Open with Tom
+
+- **M27–M29 are planned and not started.** Tom said "don't build it now"; the plan is under "Next
+  task" with his four decisions recorded as constraints.
+- **The biggest risk in that plan** is that removing replay removed the player's only recovery
+  mechanism. Income is now bounded by how far a run gets, and a player stuck at body 3 cannot grind
+  out of it. M28 must verify that floor *before* tuning anything else.
+- **The landing bands and the fuel budgets still await human playtest data** — recorded as such
+  since M13 and M15, and now more so: M24 changed lethality and visibility, and neither can be
+  measured by the autopilot.
+- **Is it hard or is it unfair?** At 70% unarmed crossings and Mars bottoming out at 0.05 visibility,
+  only Tom can answer. The playtest log exists for exactly this: Settings → COPY TO CLIPBOARD, or
+  `__log()` in the console.
+- **The clicking noise is still not confirmed fixed** (open since M16). Instrumentation found no
+  repeated audio triggers; the change made was to stop `audio.engines` writing 240 automation events
+  a second, which is the likeliest cause rather than a diagnosis.
+- **`europa-3 RADIATION PASS` deep route is 5/20** since M20's ice, measured as the pilot flying into
+  blades for want of terrain lookahead. Worth a human playtest before anything is tuned down.
 
 ### Superseded
 
