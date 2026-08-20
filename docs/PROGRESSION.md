@@ -194,45 +194,84 @@ Hull's L2 pulled earlier than Mars. A re-authoring pass over `components.js`, no
 
 ---
 
-## Open decision (as of 2026-08-20)
+## Decided (Tom, 2026-08-20)
 
-Ten bodies × five missions is **50 missions per run**, perhaps 60–90 minutes with retries. Long for a
-roguelike run, but it does serve Tom's stated goal — "only a very high skilled player should pass all
-bodies without substantial upgrades; it should be nearly impossible".
+The run's shape is settled, and it went against the recommendation above. **Tom's model is the
+ten-body ladder**, and his argument is the roguelike one: die, keep what the hangar bolted on, start
+again slightly stronger, get a little further, repeat.
 
-The alternative is a **run of five bodies drawn from the ten**, always opening on the Moon and always
-ending on Venus, the middle three assigned by the run seed from the existing tiers. Shorter, more
-replayable, every material reachable across a few runs, and it uses `eligibleBodies` rather than
-deleting it.
+He is right, and the recommendation was wrong for a specific reason worth recording: it priced a run
+at **50 missions**, which is the length of a run that *clears all ten bodies* — the rarest outcome in
+a permadeath game, not the typical one. The typical run dies at body 3 or 4, which is 15–20 missions.
+The measured figures were in Tom's own playtest log the whole time:
 
-**Recommended: the second.** It keeps a run to one sitting and makes the hangar the thing that
-carries between runs, which is exactly the permanent/perishable split already built. A 50-mission run
-makes a single run the whole game, which fights the loop.
+| from the playtest log, 2026-08-20 | flight time |
+| --- | ---: |
+| 5 Moon missions, 3 crashes, run lost | **131 s** |
+| 5 Moon missions, 2 crashes, chapter cleared | **182 s** |
 
-Not yet decided. Whichever is chosen, the work splits into three commits: the ladder, the material
-re-cut, and the survey-body content pass.
+A body is about **three minutes**. Ten bodies is ~30 minutes of flight plus briefings, and a run that
+dies at body 4 is about twelve. That is a roguelike run length, and the objection was built on a
+guess when the measurement was already recorded.
 
----
+**A second argument for the fixed ladder, missed at the time:** with five bodies drawn from ten by
+seed, the *materials* become seed-dependent. A player needing Titan's hydrocarbon for Attitude
+Thrusters L3 might not be offered Titan for several runs — a softer, more frustrating version of the
+exact bug this document exists to fix. A fixed order makes the material progression guaranteed and
+therefore designable.
+
+**M26 turned out to be a precondition.** A ten-body ladder means re-flying the Moon and Europa on
+every run, which would be unbearable at one fixed silhouette per mission. The M26 shuffle takes each
+body from 1 to 24 chapter layouts, on top of per-seed heightmaps, pads, entry side and enemy
+placement. Without it this model does not work.
+
+### The four rules
+
+1. **The order is fixed and never varies.** Moon first, Venus last, the same every run.
+2. **Every run starts at the Moon.** No starting from the furthest body reached — that would kill the
+   attrition curve the model depends on.
+3. **No replay.** A cleared body cannot be re-flown for salvage. The supply stop is a supply stop,
+   not a choice. This reverses the farming half of M25.
+4. **Shuttles attrit.** Currently every supply stop restores to 3, which across ten bodies is
+   effectively thirty lives. It wants **+1 per body cleared, capped at 3**, so losses accumulate down
+   the ladder.
+
+### The risk this creates, and it is the big one
+
+**Removing replay removes the player's only recovery mechanism.** Under M25 a player short of salvage
+could re-fly a cleared body and grind their way to an upgrade. Without that, income per run is bounded
+by how far the player gets — and a player stuck at body 3 has *no way to earn their way out of it*
+except by playing body 1–3 better.
+
+That moves the payout scale from "important" to **critical**, and it means the economy must guarantee
+a floor: every run, however badly it goes, has to leave the player measurably stronger than the last,
+or the loop deadlocks. M13's anti-frustration debrief is the existing hook for this and should be
+re-tuned rather than re-invented. **Verify this before anything else in M28 is tuned.**
 
 ## Suggested order of work
 
 Ranked by how much each moves toward "upgrades are the price of entry". The first two are blocking —
 nothing else matters while four of five tracks are capped.
 
-1. **Re-source the hangar materials onto reachable bodies.** Either repoint the blocked levels, or
-   restore the other bodies to the ladder. Prefer restoring: it keeps the "this material comes from
-   that world" texture, which is good design.
-2. **Raise payout ~2.5× or halve the level-2 costs.** Target: a clean body clear buys one meaningful
-   upgrade, a sloppy one nearly does.
-3. **Make the ladder monotonic.** See the proposed order above.
-4. **Give each body a recommended tier and print it on the route card.** Tune pad width and machine
-   damage against *that* lander rather than a stock one. This is the mechanism that converts
+Now scheduled as **M27–M29** in `ROADMAP_STATUS.md`. In short:
+
+1. **Restore all ten bodies to the ladder** (M27). This is what unblocks the hangar — the materials
+   become reachable again by being on the route, rather than by being repointed. It also fixes the
+   inverted ramp, since the order is difficulty-sorted.
+2. **Re-cut the materials and the payout** (M28). With the bodies reachable the re-cut is about
+   *ordering* rather than unblocking: every track's L2 from bodies 1–3, L3 from 3–6, L4 from 6–10,
+   Hull's L2 earlier than Mars. Payout rescaled so a clean body clear buys one meaningful upgrade.
+3. **Give each body a recommended tier and print it at the supply stop** (M28). Tune pad width and
+   machine damage against *that* lander rather than a stock one. This is the mechanism that converts
    "upgrades are nice" into "upgrades are required"; nothing currently tells the game what the player
    is supposed to be flying.
-5. **Decay farming payouts ~40% per replay.** M25 lets a cleared body be re-flown. Research already
-   falls via `firstClear`; salvage does not, so grinding the Moon is optimal and flattens everything
-   above it.
-6. **Let Hull answer the two-shot rule** — either via fix 1, or drop machine damage to ~45.
+4. **Let Hull answer the two-shot rule** (M28) — either it reaches L3 (+25%, which does buy the third
+   shot), or machine damage drops to ~45.
+5. **Make the seven survey bodies into content** (M29), held until the re-cut ladder has been played,
+   because the balance will move.
+
+Farming decay is **no longer needed** — Tom removed replay entirely, so there is nothing to decay.
+See the risk that creates, above.
 
 ## What is already working — do not touch
 

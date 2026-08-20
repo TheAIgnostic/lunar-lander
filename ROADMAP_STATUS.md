@@ -662,11 +662,79 @@ None.
 
 ## Next task
 
-**The next milestone is progression, and it is already specified in `docs/PROGRESSION.md`** —
-audited 2026-08-20, with the blocker first: M25's three-body ladder made seven of the ten hangar
-materials unreachable, so Sensors cannot be bought at all and Hull caps at L2. Tom has confirmed he
-did not intend to exclude the other bodies. The one open decision is the run's shape (a ten-body
-ladder, or five bodies drawn from ten); everything else is ordered in that document.
+**The next three milestones are progression, and they are planned below.** The audit is
+`docs/PROGRESSION.md` — read it first; every figure there carries the snippet that reproduces it.
+
+The blocker: M25's three-body ladder made seven of the ten hangar materials unreachable, so Sensors
+cannot be bought at all and Hull caps at L2 — which is the track that answers M24's two-shot
+machines. Tom has confirmed excluding the other bodies was not the intent.
+
+### Tom's decisions (2026-08-20) — constraints, not options
+
+1. **Ten bodies, one fixed order, Moon first and Venus last.** The order never varies between runs.
+2. **Every run starts at the Moon.** Never from the furthest body reached — that would remove the
+   attrition curve the whole model rests on.
+3. **No replay.** A cleared body cannot be re-flown. The supply stop is a supply stop, not a choice.
+   This reverses the farming half of M25.
+4. **Shuttles attrit** — `+1` per body cleared capped at 3, not a restore to full.
+
+The reasoning is recorded in `docs/PROGRESSION.md` under "Decided". Worth knowing that the
+recommendation there was *against* this shape and was wrong: it priced a run at 50 missions, which is
+the length of a run that clears all ten bodies — the rarest outcome in a permadeath game. Tom's own
+playtest log had the real figure, **~3 minutes per body**, so a run that dies at body 4 is about
+twelve minutes. Measure before recommending.
+
+### M27 — the ten-body ladder
+
+- `PLANET_ORDER` becomes all ten, difficulty-sorted: Moon, Europa, Titan, Mars, Enceladus, Ganymede,
+  Io, Mercury, Pluto, Venus. This fixes the inverted ramp for free — Europa becomes the body that
+  *teaches* ice at position 2 instead of a finale with the weakest gravity in the game
+- **this is what unblocks the hangar**: the materials become reachable by being on the route, not by
+  being repointed, so the "this material comes from that world" texture survives intact
+- `routeChoices` returns **only the next body**. Cleared bodies stay on the screen as a
+  non-interactive progress trail — a visible ladder showing how far this run got — with the next body
+  as the single actionable card, centred. *(Assumption: Tom asked to remove the replay **option**, not
+  the display. Correct this if the trail is unwanted.)*
+- shuttle attrition per decision 4; expedition completes on Venus
+- `isExpeditionComplete` already reads a cleared-list, so it needs no change
+- validation: all ten bodies × 20 seeds through `validate-missions.js`, and the M26 shuffle re-checked
+  at ten bodies rather than three
+
+### M28 — the material re-cut and the economy
+
+**Do the floor check first, before tuning anything.** Removing replay removed the player's only
+recovery mechanism: income per run is now bounded by how far they get, and a player stuck at body 3
+cannot grind their way out. Every run must leave the player measurably stronger than the last or the
+loop deadlocks. M13's anti-frustration debrief is the existing hook — re-tune it, do not re-invent it.
+
+- **material re-cut**: every track's L2 from bodies 1-3, L3 from bodies 3-6, L4 from bodies 6-10, and
+  Hull's L2 earlier than Mars. Today Hull L3 gates on Venus (body 10) while Hull L4 gates on Io
+  (body 7), which cannot be bought in that order. A re-authoring pass over `components.js`, not a
+  formula
+- **payout scale**: a clean body clear should buy one meaningful upgrade and a sloppy one nearly.
+  Today a *perfect* Moon chapter pays 300 against a 320 cheapest upgrade, so it buys nothing
+- **a recommended tier per body**, printed at the supply stop, with pad width and machine damage tuned
+  against *that* lander rather than a stock one. This is the mechanism that makes upgrades the price
+  of entry; nothing currently tells the game what the player should be flying
+- **Hull answers the two-shot rule** — either it reaches L3 (+25%, which does buy the third shot), or
+  machine damage drops to ~45. `enemies-tests.js` currently asserts a third shot against a hull the
+  player cannot reach
+
+### M29 — the survey bodies become content
+
+**Held until the re-cut ladder has been played**, because the balance will move. Seven bodies are
+systemically complete and narratively empty:
+
+- 35 missions share five names and five briefs — FIRST LOOK / LOW PASS / DEEP FIELD / THE SHELF /
+  LAST LIGHT on every body
+- 35 have `optionalObjective: null`, so M14's objectives system is dead on seven of ten bodies
+- no set pieces; each authored body has one
+- five named hazards do nothing: **acid** and **downdraft** (Venus), **eruption** (Io), **magnetic**
+  and **falseRadar** (Ganymede). Ganymede is the worst case — both of its hazards are hollow, so it
+  is the Moon with a different colour
+
+Note that `ice` and `darkness` *are* implemented, through `surfaceFriction` and `visibility` rather
+than a force builder; do not "fix" them.
 
 **M25 fixed the run economy Tom hit in playtest and made the progression a ladder.** Before that,
 **M24** was the first milestone whose headline number is deliberately *worse* than the one before it. The game is harder, there is one mode, and a run is a run. What it needs next is not
