@@ -530,7 +530,16 @@ that needs none of the conversation that produced this plan.
 
 ### Handover
 
-This session ran M15 through M19 plus the import fix. Start a new one by reading, in order:
+**The first prompt for a new session:**
+
+> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then the M18 and M19 sections of
+> `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything. Then implement M20.
+
+That shape matters more than the wording: read the state, then *measure* the state, then build. Every
+milestone in this project that went well started from a number, and both of the ones that went badly
+started from an assumption. Swap M20 for whichever milestone is next.
+
+This session ran M15 through M19 plus the import fix. The reading order, in full:
 
 1. **this file** — what is done, what is next, and the decisions behind both
 2. **`docs/ARCHITECTURE.md`** — what each module owns, which way the imports point, and the
