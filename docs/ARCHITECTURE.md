@@ -273,7 +273,8 @@ game or the pilot changes. Improving the pilot should move the second and leave 
 
 1. `ROADMAP_STATUS.md` — what is done, what is next, and the decisions behind both.
 2. This file — what each module owns and the rules that hold the design together.
-3. `test/BASELINE.md` — the measurements, milestone by milestone, ending with the encounter audit.
+3. `docs/PROGRESSION.md` — the hangar/skills/loadout as one system, and the measured blocker in it.
+4. `test/BASELINE.md` — the measurements, milestone by milestone, ending with the encounter audit.
    The M19 and M20 sections are the two that record *where the wall is* for terrain.
 
 Then **measure before editing**: `./test/run-all.sh 20` for the suites, and the encounter audit

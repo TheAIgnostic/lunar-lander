@@ -6,6 +6,7 @@ Working document for the roguelite expansion.
   Read it before starting a milestone — section 6 has the 50-mission table, 12 the enemy roster,
   18 the MVP scope.
 - **Architecture, dev hooks, environment gotchas:** `docs/ARCHITECTURE.md`
+- **How progression actually works, and where it is broken:** `docs/PROGRESSION.md`
 - **Measured behaviour at every milestone:** `test/BASELINE.md`
 - **Branch:** `v2`, cut from the tag `snapshot-2026-08-16`. `main` stays playable and untouched.
 - **Run everything:** `./test/run-all.sh 20`
@@ -661,6 +662,12 @@ None.
 
 ## Next task
 
+**The next milestone is progression, and it is already specified in `docs/PROGRESSION.md`** —
+audited 2026-08-20, with the blocker first: M25's three-body ladder made seven of the ten hangar
+materials unreachable, so Sensors cannot be bought at all and Hull caps at L2. Tom has confirmed he
+did not intend to exclude the other bodies. The one open decision is the run's shape (a ten-body
+ladder, or five bodies drawn from ten); everything else is ordered in that document.
+
 **M25 fixed the run economy Tom hit in playtest and made the progression a ladder.** Before that,
 **M24** was the first milestone whose headline number is deliberately *worse* than the one before it. The game is harder, there is one mode, and a run is a run. What it needs next is not
 another number — it is **a human flying it**, because the two things M24 changed most (how lethal the
@@ -759,6 +766,10 @@ in full:
 1. **this file** — what is done, what is next, and the decisions behind both
 2. **`docs/ARCHITECTURE.md`** — what each module owns, which way the imports point, and the
    environment gotchas that have each cost real time at least once
+3. **`docs/PROGRESSION.md`** — the hangar, the skills and the loadout as a system: what a death
+   costs, how difficulty is meant to climb, and the measured blocker that four of the five hangar
+   tracks cannot be climbed on the current ladder. Read it before touching economy, difficulty or
+   the route
 3. **`test/BASELINE.md`**, the M18 and M19 sections — the hazard tuning and the terrain sweep, both
    of which record *where the wall is* and not just where the setting landed
 
