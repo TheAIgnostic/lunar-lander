@@ -224,8 +224,27 @@ export function validateEnemies(level, terrain, seed) {
     }
   }
 
-  // Threats have to stay countable: the spec asks for 1-3 at once, 4 at most.
-  if (enemies.length > 4) problems.push(`${enemies.length} enemies placed, above the 4 the design allows`);
+  // Threats have to stay countable. The spec's rule is "1-3 at once, rarely 4",
+  // and until M21 this was checked as a headcount on the *map* - which is a
+  // different claim, and the one that blocked Tom's ask for more machines. What
+  // matters is how many can engage the lander at the same moment.
+  //
+  // Measured the same way `placeEnemies` enforces it, deliberately: if every
+  // machine's engagement disc overlaps at most `maxAtOnce - 1` others, then no
+  // point inside any disc can be covered by more than `maxAtOnce`. Sharing the
+  // rule is what stopped the sanctuary check drifting in M12, and it applies
+  // here for the same reason.
+  enemies.forEach((e, i) => {
+    const type = ENEMY_TYPES[e.type];
+    if (!type) return;
+    const overlaps = enemies.filter((o, k) => {
+      const other = ENEMY_TYPES[o.type];
+      return k !== i && other && Math.hypot(o.x - e.x, o.y - e.y) < type.range + other.range;
+    }).length;
+    if (overlaps > COMBAT.maxAtOnce - 1) {
+      problems.push(`${type.name} ${i} can fire alongside ${overlaps} others, above the ${COMBAT.maxAtOnce - 1} the design allows`);
+    }
+  });
   if (budget && !enemies.length) {
     notes.starved = true;   // reported, not failed: fewer enemies is always safe
   }

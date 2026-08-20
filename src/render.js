@@ -311,6 +311,80 @@ export function drawTerrain(ctx, cam, W, H, terrain, level, time, opts = {}) {
     ctx.restore();
   }
 
+  // Structures: what somebody built here and left.
+  //
+  // Traced off the heightmap like everything else that is raised into it, so
+  // the wall you fly into is the wall you can see. Drawn darker than the ground
+  // with a lit roof edge, because the roof is the thing that matters - it is
+  // flat, a machine is probably standing on it, and it reads as built rather
+  // than grown from a distance.
+  if (terrain.structures && terrain.structures.length) {
+    ctx.save();
+    for (const st of terrain.structures) {
+      if (st.x + st.w < x0 - 60 || st.x - st.w > x1 + 60) continue;
+      const left = st.i1 * terrain.step;
+      const right = st.i2 * terrain.step;
+      const foot = Math.max(terrain.h[st.i1], terrain.h[st.i2], st.base) + 60;
+      ctx.beginPath();
+      ctx.moveTo(left, foot);
+      for (let j = st.i1; j <= st.i2; j++) ctx.lineTo(j * terrain.step, terrain.h[j]);
+      ctx.lineTo(right, foot);
+      ctx.closePath();
+      const g = ctx.createLinearGradient(0, st.top, 0, st.base);
+      g.addColorStop(0, shade(w.hill, 0.32));
+      g.addColorStop(0.55, shadeA(w.hill, -0.35, 0.97));
+      g.addColorStop(1, shadeA(w.hill, -0.5, 0));
+      ctx.fillStyle = g;
+      ctx.fill();
+
+      // The lit roof line and the two corners.
+      ctx.strokeStyle = w.accent;
+      ctx.globalAlpha = 0.75;
+      ctx.lineWidth = 1.6 / cam.scale + 0.4;
+      ctx.beginPath();
+      ctx.moveTo(left, terrain.h[st.i1]);
+      for (let j = st.i1; j <= st.i2; j++) ctx.lineTo(j * terrain.step, terrain.h[j]);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+
+      // Windows on a hab, a mast and a warning light on a tower. Both are drawn
+      // from the structure's own dimensions, so they scale with it.
+      ctx.fillStyle = shade(w.hill, -0.55);
+      if (st.kind === 'hab') {
+        const rows = Math.max(1, Math.floor(st.rise / 26));
+        const cols = Math.max(2, Math.floor(st.w / 30));
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const bx = st.x - st.w / 2 + 10 + c * (st.w - 20) / cols;
+            const by = st.top + 14 + r * 26;
+            if (by > st.base - 8) continue;
+            ctx.globalAlpha = (r + c) % 3 === 0 ? 0.5 : 0.85;
+            ctx.fillRect(bx, by, Math.min(11, (st.w - 20) / cols - 5), 9);
+          }
+        }
+        ctx.globalAlpha = 1;
+      } else {
+        ctx.strokeStyle = shade(w.hill, 0.5);
+        ctx.lineWidth = 1.4 / cam.scale + 0.3;
+        ctx.beginPath();
+        ctx.moveTo(st.x, st.top);
+        ctx.lineTo(st.x, st.top - 26 - st.rise * 0.12);
+        ctx.stroke();
+        // The accessibility flashing setting reaches this like every other
+        // blinking thing: presentation only, never the simulation.
+        const f = opts.flash != null ? opts.flash : 1;
+        const blink = 0.45 + 0.55 * Math.abs(Math.sin(time * 1.1 + st.x));
+        ctx.globalAlpha = 0.35 + 0.5 * blink * f;
+        ctx.fillStyle = '#ff6b6b';
+        ctx.beginPath();
+        ctx.arc(st.x, st.top - 28 - st.rise * 0.12, 3.2, 0, TAU);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+    ctx.restore();
+  }
+
   // Micro detail: loose debris sitting on the surface.
   if (terrain.rocks && terrain.rocks.length) {
     ctx.save();

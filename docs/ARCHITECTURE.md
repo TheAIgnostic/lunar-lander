@@ -46,8 +46,8 @@ swapping two entries in a mission's `pads` array moves them across the map. Rewa
 and enemies are placed around the prize rather than scattered. The near zone is always reachable on
 the starting tank; the deep one is deliberately not.
 
-**What is raised into the ground, and the one ordering rule it has.** A boulder (M19) and Europa's
-ice (M20) are not drawn on top of the heightmap, they are *in* it: the same three hull points and
+**What is raised into the ground, and the one ordering rule it has.** A boulder (M19), Europa's ice
+(M20) and a structure (M21) are not drawn on top of the heightmap, they are *in* it: the same three hull points and
 two feet already test against the ground, so collision is exact and free, and everything placed
 afterwards — the fuel road, the cargo, the ore clearances, line of sight, the corridor validator —
 sees the real surface. Each pass runs on its own seed stream derived from the seed rather than
@@ -55,6 +55,12 @@ drawn from the shared `rng`, so adding one cannot shuffle the pads or the road. 
 pass records the crest it produced, and **a later pass can invalidate it**, so every crest is
 re-derived once in the constructor after all of them. Any new raising pass goes before that line.
 `PlanetDefinition.terrainStyle` is how a body asks for ice — content, not a branch in the generator.
+
+A **structure** is the one of these with a consumer: it is a flat-topped tower or hab, and a ground
+gun stands on the roof. Terrain still does not know what a turret is — it produces flat-topped
+geometry and records it, and `placeEnemies` chooses among what it finds. A roof is derived from the
+*highest* ground under the whole footprint, never the height at its centre, or the high end of a
+slope stands proud through it.
 
 **The rule that holds accessibility honest:** every accessibility setting changes *presentation*
 only — shake, flashing, instrument size, contrast and key bindings never reach the simulation.
@@ -82,6 +88,15 @@ guards — around the deep landing zone and back along the fuel road — and nev
 never within 150 px of a landing zone, never in the sanctuary approach corridor, and never close
 enough to a fuel cell to be swept up with it. `validate.js` enforces all four, which is what keeps
 "a mission is always completable while collecting nothing" a statement about geometry.
+
+**How many machines is a question about the air, not the map.** The spec asks for 1-3 engaging at
+once and rarely 4. Until M21 that was checked as a count of machines *placed*, which is a different
+claim and the one that kept the campaign at 21 machines. The rule is local now: a machine's
+engagement disc may overlap at most `COMBAT.maxAtOnce - 1` others, which guarantees no point in any
+disc is covered by more — and `placeEnemies` and `validate.js` enforce it with the same constant.
+A consequence worth knowing before raising a budget: **a map holds a finite number of
+non-overlapping engagements**, and past that the budget is fiction rather than difficulty. The
+budgets in `missions.js` were set from a measured capacity sweep and fill to 99%.
 
 **The rule that holds combat fair:** every mission keeps a *sanctuary* — its lowest-multiplier pad
 and the 420 px column above it — outside every machine's engagement range. `placeEnemies` and

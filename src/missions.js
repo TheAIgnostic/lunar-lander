@@ -5,11 +5,24 @@
 // Fields that later milestones consume (enemyBudget, optionalObjective) are
 // carried now so the content does not need rewriting when those land.
 //
-// **Enemy budgets follow one ramp**, set in M15 after the encounter audit found
-// nine of fifteen missions with nothing hostile on them at all: mission 1 of a
-// chapter is always quiet, and 2-5 climb 1, 1-2, 2, 2-3. That stays inside the
-// spec's "1-3 at once, rarely 4" rule while making the empty two thirds of the
-// game the exception rather than the default.
+// **Enemy budgets follow one ramp.** Set in M15 after the encounter audit found
+// nine of fifteen missions with nothing hostile on them at all; roughly doubled
+// in M21, when Tom asked for more machines and the measurement agreed - 71% of
+// the deep route had nothing on it at all. Mission 1 of a chapter is still
+// always quiet, and 2-5 climb 3, 3, 4, 4 on the Moon and 3, 4, 4, 5 on Mars.
+//
+// More machines is *not* more of a fight: they take stations strung along the
+// crossing rather than ringing the prize, so a route meets one or two at a time.
+// The spec's "1-3 at once, rarely 4" is a statement about what is on you now,
+// not about what is on the map, and both `placeEnemies` and `validate.js`
+// enforce it as one.
+//
+// **A budget is what the map actually fields**, not an aspiration. These were
+// set from a measured capacity sweep: every one of them fills to 95% or better
+// over 20 seeds, and no armed mission is ever empty. Raising them past this
+// does not put more machines in the world - it just makes the number a lie,
+// because a map has room for a finite number of non-overlapping engagements
+// and the at-once rule, not the budget, is what decides how many.
 //
 // **Pads are authored prize-first.** Index 0 is placed in the deepest distance
 // band - the far end of the map, past the fuel road, worth the most material -
@@ -38,7 +51,7 @@ export const MOON_MISSIONS = [
     terrain: { archetype: 'canyon' },
     pads: [{ mult: 3, width: 120 }],
     optionalObjective: { id: 'fuel-25', text: 'Land with at least 25% fuel', reward: { salvage: 40 } },
-    enemyBudget: 1,
+    enemyBudget: 3,
   },
   {
     id: 'moon-3', planet: 'LUNA', index: 3, name: 'THE RELAY',
@@ -47,7 +60,7 @@ export const MOON_MISSIONS = [
     terrain: { archetype: 'ridge' },
     pads: [{ mult: 3, width: 110 }, { mult: 2, width: 180 }],
     optionalObjective: { id: 'power-relay', text: 'Power the relay for extra research data', reward: { data: 35 } },
-    enemyBudget: 1,
+    enemyBudget: 3,
   },
   {
     id: 'moon-4', planet: 'LUNA', index: 4, name: 'OLD BATTERY',
@@ -56,7 +69,7 @@ export const MOON_MISSIONS = [
     terrain: { archetype: 'mesa' },
     pads: [{ mult: 3, width: 110 }, { mult: 2, width: 170 }],
     optionalObjective: { id: 'no-ability', text: 'Complete without using the active ability', reward: { cores: 1 } },
-    enemyBudget: 2, enemySets: ['sentry-turret'],
+    enemyBudget: 4, enemySets: ['sentry-turret'],
   },
   {
     id: 'moon-5', planet: 'LUNA', index: 5, name: 'TYCHO',
@@ -65,7 +78,7 @@ export const MOON_MISSIONS = [
     terrain: { archetype: 'caldera' },
     pads: [{ mult: 5, width: 78 }, { mult: 2, width: 170 }],
     optionalObjective: { id: 'centre', text: 'Touch down inside the central bonus area', reward: { cores: 1 } },
-    enemyBudget: 2, enemySets: ['sentry-turret'],
+    enemyBudget: 4, enemySets: ['sentry-turret'],
   },
 ];
 
@@ -105,6 +118,13 @@ export function missionToLevel(mission) {
     hazards: mission.hazards || planet.hazards,
     rareMaterial: planet.rareMaterial,
     cave: !!mission.cave, clearance: mission.clearance || 0,
+    // Somewhere for a machine to stand, and something to have been abandoned.
+    // Derived from the mission's own machine budget where the content does not
+    // say otherwise, so an armed mission always has flat roofs on it and a
+    // quiet one is not littered with buildings nobody used.
+    structures: mission.structures != null
+      ? mission.structures
+      : Math.min(5, mission.enemyBudget || 0),
     // Where the roof opens and where it has closed, as a fraction of the
     // crossing. M19b made the mouth per-mission; a mission that wants to be
     // flown *into* rather than begun indoors sets them.
@@ -153,7 +173,7 @@ export const MARS_MISSIONS = [
     pads: [{ mult: 3, width: 130 }],
     hazards: [{ type: 'windChannels', bandHeight: 190, strength: 44 }],
     optionalObjective: { id: 'hull-10', text: 'Keep hull damage below 10%', reward: { data: 30 } },
-    enemyBudget: 1, enemySets: ['sentry-turret'],
+    enemyBudget: 3, enemySets: ['sentry-turret'],
   },
   {
     id: 'mars-3', planet: 'MARS', index: 3, name: 'BURIED ARRAY',
@@ -163,7 +183,7 @@ export const MARS_MISSIONS = [
     pads: [{ mult: 3, width: 130 }, { mult: 2, width: 180 }],
     hazards: ['atmosphere', { type: 'dust', period: 13, minVisibility: 0.32, duty: 0.5 }],
     optionalObjective: { id: 'power-array', text: 'Restore a sensor tower for a stronger beacon', reward: { data: 40 } },
-    enemyBudget: 2, enemySets: ['sentry-turret', 'seeker-drone'], fuelCells: 2,
+    enemyBudget: 4, enemySets: ['sentry-turret', 'seeker-drone'], fuelCells: 2,
   },
   {
     id: 'mars-4', planet: 'MARS', index: 4, name: 'IRON RAIN',
@@ -173,7 +193,7 @@ export const MARS_MISSIONS = [
     pads: [{ mult: 3, width: 115 }, { mult: 2, width: 175 }],
     hazards: ['atmosphere', { type: 'dust', period: 18, minVisibility: 0.5, duty: 0.3 }],
     optionalObjective: { id: 'salvage-iron', text: 'Recover the iron-ceramic salvage off the safe route', reward: { salvage: 70 } },
-    enemyBudget: 2, enemySets: ['sentry-turret', 'seeker-drone'], fuelCells: 2,
+    enemyBudget: 4, enemySets: ['sentry-turret', 'seeker-drone'], fuelCells: 2,
   },
   {
     id: 'mars-5', planet: 'MARS', index: 5, name: 'STORM EYE',
@@ -183,7 +203,7 @@ export const MARS_MISSIONS = [
     pads: [{ mult: 5, width: 84 }, { mult: 2, width: 175 }],
     hazards: ['atmosphere', { type: 'dust', period: 11, minVisibility: 0.22, duty: 0.55 }],
     optionalObjective: { id: 'centre', text: 'Touch down inside the central bonus area', reward: { cores: 1 } },
-    enemyBudget: 3, enemySets: ['seeker-drone', 'sentry-turret'], fuelCells: 3,
+    enemyBudget: 5, enemySets: ['seeker-drone', 'sentry-turret'], fuelCells: 3,
   },
 ];
 
@@ -211,6 +231,12 @@ export const EUROPA_MISSIONS = [
     terrain: { archetype: 'canyon' }, cave: true, clearance: 300, caveMouth: 0.26, caveShut: 0.58,
     pads: [{ mult: 5, width: 120 }],
     optionalObjective: { id: 'core-ice', text: 'Recover an ice core from the crevasse floor', reward: { data: 40 } },
+    // Held at one, against the M21 ramp. THE CREVASSE is a single-pad cave, so
+    // the sanctuary *is* the prize and the corridor is the only way in: there
+    // is no route around a machine here the way there is on a two-zone map.
+    // Measured over 40 seeds - unarmed flights lost to fire: 0 at one machine,
+    // 2 at two, 6 at three. The unarmed crossing is a promise, so this is the
+    // number that keeps it.
     enemyBudget: 1,
   },
   {
@@ -221,7 +247,7 @@ export const EUROPA_MISSIONS = [
     pads: [{ mult: 3, width: 125 }, { mult: 2, width: 175 }],
     hazards: [{ type: 'radiation', period: 15, duty: 0.45, rate: 13 }],
     optionalObjective: { id: 'low-rads', text: 'Land with radiation exposure under 30%', reward: { data: 45 } },
-    enemyBudget: 2, fuelCells: 2,
+    enemyBudget: 3, fuelCells: 2,
   },
   {
     id: 'europa-4', planet: 'EUROPA', index: 4, name: 'UNDER THE ICE',
@@ -231,6 +257,9 @@ export const EUROPA_MISSIONS = [
     pads: [{ mult: 3, width: 130 }],
     hazards: [{ type: 'radiation', period: 18, duty: 0.35, rate: 11 }],
     optionalObjective: { id: 'probe-lost', text: 'Recover the probe that went quiet under the shelf', reward: { salvage: 80 } },
+    // Two, against the M21 ramp, and for the same structural reason as THE
+    // CREVASSE: one pad, one corridor, drones that ram. Over 40 seeds, unarmed
+    // flights lost to fire: 0 at two machines, 1 at three, 5 at four.
     enemyBudget: 2, enemySets: ['seeker-drone'], fuelCells: 2,
   },
   {
@@ -241,10 +270,12 @@ export const EUROPA_MISSIONS = [
     pads: [{ mult: 5, width: 96 }, { mult: 2, width: 180 }],
     hazards: [{ type: 'radiation', period: 13, duty: 0.5, rate: 14 }],
     optionalObjective: { id: 'perfect', text: 'Set down on the plate at PERFECT', reward: { cores: 2 } },
-    // Two, not the three the ramp allows: Europa's drones ram and the plate
-    // is the smallest in the chapter, and at three an unarmed flight to the
-    // prize fell from 20/20 to 5/20. The ramp is a shape, not a quota.
-    enemyBudget: 2, enemySets: ['seeker-drone'], fuelCells: 3,
+    // Below the ramp, and deliberately. A drone-only chapter cannot absorb
+    // machines the way a mixed one can: a turret is something you fly around,
+    // a drone follows you and rams. On the deep route here, unarmed flights
+    // land 6/20 at two machines, 3/20 at three and 1/20 at four - so this is
+    // three, and the ramp is a shape rather than a quota.
+    enemyBudget: 3, enemySets: ['seeker-drone'], fuelCells: 3,
   },
 ];
 

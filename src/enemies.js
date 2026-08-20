@@ -28,13 +28,39 @@ export const COMBAT = {
   muzzleSafe: 56,          // a shot may never appear closer than this to the ship
   padGuard: 110,           // no ground enemy on or beside a pad
   minSpacing: 230,         // enemies stand apart, so threats stay countable
+  // What counts as ground a gun can stand on. M19 roughened the world and
+  // nobody re-checked this: 30% of ground guns stood on slopes past 0.30, and
+  // one in five had more than its own radius of height across its footprint -
+  // which is what "half-buried in a slope" looks like as a number. A roof is
+  // exempt because it is flat by construction.
+  groundSlope: 0.28,
+  footSpan: 11,            // px of height across the machine's own base
+  perchShare: 0.75,        // how often a ground gun takes an available roof
   guardSpread: 560,        // how loosely machines ring the prize
   roadReach: 500,          // and how far back up the fuel road they sit
+  // Where along the crossing the machines stand, as a fraction of the distance
+  // from the entry to what they guard. M21 asks for two to three times as many
+  // of them, and ringing that many around the prize puts four in one fight -
+  // so they are strung out along the route instead, each taking a station.
+  // Stations start *past* the sanctuary. The safe pad sits 14-34% of the way in
+  // and carries a 700 px exclusion bubble, so a station at 0.30 is inside it:
+  // the first version spent 26,000 of its 30,000 rejections there and placed
+  // three machines in four.
+  stationLo: 0.46,
+  stationHi: 1.06,
+  stationJitter: 300,      // how far either side of its station a machine looks
+  stationWiden: 4,         // ...growing to this multiple as attempts fail
+  // "1-3 at once, rarely 4" is the spec's rule, and it is about how many
+  // machines can engage the lander *at the same time* - not how many are on the
+  // map. If a machine's engagement disc overlaps at most this many others,
+  // then no point inside its disc can be covered by more than maxAtOnce, which
+  // makes the rule a cheap local test instead of a sweep over the whole world.
+  maxAtOnce: 4,
   losSamples: 26,
   hoverMin: 170,           // drone patrol altitude above the surface
   hoverMax: 300,
   maxShots: 24,            // hard cap; old shots are culled first
-  placementTries: 260,
+  placementTries: 520,     // raised with the budgets: more machines, tighter ground
 };
 
 /**
@@ -175,6 +201,14 @@ export function placeEnemies(level, terrain, seed) {
 
   const rng = makeRng((((seed | 0) ^ 0x7f4a7c15) >>> 0) + 17);
   const start = spawnFor(level, terrain);
+  // Roofs are the good ground. Terrain built them without knowing what they are
+  // for; a gun claims one here, and each is claimed at most once.
+  const roofs = (terrain.structures || []).slice();
+  // Roofs a *given* machine has already been turned away from. The nearest roof
+  // to a station is a deterministic choice, so without this the loop offers the
+  // same rejected roof every try and burns the whole budget of attempts on it.
+  let tried = new Set();
+  let triedFor = -1;
   const safe = sanctuaryPad(terrain);
   const gates = safe ? sanctuaryGates(safe) : null;
   const margin = 180;
@@ -192,20 +226,71 @@ export function placeEnemies(level, terrain, seed) {
 
   for (let tries = 0; tries < COMBAT.placementTries && out.length < budget; tries++) {
     const type = ENEMY_TYPES[sets[out.length % sets.length]];
-    // Two thirds of the time, look near the prize or on the road up to it.
-    const x = guardAt != null && rng() < 0.9
-      ? clamp(guardAt + (rng() - 0.5) * COMBAT.guardSpread - Math.sign(guardAt - start.x) * rng() * COMBAT.roadReach,
-        margin, level.width - margin)
-      : rng.range(margin, level.width - margin);
+
+    // A gun takes a roof when there is one going. It is flat by construction,
+    // it is what the structure was built for, and it puts the machine
+    // somewhere a player can read from a distance.
+    // Each machine has a station along the crossing, so a route meets them one
+    // or two at a time instead of walking into all of them at the end.
+    const station = guardAt == null ? null : clamp(
+      start.x + (guardAt - start.x) * (budget <= 1
+        ? 0.88
+        : COMBAT.stationLo + (COMBAT.stationHi - COMBAT.stationLo) * (out.length / (budget - 1))),
+      margin, level.width - margin,
+    );
+
+    // A gun takes a roof when there is one going - the nearest to its own
+    // station, so claiming one does not pull it out of position. A roof is flat
+    // by construction, which is what the structure was built for.
+    if (triedFor !== out.length) { tried = new Set(); triedFor = out.length; }
+    let perchIndex = -1;
+    if (type.kind === 'ground' && roofs.length && rng() < COMBAT.perchShare) {
+      roofs.forEach((r, i) => {
+        if (tried.has(r)) return;
+        if (perchIndex < 0
+          || (station != null
+            ? Math.abs(r.x - station) < Math.abs(roofs[perchIndex].x - station)
+            : rng() < 0.35)) perchIndex = i;
+      });
+    }
+
+    // The search widens as attempts fail. A station is where a machine *wants*
+    // to stand, not a demand the terrain has to satisfy: on a map whose station
+    // lands on a cliff, a fixed window simply never places the machine, which
+    // is how the first version of this quietly cut the roster from 21 to 9.
+    const spread = COMBAT.stationJitter
+      * (1 + (COMBAT.stationWiden - 1) * (tries / COMBAT.placementTries));
+    // Past the point where stationing is clearly not working, drop it entirely
+    // and search the whole map. A station is a preference; fielding the machine
+    // at all is the promise. Without this, RADIATION PASS placed *nothing* on
+    // one seed in five - the same "declared enemies, empty mission" the M15
+    // audit was written to catch.
+    const desperate = tries > COMBAT.placementTries * 0.6;
+    const x = perchIndex >= 0
+      ? roofs[perchIndex].x
+      : (station != null && !desperate
+        ? clamp(station + (rng() - 0.5) * spread, margin, level.width - margin)
+        : rng.range(margin, level.width - margin));
     const ground = terrain.heightAt(x);
     const roof = terrain.ceiling ? terrain.ceilingAt(x) : -Infinity;
 
+    // Any rejection below retires this roof for this machine, so the next try
+    // offers the next-nearest one instead of the same one again.
+    const reject = () => { if (perchIndex >= 0) tried.add(roofs[perchIndex]); return true; };
+
     let y;
     if (type.kind === 'ground') {
-      if (Math.abs(terrain.slopeAt(x)) > 0.5) continue;             // no gun on a cliff face
-      if (terrain.padAt(x)) continue;
-      y = ground - type.radius;
-      if (terrain.ceiling && y - roof < 120) continue;              // no room to stand
+      if (terrain.padAt(x) && reject()) continue;
+      if (perchIndex >= 0) {
+        y = roofs[perchIndex].top - type.radius;
+      } else {
+        // Flat *and* short: the slope test alone passes a gun standing across a
+        // 40 px step, because a step between two samples is not a slope.
+        if (Math.abs(terrain.slopeAt(x)) > COMBAT.groundSlope) continue;
+        if (footSpan(terrain, x, type.radius) > COMBAT.footSpan) continue;
+        y = ground - type.radius;
+      }
+      if (terrain.ceiling && y - roof < 120 && reject()) continue;   // no room to stand
     } else {
       const hover = rng.range(COMBAT.hoverMin, COMBAT.hoverMax);
       y = ground - hover;
@@ -218,22 +303,56 @@ export function placeEnemies(level, terrain, seed) {
     for (const p of terrain.pads) {
       if (x > p.x1 - COMBAT.padGuard && x < p.x2 + COMBAT.padGuard) { clear = false; break; }
     }
-    if (!clear) continue;
-    if (Math.hypot(x - start.x, y - start.y) < COMBAT.spawnSafeRadius) continue;
+    if (!clear && reject()) continue;
+    if (Math.hypot(x - start.x, y - start.y) < COMBAT.spawnSafeRadius && reject()) continue;
 
     // The sanctuary must stay out of reach: no point in the corridor a lander
     // descends through may sit inside this machine's engagement range.
     if (gates) {
       const reach = type.range + COMBAT.sanctuaryMargin;
-      if (gates.some((p) => Math.hypot(x - p.x, y - p.y) < reach)) continue;
+      if (gates.some((p) => Math.hypot(x - p.x, y - p.y) < reach) && reject()) continue;
     }
-    if (out.some((e) => Math.hypot(e.x - x, e.y - y) < COMBAT.minSpacing)) continue;
+    if (out.some((e) => Math.hypot(e.x - x, e.y - y) < COMBAT.minSpacing) && reject()) continue;
+
+    // Countable threats: adding this one may not let five engage at once.
+    //
+    // The test has to be symmetric. Counting only the machines already placed
+    // passes a candidate that overlaps three, while pushing each of those three
+    // to four - the constraint is on every machine, not on the newest one, and
+    // the validator caught exactly that on OLD BATTERY and IRON RAIN.
+    const overlapping = out.filter((e) => {
+      const other = ENEMY_TYPES[e.type];
+      return Math.hypot(e.x - x, e.y - y) < type.range + other.range;
+    });
+    if (overlapping.length > COMBAT.maxAtOnce - 1 && reject()) continue;
+    const crowds = overlapping.some((e) => {
+      const other = ENEMY_TYPES[e.type];
+      const already = out.filter((o) => o !== e
+        && Math.hypot(o.x - e.x, o.y - e.y) < other.range + ENEMY_TYPES[o.type].range).length;
+      return already + 1 > COMBAT.maxAtOnce - 1;
+    });
+    if (crowds && reject()) continue;
 
     const e = makeEnemy(type, x, y, out.length, rng);
     if (type.kind === 'air') e.hover = ground - y;
+    if (perchIndex >= 0) {
+      e.perch = roofs[perchIndex].kind;
+      roofs.splice(perchIndex, 1);
+    }
     out.push(e);
   }
   return out;
+}
+
+/** How much height the ground varies across a machine's own footprint. */
+function footSpan(terrain, x, r) {
+  let lo = Infinity, hi = -Infinity;
+  for (let d = -r; d <= r; d += 2) {
+    const h = terrain.heightAt(x + d);
+    if (h < lo) lo = h;
+    if (h > hi) hi = h;
+  }
+  return hi - lo;
 }
 
 function makeEnemy(type, x, y, index, rng) {

@@ -1141,3 +1141,146 @@ that places machines.
 The encounter audit's greed measure fell 108/300 → 85/300, all of it Europa, with `europa-2` going
 15/20 → 0/20. That is the cave plus the known-stale fuel budgets, which are already recorded as
 the finding they are.
+
+---
+
+## M21 — structures, and guards that belong somewhere (2026-08-20)
+
+Three asks from Tom's playtest: turrets half-buried in slopes, too few machines, and nothing built
+in a world whose fiction is full of abandoned installations. All three measured first.
+
+### Turrets stood on slopes because nobody re-checked after M19
+
+The placement filter allowed ground up to a slope of 0.5, written when the ground was smooth. M19
+roughened everything and the filter never moved:
+
+| | before | after |
+| --- | ---: | ---: |
+| mean \|slope\| under a ground gun | 0.220 | **0.043** |
+| guns on ground steeper than 0.30 | 30% | **0%** |
+| height across the gun's own base | 9.8 px | **2.3 px** |
+| guns with more than a radius of it (half-buried) | 36 of 199 | **0** |
+
+Two changes. The slope limit came down to 0.28, and a **second, better test** joined it: the height
+across the machine's own footprint. A slope test alone passes a gun standing across a 40 px step,
+because a step between two heightmap samples is not a slope — which is exactly what M19's boulders
+and M20's seams put into the ground.
+
+### Structures, and why terrain does not know what a turret is
+
+The other half of the fix is that there is now somewhere to stand. A **structure** is a flat-topped
+block cut into the heightmap — a tower or a low hab — with vertical sides, because a building with
+sloped sides reads as a hill. It follows the same rule as a boulder or a serac: raised into the
+ground, so collision, line of sight and every placement clearance come free.
+
+Terrain produces flat-topped geometry and records it; `placeEnemies` chooses among what it finds.
+The generator never learns what a turret is, which is the import rule the project has held since
+M19. **73% of ground guns now stand on a roof.**
+
+One fault found by its own test: the roof was derived from the ground height at the structure's
+*centre* and cut with `Math.min`, which leaves the high end of a slope standing proud **through** the
+roof — an 87 px step across a 183 px hab. It is derived from the highest ground under the whole
+footprint now, and the roofs measure flat to under 2 px.
+
+### More machines is not more of a fight
+
+Before: **21 machines across 15 missions**, and 71% of the deep route had nothing on it at all.
+
+The spec's rule is "1-3 at once, rarely 4", and until M21 the validator checked that as a headcount
+on the *map* — a different claim, and the one that blocked the ask. What matters is how many can
+engage the lander at the same moment. So:
+
+- machines take **stations strung along the crossing** rather than ringing the prize
+- a machine's engagement disc may overlap at most **3 others**, which makes "no more than 4 at once"
+  a cheap local test instead of a sweep of the world
+- the validator checks that same rule, sharing the constant — the M12 lesson about placement and
+  validation drifting apart
+
+| machines that can engage you at once | share of all the air a lander can fly through |
+| --- | ---: |
+| none | 62.0% |
+| 1 | 26.5% |
+| 2 | 10.2% |
+| 3 | 1.2% |
+| 4 | 0.1% |
+| 5 | **never** |
+
+**39 machines now, against 21 — 1.86×**, with the crowding *lower* than before per machine. The
+audit reports this distribution now, because it is the property the design claims.
+
+### The overlap rule had to be symmetric, and the validator caught it
+
+Counting overlaps only against machines *already placed* passes a candidate that overlaps three
+while pushing each of those three to four. Placement said fine; the validator failed OLD BATTERY and
+IRON RAIN on eleven seeds between them. The test caught a real bug in the code it was written
+against, on its first run.
+
+### A budget is what the map fields, not an aspiration
+
+Raising budgets alone did not work: at 6 machines a mission fielded 3.4. The obvious suspects were
+all wrong — removing *any single* constraint bought 3-5 points, and removing the at-once cap
+entirely still only reached 87%:
+
+| | fill |
+| --- | ---: |
+| as shipped then | 83% |
+| no at-once cap | 87% |
+| no sanctuary margin | 88% |
+| the old loose footing rules | 86% |
+| 4× the placement attempts | 84% |
+
+A map has room for a finite number of non-overlapping engagements, and past that the number in the
+mission file is a lie. Two things fixed it:
+
+- **a broad fallback.** Past 60% of its attempts a machine abandons its station and searches the
+  whole map. Without it, RADIATION PASS placed *nothing* on one seed in five — the same "declared
+  enemies, empty mission" the M15 audit exists to catch.
+- **budgets set from a measured capacity sweep.** Every budget now fills to **99%** (810/820 over 20
+  seeds), no armed mission is ever empty, and the test asserts a 95% floor rather than exact
+  equality — if it drops, a budget was raised past what its map can hold.
+
+### Two missions cannot have more machines at all, and the reason is structural
+
+`europa-2 THE CREVASSE` and `europa-4 UNDER THE ICE` are single-pad caves. With one landing zone the
+sanctuary **is** the prize, and the corridor is the only way in — there is no route around a machine
+the way there is on a two-zone map. Unarmed flights lost to enemy fire, over 40 seeds:
+
+| machines | THE CREVASSE | UNDER THE ICE |
+| ---: | ---: | ---: |
+| 1 | **0/40** | 0/40 |
+| 2 | 2/40 | **0/40** |
+| 3 | 6/40 | 1/40 |
+| 4 | 8/40 | 5/40 |
+
+"You can cross this unarmed" is a promise, so they hold at 1 and 2 — their pre-M21 numbers. This is
+the single-pad finding M20 raised, and it now has a number attached: it does not just make those
+missions watched, it caps what they can carry.
+
+### A drone-only chapter cannot absorb machines the way a mixed one can
+
+A turret is something you fly around; a drone follows you and rams. On THE FLOES' deep route,
+unarmed flights land 6/20 at two machines, 3/20 at three, 1/20 at four. Europa's budgets are below
+Luna's and Mars' for that reason, not by oversight.
+
+Worth separating from it: `europa-3 RADIATION PASS`'s deep route is **4/20 with no machines on the
+map at all**. That collapse is M20's ice, not M21's guards, and no combat tuning will move it.
+
+### Where it landed
+
+| | before | after |
+| --- | ---: | ---: |
+| machines across the campaign | 21 | **39** |
+| budget fill | — | **99%** |
+| ground guns on a slope | 30% | **0%** |
+| guns standing on a built roof | — | **73%** |
+| way home | 521/540 (96%) | **519/540 (96%)** |
+| the prize | 199/300 | 179/300 |
+| deep route engaged | 86% | 93% |
+| ore within 600 px of a machine | 61% | 79% |
+
+The way home is untouched, which is the guarantee. The prize costs 20 flights of 300 — the intended
+price of the ask — and the ore is genuinely contested now, since machines and deposits are both
+placed along the road: the median deposit sits 247 px from a machine, against 451 px before.
+
+The flight fixture moved on the armed authored missions only. No classic mission and none of the
+three quiet chapter-openers moved, which is the containment check.

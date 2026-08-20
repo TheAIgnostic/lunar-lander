@@ -45,7 +45,7 @@ for (const id of ENEMY_IDS) {
 
 // --- every armed mission, over many seeds: the structural promises
 {
-  let problems = 0, exposed = 0, placed = 0, total = 0;
+  let problems = 0, exposed = 0, placed = 0, total = 0, empty = 0, over = 0;
   for (const lvl of ARMED) {
     for (const seed of SEEDS) {
       const terrain = new Terrain(lvl, seed);
@@ -54,12 +54,50 @@ for (const id of ENEMY_IDS) {
       if (v.problems.length) console.log(`  ...  ${lvl.id} seed ${seed}: ${v.problems.join('; ')}`);
       placed += v.enemies.length;
       total += lvl.enemyBudget;
+      if (v.enemies.length === 0) empty++;
+      if (v.enemies.length > lvl.enemyBudget) over++;
       exposed += sanctuaryClear(lvl, terrain, v.enemies).exposed;
     }
   }
   check('no armed mission breaks a placement rule', problems === 0, `${problems} problems`);
+  // M21: a gun stands on flat, short ground or on a roof, never half-buried in
+  // a slope. Before it, 30% of ground guns stood on ground steeper than 0.30
+  // and one in five had more than its own radius of height across its base.
+  {
+    let steep = 0, uneven = 0, guns = 0, perched = 0;
+    for (const lvl of ARMED) {
+      for (const seed of SEEDS) {
+        const terrain = new Terrain(lvl, seed);
+        for (const e of validateEnemies(lvl, terrain, seed).enemies) {
+          const type = ENEMY_TYPES[e.type];
+          if (type.kind !== 'ground') continue;
+          guns++;
+          if (e.perch) perched++;
+          if (Math.abs(terrain.slopeAt(e.x)) > COMBAT.groundSlope + 0.02) steep++;
+          let lo = Infinity, hi = -Infinity;
+          for (let d = -type.radius; d <= type.radius; d += 2) {
+            const h = terrain.heightAt(e.x + d);
+            if (h < lo) lo = h;
+            if (h > hi) hi = h;
+          }
+          if (hi - lo > COMBAT.footSpan + 1) uneven++;
+        }
+      }
+    }
+    check('no ground gun stands on a slope', steep === 0, `${steep} of ${guns}`);
+    check('no ground gun is half-buried', uneven === 0, `${uneven} of ${guns}`);
+    check('guns do use the roofs built for them', perched > guns * 0.3, `${perched}/${guns} perched`);
+  }
   check('the sanctuary pad is never in anyone’s sight line', exposed === 0, `${exposed} exposed samples`);
-  check('missions get the machines they asked for', placed === total, `${placed}/${total}`);
+  // A budget is a target the map has to have room for, not a guarantee it can
+  // always meet: the countability rule, the sanctuary and the flat-footing rule
+  // all take ground away, and past a point a map simply has nowhere to put
+  // another machine. M21 set every budget from a measured capacity sweep so
+  // that this stays at or above 95% - if it drops, a budget was raised past
+  // what its map can hold and the number in the mission has become a lie.
+  check('missions field the machines they asked for', placed >= total * 0.95, `${placed}/${total}`);
+  check('a budget is never exceeded', over === 0, `${over} seeds over budget`);
+  check('an armed mission is never empty', empty === 0, `${empty} seeds with nothing placed`);
 }
 
 /** A ship parked at a spot, with a full loadout, ready to be shot at. */

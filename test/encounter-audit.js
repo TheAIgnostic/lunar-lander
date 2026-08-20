@@ -15,7 +15,7 @@ import { Terrain } from '../src/terrain.js';
 import { flyMission } from './pilot.js';
 import { cargoFor } from '../src/objectives.js';
 import { MOON_LEVELS, MARS_LEVELS, EUROPA_LEVELS } from '../src/missions.js';
-import { placeEnemies } from '../src/enemies.js';
+import { placeEnemies, ENEMY_TYPES, lineOfSight } from '../src/enemies.js';
 
 const SEEDS = +(process.argv[2] || 20);
 const seedList = Array.from({ length: SEEDS }, (_, i) => 1000 + i * 137);
@@ -161,4 +161,38 @@ if (armedRows.length) {
   const engaged = armedRows.reduce((a, r) => a + r.deep.filter(shotAt).length, 0);
   const flown = armedRows.reduce((a, r) => a + r.deep.length, 0);
   console.log(`  armed missions: engaged on the deep route ${engaged}/${flown} (${Math.round((engaged / flown) * 100)}%)`);
+
+  // How crowded it actually gets. The spec's rule is "1-3 at once, rarely 4",
+  // and M21's whole argument for more machines is that more *on the map* is not
+  // more *on you* - so the audit has to report the thing being claimed. Every
+  // point of air a lander can occupy, counting only machines that are in range
+  // and can see it.
+  const hist = {};
+  let worst = 0;
+  for (const r of armedRows) {
+    for (const seed of seedList) {
+      const terrain = new Terrain(r.level, seed);
+      const machines = placeEnemies(r.level, terrain, seed);
+      for (let x = 140; x < terrain.width - 140; x += 90) {
+        const ground = terrain.heightAt(x);
+        const roof = terrain.ceiling ? terrain.ceilingAt(x) + 60 : 130;
+        for (let y = roof; y < ground - 40; y += 90) {
+          let n = 0;
+          for (const e of machines) {
+            const type = ENEMY_TYPES[e.type];
+            const d = Math.hypot(e.x - x, e.y - y);
+            if (d > type.range || d < type.minRange) continue;
+            if (!lineOfSight(terrain, e.x, e.y, x, y)) continue;
+            n++;
+          }
+          hist[n] = (hist[n] || 0) + 1;
+          if (n > worst) worst = n;
+        }
+      }
+    }
+  }
+  const samples = Object.values(hist).reduce((a, b) => a + b, 0);
+  const share = Object.keys(hist).sort((a, b) => +a - +b)
+    .map((n) => `${n}:${(100 * hist[n] / samples).toFixed(1)}%`).join('  ');
+  console.log(`  machines that can engage you at once   ${share}   (worst ${worst})`);
 }

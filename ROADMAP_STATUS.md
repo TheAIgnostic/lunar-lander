@@ -475,6 +475,40 @@ scheduled until the MVP is stable — the spec says the same.
     be left underground by a later raising pass. Every crest is re-derived once, after all of them
   - 65 new terrain assertions, which is what found the second fault
 
+- [x] **M21 — structures, and guards that belong somewhere** (this commit)
+  - **turrets no longer stand on slopes.** The placement filter allowed ground up to 0.5 and was
+    written before M19 roughened the world: 30% of ground guns stood on ground steeper than 0.30 and
+    one in five was half-buried. Now 0% and none - mean slope under a gun 0.220 → **0.043**
+  - the slope test gained a better companion: **the height across the machine's own footprint**. A
+    slope test alone passes a gun standing across a 40 px *step*, which is exactly what M19's
+    boulders and M20's seams put in the ground
+  - **structures**: flat-topped towers and habs cut into the heightmap, following the boulder/serac
+    rule so collision and line of sight come free. Terrain produces flat-topped geometry; `placeEnemies`
+    chooses among what it finds, so the generator still does not know what a turret is. **73% of
+    ground guns stand on a roof now**
+  - **39 machines against 21, and less crowding per machine.** The spec's "1-3 at once, rarely 4"
+    was being checked as a headcount on the *map*, which is a different claim and the one blocking
+    Tom's ask. Machines take stations along the crossing, a machine's engagement disc may overlap at
+    most three others, and the validator checks the same rule. Measured over every point of air a
+    lander can fly through: **none 62%, one 26.5%, two 10.2%, three 1.2%, four 0.1%, five never**
+  - **a budget is what the map fields.** Raising them alone did not work - at 6 a mission fielded 3.4
+    - and no single constraint was to blame: removing *any* of them bought 3-5 points, and removing
+    the at-once cap entirely still only reached 87%. Fixed by a broad fallback past 60% of the
+    placement attempts (RADIATION PASS was placing *nothing* on one seed in five) and by setting
+    every budget from a measured capacity sweep. Fill is **99%**, and the test asserts a 95% floor
+  - **two missions cannot take more machines at all**, and it is structural: `europa-2` and
+    `europa-4` are single-pad caves, so the sanctuary *is* the prize and the corridor is the only way
+    in. Unarmed flights lost to fire over 40 seeds: THE CREVASSE 0 at one machine, 2 at two, 6 at
+    three; UNDER THE ICE 0 at two, 1 at three, 5 at four. They hold at their pre-M21 numbers
+  - **a drone-only chapter cannot absorb machines the way a mixed one can** - a turret is something
+    you fly around, a drone follows you and rams. THE FLOES' deep route: 6/20 at two, 3/20 at three,
+    1/20 at four
+  - the way home is **untouched** (519/540 against 521/540); the prize costs 20 flights of 300, which
+    is the price of the ask. Ore is properly contested now: the median deposit sits 247 px from a
+    machine against 451 px before
+  - the symmetric-overlap bug: counting overlaps only against machines *already placed* passes a
+    candidate that pushes three others to four. The new validator rule caught it on its first run
+
 ## Decisions (Tom, 2026-08-16)
 
 1. **Gravity** — compressed mapping is the *baseline*, then a per-body hand-tuned offset so each
@@ -492,10 +526,9 @@ None.
 
 ## Next task
 
-Two content milestones remain from Tom's playtest, then a cleanup that is now overdue enough to be
-scheduled rather than mentioned. **M21 and M22 are unblocked** — M19 rebuilt the ground they stand
-on and M20 has now proved the pattern twice. M23 is a refactor with no behaviour change, which makes
-it the safest thing on this list to hand to a cold session.
+One content milestone remains from Tom's playtest, then a cleanup that is now overdue enough to be
+scheduled rather than mentioned. M23 is a refactor with no behaviour change, which makes it the
+safest thing on this list to hand to a cold session.
 
 ### M21 — structures, and guards that belong somewhere
 
@@ -515,7 +548,7 @@ it the safest thing on this list to hand to a cold session.
   thirteen do. This is the milestone that places machines, so it belongs here
 - re-run the encounter audit either side
 
-### M22 — ore you can read
+### M22 — ore you can read (next)
 
 - material becomes **floating ore crates near the ground**; the light-ray marker goes
 - the M23 import fix already separated placement from pricing, so this is a render change plus a

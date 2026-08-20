@@ -65,6 +65,29 @@ export const ICE = {
   serac: { density: 1.5, min: 24, max: 52, rise: [1.5, 3.2], padGuard: 110, caveScale: 0.55 },
 };
 
+/**
+ * Structures: what is left of whoever was here before.
+ *
+ * Raised into the heightmap like a boulder or a serac, so a tower is something
+ * you collide with, land a machine on and hide behind for nothing. The
+ * difference is the *top*: a structure's roof is cut flat, which is the whole
+ * reason it exists. M21's complaint was turrets half-buried in slopes, and 30%
+ * of them stood on ground steeper than 0.30 - a flat roof is somewhere a gun
+ * can honestly stand.
+ *
+ * Terrain does not know what a turret is. It produces flat-topped geometry and
+ * records it; `placeEnemies` chooses among what it finds. That keeps the
+ * generator free of concepts it has no business importing.
+ */
+export const STRUCTURE = {
+  padGuard: 210,          // never beside a landing zone
+  minGap: 250,            // structures stand apart, so they read as buildings
+  maxSlope: 0.55,         // nothing is built on a cliff face
+  tower: { w: [34, 62], h: [95, 215] },
+  hab: { w: [95, 200], h: [42, 92] },
+  towerShare: 0.5,
+};
+
 export class Terrain {
   constructor(cfg, seed) {
     const rng = makeRng(seed);
@@ -151,6 +174,11 @@ export class Terrain {
     this.seams = this.surface === 'ice' ? this._fractureIce(cfg, seed) : [];
     this.seracs = this.surface === 'ice' ? this._raiseSeracs(cfg, seed) : [];
 
+    // What somebody built here and left. Flat roofs, which is what a machine
+    // needs to stand on and what the ground stopped providing when M19
+    // roughened it.
+    this.structures = this._raiseStructures(cfg, seed);
+
     // Big rocks are *terrain*, not decoration.
     //
     // Rocks were 3-9 px and drawn on top of the heightmap with no collision at
@@ -167,6 +195,10 @@ export class Terrain {
     // underground, which the renderer reads to place its gradient.
     for (const s of this.seracs) s.top = this.heightAt(s.x + s.lean * s.r);
     for (const b of this.boulders) b.top = this.heightAt(b.x);
+    // A structure's roof is the one crest that must *not* drift: a machine is
+    // placed on it. Nothing may raise ground inside its footprint afterwards,
+    // and `_raiseBoulders` keeps clear of them for that reason.
+    for (const st of this.structures) st.top = this.heightAt(st.x);
 
     this.fuelCells = this._placeFuel(cfg, rng);
     this.cargo = this._placeCargo(cfg, rng);
@@ -229,6 +261,9 @@ export class Terrain {
         const x = rng.range(r + 60, this.width - r - 60);
         // Never near a landing zone, and never on a slope it would slide off.
         if (this.pads.some((p) => x > p.x1 - BOULDER.padGuard - r && x < p.x2 + BOULDER.padGuard + r)) continue;
+        // A rock on a roof is a rock a machine cannot stand beside, and it
+        // would move a crest that `placeEnemies` has already been promised.
+        if (this.structures.some((st) => x > st.x - st.w / 2 - r - 30 && x < st.x + st.w / 2 + r + 30)) continue;
         if (Math.abs(this.slopeAt(x)) > 0.8) continue;
         if (out.some((b) => Math.abs(b.x - x) < (b.r + r) * 1.4)) continue;
         // A cave has to stay flyable: a boulder may not eat the corridor.
@@ -357,6 +392,55 @@ export class Terrain {
     // rule the boulders use, and for the same reason: the drawing traces the
     // heightmap rather than guessing at it.
     for (const s of out) s.top = this.heightAt(s.x + s.lean * s.r);
+    return out;
+  }
+
+  /**
+   * Flat-topped blocks cut into the heightmap: towers and low habs.
+   *
+   * The sides are deliberately vertical - a hard cut at the footprint edge -
+   * because a building with sloped sides reads as a hill. The roof is set by
+   * `Math.min` against the existing ground, so it is level even where the
+   * ground under it is not, which is the property the whole thing exists for.
+   */
+  _raiseStructures(cfg, seed) {
+    const want = Math.max(0, cfg.structures | 0);
+    if (!want || !this.shape) return [];
+    const rng = makeRng(((((seed | 0) ^ 0x5721c7ea) >>> 0) + 19) >>> 0);
+    const out = [];
+    for (let i = 0; i < want; i++) {
+      for (let tries = 0; tries < 40; tries++) {
+        const tower = rng() < STRUCTURE.towerShare;
+        const spec = tower ? STRUCTURE.tower : STRUCTURE.hab;
+        const w = rng.range(spec.w[0], spec.w[1]);
+        const rise = rng.range(spec.h[0], spec.h[1]);
+        const x = rng.range(w + 90, this.width - w - 90);
+        if (this.pads.some((p) => x > p.x1 - STRUCTURE.padGuard - w && x < p.x2 + STRUCTURE.padGuard + w)) continue;
+        if (out.some((o) => Math.abs(o.x - x) < (o.w + w) / 2 + STRUCTURE.minGap)) continue;
+        if (Math.abs(this.slopeAt(x)) > STRUCTURE.maxSlope) continue;
+        const i1 = Math.max(0, Math.floor((x - w / 2) / this.step));
+        const i2 = Math.min(this.n - 1, Math.ceil((x + w / 2) / this.step));
+        if (i2 - i1 < 2) continue;                       // narrower than the grid can hold
+        // Measure the ground the whole footprint stands on, not just the middle.
+        // Taking the height at the centre and lowering everything to it leaves
+        // the high end of a slope standing proud *through* the roof - an 87 px
+        // step across a 183 px hab, which is not a roof anything can stand on.
+        let crest = Infinity, foot = -Infinity;
+        for (let k = i1; k <= i2; k++) {
+          if (this.h[k] < crest) crest = this.h[k];
+          if (this.h[k] > foot) foot = this.h[k];
+        }
+        const base = foot;
+        const top = crest - rise;
+        // A cave has to stay flyable, and a tower eats more corridor than a
+        // boulder does because it does not taper.
+        if (this.ceiling && top - this.ceilingAt(x) < 210) continue;
+        if (top < this.height * 0.24) continue;
+        for (let k = i1; k <= i2; k++) this.h[k] = Math.min(this.h[k], top);
+        out.push({ kind: tower ? 'tower' : 'hab', x, w, rise, base, top, i1, i2 });
+        break;
+      }
+    }
     return out;
   }
 

@@ -176,5 +176,40 @@ for (const name of ARCHETYPE_NAMES) {
     Math.max(...cave.seracs.map((s) => s.r)) < Math.max(...t.seracs.map((s) => s.r)));
 }
 
+// --- structures: flat roofs cut into the ground, away from the landing zones
+{
+  const c = cfg({ terrain: { archetype: 'ridge', relief: 260, detail: 1.2 }, structures: 4 });
+  const t = new Terrain(c, 77);
+  check('a mission that asks for structures gets some', t.structures.length > 0, `${t.structures.length}`);
+  check('and never more than it asked for', t.structures.length <= 4);
+  check('a level that asks for none has none', new Terrain(cfg({ terrain: { archetype: 'ridge' } }), 77).structures.length === 0);
+  check('structures are deterministic',
+    JSON.stringify(new Terrain(c, 77).structures) === JSON.stringify(t.structures));
+
+  for (const st of t.structures) {
+    // The roof is the whole point: a machine stands on it.
+    let lo = Infinity, hi = -Infinity;
+    for (let d = -st.w / 2 + 6; d <= st.w / 2 - 6; d += 2) {
+      const h = t.heightAt(st.x + d);
+      if (h < lo) lo = h;
+      if (h > hi) hi = h;
+    }
+    check(`${st.kind}: the roof is flat`, hi - lo < 2, `${(hi - lo).toFixed(1)} px across ${st.w.toFixed(0)}`);
+    check(`${st.kind}: the roof is where it says it is`, Math.abs(st.top - t.heightAt(st.x)) < 1.5);
+    check(`${st.kind}: it stands above the ground it was built on`, st.top < st.base);
+    check(`${st.kind}: it is inside the world`, st.top > t.height * 0.2);
+    for (const p of t.pads) {
+      check(`${st.kind}: nothing is built beside a pad`,
+        st.x + st.w / 2 < p.x1 - 100 || st.x - st.w / 2 > p.x2 + 100);
+    }
+  }
+
+  // A roofed level has the tightest air in the game, and a tower does not taper.
+  const cave = new Terrain(cfg({ terrain: { archetype: 'canyon', relief: 240 }, structures: 4, cave: true, clearance: 260 }), 77);
+  let minGap = Infinity;
+  for (let i = 0; i < cave.n; i++) minGap = Math.min(minGap, cave.h[i] - cave.ceiling[i]);
+  check('a tower never closes a cave corridor', minGap >= 200, minGap.toFixed(0));
+}
+
 console.log(`\n  ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
