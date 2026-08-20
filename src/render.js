@@ -186,7 +186,46 @@ export function drawTerrain(ctx, cam, W, H, terrain, level, time, opts = {}) {
     ctx.restore();
   }
 
-  // Micro detail: boulders and debris sitting on the surface.
+  // Boulders. These are raised into the heightmap, so the shape drawn here is
+  // the exact surface the lander collides with - traced off `terrain.h` rather
+  // than approximated. Filled a shade lighter than the ground body and given a
+  // shadowed underside so a boulder reads as a rock embedded in the surface
+  // rather than as a smooth rise in the ground.
+  if (terrain.boulders && terrain.boulders.length) {
+    ctx.save();
+    for (const b of terrain.boulders) {
+      if (b.x + b.r < x0 - 40 || b.x - b.r > x1 + 40) continue;
+      const j1 = Math.max(0, Math.floor((b.x - b.r) / terrain.step));
+      const j2 = Math.min(terrain.n - 1, Math.ceil((b.x + b.r) / terrain.step));
+      const skirt = b.top + b.rise * 0.55;      // where the rock meets the ground
+      ctx.beginPath();
+      ctx.moveTo(j1 * terrain.step, skirt);
+      for (let j = j1; j <= j2; j++) ctx.lineTo(j * terrain.step, terrain.h[j]);
+      ctx.lineTo(j2 * terrain.step, skirt);
+      ctx.closePath();
+      const bg = ctx.createLinearGradient(0, b.top, 0, skirt);
+      bg.addColorStop(0, shade(w.hill, 0.5));
+      bg.addColorStop(1, shade(w.hill, 0.16));
+      ctx.fillStyle = bg;
+      ctx.fill();
+      ctx.strokeStyle = shade(w.hill, 0.85);
+      ctx.lineWidth = 1.3 / cam.scale + 0.35;
+      ctx.stroke();
+      // A crack or two, so the bigger ones have some texture at range.
+      if (b.r > 34) {
+        ctx.globalAlpha = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(b.x - b.r * 0.30, b.top + b.rise * 0.18);
+        ctx.lineTo(b.x + b.r * 0.06, b.top + b.rise * 0.05);
+        ctx.lineTo(b.x + b.r * 0.34, b.top + b.rise * 0.34);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+    ctx.restore();
+  }
+
+  // Micro detail: loose debris sitting on the surface.
   if (terrain.rocks && terrain.rocks.length) {
     ctx.save();
     ctx.fillStyle = 'rgba(4,7,14,0.92)';

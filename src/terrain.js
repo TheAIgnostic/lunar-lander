@@ -29,6 +29,13 @@ import { MATERIAL_NODE } from './economy.js';
  */
 export const TERRAIN = { relief: 1.8, rough: 1.25, bite: 0.25 };
 
+/**
+ * Boulders raised into the heightmap. `min`/`max` are radii in px - the old
+ * decorative rocks were 3-9, so the largest of these is a genuine landmark you
+ * have to go around rather than a texture you fly through.
+ */
+export const BOULDER = { density: 1.6, min: 16, max: 74, padGuard: 130, caveScale: 0.5 };
+
 export class Terrain {
   constructor(cfg, seed) {
     const rng = makeRng(seed);
@@ -107,6 +114,16 @@ export class Terrain {
     this.ceiling = null;
     if (cfg.cave) this._makeCeiling(cfg, rng);
 
+    // Big rocks are *terrain*, not decoration.
+    //
+    // Rocks were 3-9 px and drawn on top of the heightmap with no collision at
+    // all, so a boulder was something you flew through. Making them large would
+    // have meant either obvious fakery or a whole second collision system for
+    // free-standing bodies. Raising the heightmap instead gives exact collision
+    // for nothing - the same three hull points and two feet already test
+    // against the ground - and everything placed afterwards, the fuel road
+    // included, sees the real surface.
+    this.boulders = this._raiseBoulders(cfg, seed);
     this.fuelCells = this._placeFuel(cfg, rng);
     this.cargo = this._placeCargo(cfg, rng);
     this.rocks = this._scatterRocks(cfg, rng);
@@ -140,6 +157,64 @@ export class Terrain {
     }
   }
 
+  /**
+   * Boulders: raised into the heightmap so they are real obstacles.
+   *
+   * Runs on its own seed stream, like the ore does, so adding them does not
+   * shuffle the pads, the road or anything else that was already placed.
+   * Deliberately kept well clear of the landing zones: a rock beside a pad is
+   * character, a rock *on* the approach is an ambush the player cannot read.
+   */
+  _raiseBoulders(cfg, seed) {
+    const spec = cfg.terrain || {};
+    const density = spec.detail != null ? spec.detail : (this.shape ? 1 : 0);
+    if (density <= 0 || !this.shape) return [];
+    const rng = makeRng(((((seed | 0) ^ 0x51ed270b) >>> 0) + 7) >>> 0);
+    // A cave corridor is the tightest air in the game, and it already has a
+    // roof, a drone and a radiation sweep in it. Full-sized boulders there
+    // slowed the crossing enough to cost a lander to fire on the safe route,
+    // which is the one thing the design promises cannot happen - so a roofed
+    // level gets fewer of them and smaller.
+    const roofed = !!this.ceiling;
+    const scale = roofed ? BOULDER.caveScale : 1;
+    const count = Math.round((this.width / 700) * density * BOULDER.density * (roofed ? 0.55 : 1));
+    const out = [];
+    for (let i = 0; i < count; i++) {
+      for (let tries = 0; tries < 18; tries++) {
+        const r = rng.range(BOULDER.min, BOULDER.max) * scale;
+        const x = rng.range(r + 60, this.width - r - 60);
+        // Never near a landing zone, and never on a slope it would slide off.
+        if (this.pads.some((p) => x > p.x1 - BOULDER.padGuard - r && x < p.x2 + BOULDER.padGuard + r)) continue;
+        if (Math.abs(this.slopeAt(x)) > 0.8) continue;
+        if (out.some((b) => Math.abs(b.x - x) < (b.r + r) * 1.4)) continue;
+        // A cave has to stay flyable: a boulder may not eat the corridor.
+        const rise = r * rng.range(0.7, 1.05);
+        if (this.ceiling) {
+          const gap = this.heightAt(x) - this.ceilingAt(x);
+          if (gap - rise < 210) continue;
+        }
+        // Raise the ground in a jagged dome. The jitter is what stops it
+        // reading as a smooth hill - it is the rock's own silhouette, and it
+        // is the actual collision surface rather than a drawing of one.
+        const i1 = Math.max(0, Math.floor((x - r) / this.step));
+        const i2 = Math.min(this.n - 1, Math.ceil((x + r) / this.step));
+        const wob = rng.range(0, 6.28);
+        for (let k = i1; k <= i2; k++) {
+          const d = (k * this.step - x) / r;
+          if (Math.abs(d) > 1) continue;
+          const dome = Math.cos(d * Math.PI / 2) ** 1.4;
+          const jag = 1 + 0.18 * Math.sin(d * 7 + wob) + 0.1 * Math.sin(d * 13 - wob);
+          this.h[k] -= rise * dome * jag;
+        }
+        out.push({ x, r, rise, top: 0 });
+        break;
+      }
+    }
+    // Record the crest after every boulder is in, so overlapping ones agree.
+    for (const b of out) b.top = this.heightAt(b.x);
+    return out;
+  }
+
   /** Layer 4: boulders and debris along the surface, away from the pads. */
   _scatterRocks(cfg, rng) {
     const spec = cfg.terrain || {};
@@ -152,7 +227,10 @@ export class Terrain {
       if (this.padAt(x)) continue;
       const slope = Math.abs(this.slopeAt(x));
       if (slope > 0.9) continue;                 // nothing perches on a cliff
-      const r = rng.range(3, 9) * (1 + density * 0.2);
+      // Loose debris, in a much wider spread than the old flat 3-9 px. The big
+      // ones are boulders in the heightmap; these are what is scattered between
+      // them, and a field of identically-sized pebbles reads as a texture.
+      const r = rng.range(2.5, 15) * (1 + density * 0.2);
       const pts = [];
       const sides = rng.int(5, 7);
       for (let k = 0; k < sides; k++) {

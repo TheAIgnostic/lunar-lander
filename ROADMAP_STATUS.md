@@ -416,6 +416,30 @@ scheduled until the MVP is stable — the spec says the same.
   - **the physics fixture moved for the first time since M0**, because the boundary layer makes
     gusts altitude-dependent. A deliberate model change, not drift, and recorded as such
 
+- [x] **M19 — terrain with teeth** (three commits)
+  - Tom asked for three times bumpier and left the number to me. It is **2.2×**, and three was never
+    available: the generator fits the silhouette to the world, and a canyon's legroom was 230 px, so
+    every trench was already squashed to half depth and raising `relief` only deepened the
+    compression. At relief ×3 the fit was 0.19 and the canyon came out *shallower* than at ×1
+  - the lever was the vertical budget, so the world is taller: height 1400 → 1600, groundBase
+    300 → 520. Free, and it improves the deep route because there is more air over the fuel road
+  - measured per knob: **macro relief is nearly free** (1.8× costs one landing in ninety), while
+    surface roughness and narrowing cost five to eight each, because they land on the pad approach
+    rather than on the crossing. So relief 1.8, roughness 1.25, bite 0.25, features 15% narrower
+  - **boulders are terrain now.** Rocks were 3-9 px with *no collision at all*; they are raised into
+    the heightmap as jagged domes, so collision is free and exact and the fuel road sees the real
+    surface. 6-12 per mission at 16-74 px. The cheapest bumpiness in the milestone, because they sit
+    away from pads by construction: the way home went **up**, 93% → 95%
+  - **a cave you fly into**: the roof is lifted clear of the world at the entry and comes down over
+    the crossing, so the sky closes above you around a third of the way in. Still one array, so
+    every consumer is untouched. Caves get smaller boulders — at full size they cost a lander to
+    fire on the *safe* route, which is the one thing the design promises cannot happen
+  - the classic twelve are untouched: the roughness multiplier is gated on having an archetype
+  - three tests were passing for the wrong reason and this found all of them: the turret
+    minimum-range check depended on a second turret being out of range; the muzzle-safety check
+    measured a shot one frame after birth; and the way-home gate samples six seeds, which is ±4
+    points of noise at these margins
+
 ## Decisions (Tom, 2026-08-16)
 
 1. **Gravity** — compressed mapping is the *baseline*, then a per-body hand-tuned offset so each
@@ -490,7 +514,7 @@ small to reach the hand.
 - **radiation damages the hull** on a timer you can watch, shielded by terrain and by the Ray Shield
 - **a hull bar on every body**, not only the ones with machines on them
 
-### M19 — terrain with teeth
+### M19 — terrain with teeth  ✅ done (this commit)
 
 The high-risk one, like M2 was. Everything here has to survive the mission validator.
 

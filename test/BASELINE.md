@@ -872,3 +872,109 @@ The gust boundary layer makes gusts depend on altitude, which is a deliberate ch
 model rather than drift. One case moved by fractions of a pixel at step 7, where the lander is high
 enough that the shear is near 1. Re-recorded with that reason. Everything else about the flight
 model is untouched.
+
+---
+
+## M19 — terrain with teeth (2026-08-20)
+
+Tom asked for three times bumpier and said to pick what is manageable. It came out at about **2.2×**,
+and the reason three was never on the table is more interesting than the number.
+
+### Raising `relief` did almost nothing
+
+The generator fits the silhouette to the world, and the space a canyon has to sink into is
+`groundBase - 70`, which was **230 px**. Every trench was already compressed to roughly half its
+intended depth, so multiplying relief only made the compression worse:
+
+| relief multiplier | fit on moon-2 (a canyon) | effective depth |
+| --- | ---: | ---: |
+| ×1 | 0.56 | 0.56 |
+| ×1.5 | 0.37 | 0.56 |
+| ×2 | 0.28 | 0.56 |
+| ×3 | **0.19** | 0.57 |
+
+The lever was never the multiplier. It was the vertical budget, so the world is taller: height
+1400 → 1600, groundBase 300 → 520. That nearly doubles canyon depth capacity, and it is **free** —
+86/90 on the way-home measure, identical to before, and it slightly *improves* the deep route
+because there is more air to fly the fuel road through.
+
+### Which knob costs what
+
+Measured one at a time against the project's own "the way home is always there" bar:
+
+| change | way home |
+| --- | ---: |
+| nothing (before M19) | 86/90 |
+| macro relief ×1.8 alone | **89/90** |
+| surface roughness ×1.7 + bite 0.5 alone | 83/90 |
+| narrowing to 0.75 alone | 84/90 |
+| all three together | 81/90 |
+
+Macro relief is nearly free; surface texture and narrowing are what cost landings, because they
+land on the pad approach rather than on the crossing. So relief went to 1.8, roughness and bite
+stayed modest at 1.25 / 0.25, and macro features narrowed 15%.
+
+### Boulders are terrain, not decoration
+
+Rocks were 3–9 px and drawn on top of the heightmap with **no collision at all** — a boulder was
+something you flew through. Making them large would have meant either obvious fakery or a whole
+second collision system for free-standing bodies.
+
+They are raised into the heightmap instead, as jagged domes. Collision comes free, because the same
+three hull points and two feet already test against the ground, and everything placed afterwards —
+the fuel road included — sees the real surface. 6–12 per mission at 16–74 px radius, against the
+old flat 3–9.
+
+That turned out to be the cheapest bumpiness in the milestone, because boulders sit **away** from
+the pads by construction: the way home went *up*.
+
+### Where it landed
+
+| | before | after |
+| --- | ---: | ---: |
+| mean surface slope | 0.331 | **0.719** (2.17×) |
+| share of surface steeper than 30° | 16.7% | **38.3%** (2.29×) |
+| relief span | 330 px | **597 px** (1.81×) |
+| way home | 93% | **95%** |
+| deep route | 83% | 75% |
+
+The classic twelve are untouched. The roughness multiplier is gated on having an archetype, so the
+legacy path cannot be roughened by accident; confirmed by the flight fixture, where all 45 moved
+entries were authored missions and zero were classic.
+
+### A cave you fly into
+
+A cave was a lid over the whole level, so a cave mission began already indoors and the ceiling was a
+fact rather than an event. The roof is lifted clear of the world at the entry and comes down across
+the crossing. On UNDER THE ICE:
+
+| distance from the entry | roof | corridor |
+| ---: | ---: | ---: |
+| 0% | −120 (above the world) | 1165 px |
+| 25% | −93 | 1578 px |
+| 35% | 60 | 1422 px |
+| 60% | 268 | 649 px |
+
+Still one array over the whole level, so every consumer keeps working untouched: hull collision,
+line of sight, the fuel, cargo and ore placement clearances, the corridor validator and the pilot's
+ceiling guard. Near the entry the roof is simply out of reach.
+
+**Caves get smaller boulders.** At full size they cost a lander to enemy fire on the *safe* route on
+europa-4 — the one thing the design promises cannot happen. A roofed level gets 55% as many at half
+the radius, and the guarantee is back to 20/20.
+
+### Three tests that were passing for the wrong reason
+
+Terrain this different is a good way to find tests that were relying on scenery.
+
+- **The turret minimum-range check** flew at `enemies[0]` on a *two*-turret mission and asserted
+  nothing fired, which silently depended on the second turret being out of range. M19 moved them
+  253 px apart, the far gun did the shooting, and the rule under test was never exercised. It uses
+  a one-turret field now.
+- **The muzzle-safety invariant** read `shots[k].x` after `field.update`, but that call fires the
+  shot *and* steps every projectile in the same pass. At 255 px/s that is 2.1 px of travel, and it
+  reported a shot born at a legal 57.1 px as an illegal 55.0. It reads the fire event now, which is
+  the birth position. The rule was never broken; the ruler was.
+- **The way-home gate samples 6 seeds**, which at these margins is ±4 points of noise — it read
+  79–84 out of 90 across settings that all measure 94–95% at 20 seeds. Worth remembering before
+  tuning against it again.
