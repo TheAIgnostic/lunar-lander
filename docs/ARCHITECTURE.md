@@ -142,9 +142,15 @@ them. Deleting the content would delete the only proof the flight model has not 
 stay as an engine fixture that no player can reach. `act()` keeps the `campaign` and `endless` cases
 as audible refusals rather than dropping them, so a stale key binding says why (the M16 rule).
 
-The run is the roguelike unit. There is no route choice — `routeOffers` still does the eligibility
-work and the tiering, and the first offer is simply taken, so the card is a briefing. Losing the last
-shuttle calls `Save.wipeForDeath`, and what that keeps is the whole of the design:
+The run is the roguelike unit, and since M25 it is a **linear ladder**: `PLANET_ORDER` is Moon,
+Mars, Europa, a run always starts at its foot, and losing the last shuttle puts you back there. The
+route window shows every body already cleared plus the next one, so the remaining choice is *replay
+cleared ground to farm the hangar, or press on* — known and cheap against unknown and better paid.
+`isCheckpoint` fires after **every** body, which is both the design and the fix for a real bug:
+rewards accumulate in `run.haul`, purchases spend from `meta.banked`, and only a checkpoint moves one
+to the other, so a checkpoint every *second* body left a whole chapter's pay unspendable.
+
+Losing the last shuttle calls `Save.wipeForDeath`, and what that keeps is the whole of the design:
 
 | lost on death | kept on death |
 | --- | --- |

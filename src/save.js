@@ -157,6 +157,10 @@ export function newRun(chapterId, seed, shuttles = 3) {
     missionsCleared: 0,
     chaptersCleared: 0,
     visited: [chapterId],
+    // Bodies this run has *finished*, in ladder order. `visited` records what
+    // was entered; this records what was cleared, which is what the route
+    // window and the completion check both read.
+    cleared: [],
     sector: 1,
     banked: [],          // settlement ids already paid out, so none pays twice
     coreDrought: 0,      // missions since the last Tech Core, for bad-luck protection

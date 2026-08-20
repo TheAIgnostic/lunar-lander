@@ -1554,3 +1554,75 @@ all. That one is entirely on the human playtest.
   `shot.speed < 400`. They were rewritten around what those constants were protecting — a reaction
   window of at least a second between the lock and the hit, measured at the machine's own range —
   rather than deleted. Turret 1.18 s, drone 1.68 s.
+
+---
+
+## M25 — the ladder, and the money you never got to spend (2026-08-20)
+
+Tom played two bodies of the M24 build and reported that his salvage and research never became
+spendable. That is a real bug with three causes stacked on top of each other, and the rest of the
+milestone is the run shape he asked for around it.
+
+### The bug: a whole chapter's pay, banked nowhere
+
+Mission rewards accumulate in `run.haul`. `purchase()` and `buySkill()` spend from `meta.banked`.
+The only thing that moves one to the other is a **checkpoint** — and `isCheckpoint` fired every
+*second* body:
+
+```
+isCheckpoint(chaptersCleared) => chaptersCleared > 0 && chaptersCleared % 2 === 0
+```
+
+So clearing the Moon banked nothing. M24 then closed the hangar and the loadout outside that same
+window, which turned a one-body delay into a wall: two bodies in, with a full haul sitting in the run
+and no screen that would take it.
+
+**Every body is a supply stop now.** Verified live: a run carrying 900 transmitted + 400 cargo
+salvage, 250 data, 2 cores and 6 ore banked all of it on clearing the Moon, the haul reset to zero,
+and a gear purchase then went through — 1300 → 980 salvage, ilmenite 60 → 20, gear 1 → 2. With the
+window shut the same purchase is refused.
+
+Worth keeping: the refusal that looked like a second bug was correct. Buying gear with the wrong
+material named exactly what was missing ("Needs 40 more Ilmenite alloy stock"), which is M10's
+refusal rule doing its job.
+
+### The ladder
+
+| | before | after |
+| --- | --- | --- |
+| progression | two-card forecast, tier-gated, seeded | **Moon → Mars → Europa, fixed** |
+| after a body | pick one of two offered bodies | **replay any cleared body, or take the next** |
+| supply stop | every second body | **every body** |
+| completion | five sectors | **every body on the ladder cleared** |
+| on death | back to a menu with progress intact | **back to the Moon** |
+
+The choice that remains is the one worth having: at every window you can go back to ground you have
+already cleared and farm it for the hangar, or press on. Going back is known, safe and pays less;
+going on is the other thing. That is a decision about risk and money, which two forecast cards never
+were.
+
+Cards are laid out with flex-wrap and centred justification rather than a fixed two-column grid, so
+one card sits in the middle and three sit evenly. Three cards at a 300 px basis wrapped and pushed
+Europa below the fold at 800 px wide; the basis is 200 px with a 320 px cap now, which fits three on
+one row and still fills the width when there are two.
+
+### The expedition now ends where it is won
+
+Completion was decided in the route handler, so clearing Europa dropped the player onto three
+"replay to farm" cards with no next body, and the win only fired once one of them was clicked. It is
+decided in `main.js` on the frame the last body is cleared. By the time the route screen is
+reachable there is always somewhere left to go.
+
+### What did not move
+
+Both fixtures byte-identical again. Nothing here touches the simulation — it is banking cadence,
+screen composition and run bookkeeping.
+
+### Left as a question, not a decision
+
+`TIERS`, `eligibleBodies`, `routeOffers`, `MIN_OFFERS` and `SECTORS` are M9's discovery-tier
+machinery and are now **called by nothing outside `route.js`**. They are marked as unwired rather
+than deleted, because the question they answer is still open: when the remaining seven bodies are
+authored, do they join `PLANET_ORDER` or come back as a tiered choice after the ladder? That is a
+design call. Until it is made this is dead code with passing tests — the exact state the M11 note
+warns about.

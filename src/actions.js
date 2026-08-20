@@ -13,7 +13,7 @@ import * as Save from './save.js';
 import { purchase } from './components.js';
 import { settleHaul } from './economy.js';
 import { chapterFor } from './missions.js';
-import { isExpeditionComplete, routeOffers } from './route.js';
+import { routeChoices } from './route.js';
 import { flightAssist } from './screens.js';
 import { STARTER_PASSIVES } from './modules.js';
 import { buySkill } from './skills.js';
@@ -27,7 +27,9 @@ export function act(action) {
   audio.unlock();
   audio.ui();
   if (action.startsWith('chapter:')) {
-    flow.beginExpedition(action.slice(8));
+    // The ladder decides where a run starts, so the body named here is ignored.
+    // The action is kept because the menu and the chapters screen both fire it.
+    flow.beginExpedition();
     return;
   }
   if (action === 'noop') return;
@@ -136,16 +138,16 @@ export function act(action) {
   if (action.startsWith('pick:')) { g.hangarPick = action.slice(5); flow.renderOverlay(); return; }
   if (action.startsWith('buy:')) {
     // M24: the hangar is a *window*, not a shop. You may always walk in and
-    // look at what the tracks cost, but salvage is only ever spent at a sector
-    // checkpoint - which is the same moment the loadout opens. That is the
+    // look at what the tracks cost, but salvage is only ever spent in the
+    // window between bodies - the same moment the loadout opens. That is the
     // trade the run economy is built on: a permanent upgrade now, or the
-    // modules and skills to survive the next sector.
+    // modules and skills to survive the next body.
     if (g.run && !g.loadoutWindow) {
-      flow.toast('The hangar only takes work at a sector checkpoint.');
+      flow.toast('The hangar only takes work between bodies.');
       return;
     }
     if (!g.run) {
-      flow.toast('Upgrades are fitted during an expedition, at a checkpoint.');
+      flow.toast('Upgrades are fitted during an expedition, in the window between bodies.');
       return;
     }
     const id = action.slice(4);
@@ -174,20 +176,9 @@ export function act(action) {
       run.haul = { salvageSafe: 0, salvageCargo: 0, data: 0, cores: 0, materials: {} };
       run.sector++;
       g.lives = run.maxShuttles;
-      // Five sectors is an expedition. Reaching the end of the fifth is the
-      // win condition the run never had.
-      if (isExpeditionComplete(run.sector)) {
-        g.lastRunSummary = { missions: run.missionsCleared, chapter: run.chapterId, settled, complete: true };
-        run.score = g.score;
-        // M24: carrying an expedition through all five sectors is what opens
-        // mission select. It is the only thing that does.
-        if (!meta.gameCompleted) { meta.gameCompleted = true; Save.saveMeta(meta); }
-        Save.clearRun();
-        g.run = null;
-        g.loadoutWindow = false;
-        flow.setState('expedition-complete');
-        return;
-      }
+      // Completion is not decided here any more: main.js ends the expedition on
+      // the frame the last body is cleared, so by the time this screen is
+      // reachable there is always somewhere left to go.
     }
     g.loadoutWindow = false;
     run.chapterId = card.planet;

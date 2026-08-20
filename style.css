@@ -423,3 +423,43 @@ table.stats-table .m-w { text-align: right; color: #7f9db0; font-size: 11px; }
 .tile.route .planet-icon { display: block; }
 .tile.route .world { font-size: 18px; letter-spacing: 0.06em; }
 .tile.route .best.haul { color: #c9a4ff; }
+
+/* --- M25: the ladder ------------------------------------------------------
+   The route window shows every cleared body plus the next one, so the card
+   count is 1, 2 or 3 and a fixed two-column grid left one card stranded in the
+   left half of the screen. Flex-wrap with centred justification puts one card
+   in the middle and lays two or three out evenly, which is what Tom asked for. */
+.grid.routes.centred,
+.grid.chapters.centred {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: stretch;
+  gap: 16px;
+}
+/* Basis small enough that three fit on one row at the narrowest desktop the
+   game is played at - three cards wrapped and pushed Europa below the fold at
+   800px wide. They grow to the max when there are only one or two. */
+.grid.routes.centred > .tile { flex: 1 1 200px; max-width: 320px; }
+.grid.chapters.centred > .tile { flex: 1 1 200px; max-width: 300px; }
+@media (max-width: 720px) {
+  .grid.routes.centred > .tile,
+  .grid.chapters.centred > .tile { flex: 1 1 100%; max-width: none; }
+}
+
+/* A card says which kind it is, so "go back and farm" and "go on" never read
+   as two identical buttons. */
+.route-tag {
+  align-self: flex-start;
+  font-size: 9px;
+  letter-spacing: .16em;
+  padding: 3px 7px;
+  border-radius: 3px;
+  margin-bottom: 2px;
+}
+.route-tag.next { background: rgba(93, 245, 255, .14); color: var(--cyan, #5df5ff); }
+.route-tag.done { background: rgba(159, 192, 212, .12); color: #9fc0d4; }
+.tile.route.is-next { border-color: rgba(93, 245, 255, .38); }
+.tile.route.is-done { opacity: .82; }
+.tile.route.is-done:hover { opacity: 1; }
+.tile.chapter.locked { opacity: .5; }

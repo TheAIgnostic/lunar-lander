@@ -586,6 +586,29 @@ scheduled until the MVP is stable — the spec says the same.
     M23 lesson, holding); and three enemy assertions that encoded the old constants rather than the
     property behind them
 
+- [x] **M25 — the ladder, and the money you never got to spend** (this commit)
+  - Tom played two bodies of M24 and reported his salvage and research never became spendable. Real
+    bug, three causes stacked: rewards land in `run.haul`, purchases spend from `meta.banked`, and
+    only a **checkpoint** moves one to the other — and checkpoints fired every *second* body. M24
+    then closed the hangar outside that same window, turning a delay into a wall
+  - **every body is a supply stop now.** Verified live: clearing the Moon banks the lot, the haul
+    resets, and a purchase goes through (1300 → 980 salvage, gear 1 → 2). Shut the window and the
+    same purchase is refused
+  - **the progression is a linear ladder** — Moon, Mars, Europa — with no forecast to choose
+    between. What remains is the choice worth having: at every window, replay a cleared body to farm
+    for the hangar, or take the next one. Going back is known and pays less
+  - **on death you start at the Moon**, with whatever the hangar has bolted on
+  - route cards are centred and flex-wrapped, so one sits in the middle and three sit evenly. Three
+    at a 300 px basis wrapped Europa below the fold at 800 px; 200 px with a 320 px cap fits them
+  - **the expedition ends where it is won**: clearing Europa used to drop you onto three "replay to
+    farm" cards and only fire the win once you clicked one. Decided in `main.js` now, on the frame
+    the last body is cleared
+  - both fixtures byte-identical — nothing here touches the simulation
+  - **left as a question:** `TIERS` / `eligibleBodies` / `routeOffers` / `SECTORS` are M9's
+    discovery-tier machinery and are now called by nothing outside `route.js`. Marked unwired rather
+    than deleted, because whether the remaining seven bodies join `PLANET_ORDER` or return as a
+    tiered choice is Tom's design call. Dead code with passing tests until it is made
+
 ## Decisions (Tom, 2026-08-16)
 
 1. **Gravity** — compressed mapping is the *baseline*, then a per-body hand-tuned offset so each
@@ -603,8 +626,8 @@ None.
 
 ## Next task
 
-**M24 is done**, and it is the first milestone whose headline number is deliberately *worse* than the
-one before it. The game is harder, there is one mode, and a run is a run. What it needs next is not
+**M25 fixed the run economy Tom hit in playtest and made the progression a ladder.** Before that,
+**M24** was the first milestone whose headline number is deliberately *worse* than the one before it. The game is harder, there is one mode, and a run is a run. What it needs next is not
 another number — it is **a human flying it**, because the two things M24 changed most (how lethal the
 crossing is, and how blind the weather is) are the two things this project's instrument cannot
 measure. The autopilot does not dodge, and it does not look at the screen.

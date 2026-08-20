@@ -13,7 +13,7 @@ import * as Log from './gamelog.js';
 import { worstVisibility } from './forces.js';
 import { missionReward, addReward, settleHaul, nodeWorth, haulOf } from './economy.js';
 
-import { isCheckpoint } from './route.js';
+import { isCheckpoint, isExpeditionComplete, PLANET_ORDER } from './route.js';
 import { deriveFull } from './components.js';
 import { deriveSkills } from './skills.js';
 import { derivePassive, MOON_BLUEPRINTS, COMBAT_BLUEPRINT } from './modules.js';
@@ -153,7 +153,10 @@ function startLevel(index, freshSeed = true) {
 }
 
 /** Start a fresh expedition: three shuttles, one seed, five missions. */
-function beginExpedition(planetId) {
+function beginExpedition() {
+  // M25: the ladder is linear and a run always starts at its foot. Losing an
+  // expedition puts you back here, at the Moon, with the hangar you built.
+  const planetId = PLANET_ORDER[0];
   const seed = g.forcedSeed != null ? g.forcedSeed : (Math.random() * 1e9) | 0;
   g.run = Save.newRun(planetId, seed);
   g.chapter = chapterFor(planetId, seed, 1);
@@ -163,6 +166,27 @@ function beginExpedition(planetId) {
   g.lives = g.run.shuttles;
   Save.saveRun(g.run);
   startLevel(0, false);
+}
+
+/**
+ * The ladder is finished. Bank the last haul, record that the game has been
+ * carried to its end (which is what opens mission select), and release the run.
+ */
+function finishExpedition() {
+  const run = g.run;
+  const settled = settleHaul(run.haul, { completed: true });
+  setMeta(Save.bankRun(meta, run, { completed: true, settled, id: `sector-${run.sector}` }));
+  run.haul = { salvageSafe: 0, salvageCargo: 0, data: 0, cores: 0, materials: {} };
+  run.score = g.score;
+  Save.saveRun(run);
+  g.lastRunSummary = { missions: run.missionsCleared, chapter: run.chapterId, settled, complete: true };
+  if (!meta.gameCompleted) meta.gameCompleted = true;
+  Save.saveMeta(meta);
+  Save.clearRun();
+  g.run = null;
+  g.loadoutWindow = false;
+  Log.log('expedition-complete', { missions: run.missionsCleared, bodies: (run.cleared || []).length });
+  setState('expedition-complete');
 }
 
 /** Pick an interrupted expedition back up exactly where it stopped. */
@@ -577,11 +601,21 @@ function onLand() {
         }
         g.run.chaptersCleared++;
         const body = g.level.planet || g.campaign;
+        // Farming a body again must not add it twice, or the ladder thinks it
+        // is further along than it is.
+        g.run.cleared = Array.isArray(g.run.cleared) ? g.run.cleared : [];
+        if (!g.run.cleared.includes(body)) g.run.cleared.push(body);
         meta.stats.bodies[body] = (meta.stats.bodies[body] || 0) + 1;
         g.run.shuttles = g.lives;
         persistRun();
-        // The checkpoint is the one place mid-expedition where the loadout
-        // opens. It closes again as soon as the next leg is chosen.
+        // M25: the expedition ends *here*, where clearing the last body on the
+        // ladder is actually known - not on the next route screen. Leaving it
+        // to the route handler meant finishing Europa dropped you onto three
+        // "replay to farm" cards with no next body, and the win only fired once
+        // you clicked one of them.
+        if (isExpeditionComplete(g.run.cleared)) { finishExpedition(); return; }
+        // The supply stop after every body: the haul is banked and the loadout
+        // and hangar open. Both close again as soon as the next leg is chosen.
         g.loadoutWindow = isCheckpoint(g.run.chaptersCleared);
         setState(g.loadoutWindow ? 'checkpoint' : 'route');
         return;

@@ -18,7 +18,7 @@ import { ACTIVE_MODULES, PASSIVE_MODULES, moduleById, recommendedFor } from './m
 import { cargoFor } from './objectives.js';
 import { planetIcon } from './planeticons.js';
 import { PLANETS, gravityFor } from './planets.js';
-import { SECTORS, routeOffers } from './route.js';
+import { PLANET_ORDER, routeChoices } from './route.js';
 import { ENVELOPE, normalizeAngle } from './ship.js';
 import { TREES, TREE_IDS, skillCheck } from './skills.js';
 import { audio, g, input, meta, saveSource, settings, ship, store } from './state.js';
@@ -207,20 +207,27 @@ export function screenHTML(s) {
       </div>`;
 
     case 'chapters': {
-      const cards = Object.values(CHAPTERS).map((ch) => {
-        const p = PLANETS[ch.planet];
+      // M25: the ladder, not a menu. Only the first body is startable - the
+      // rest are shown so the run has a visible shape, and are reached by
+      // clearing what is in front of them.
+      const cards = PLANET_ORDER.map((id, i) => {
+        const ch = Object.values(CHAPTERS).find((c) => c.planet === id);
+        const p = PLANETS[id];
         const acc = WORLDS[p.world].accent;
-        return `<button class="tile chapter" data-action="chapter:${ch.planet}">
+        const first = i === 0;
+        return `<button class="tile chapter${first ? '' : ' locked'}" data-action="${first ? 'chapter:' + id : 'noop'}" ${first ? '' : 'disabled'}>
+          <span class="route-tag ${first ? 'next' : 'done'}">${first ? 'START HERE' : `BODY ${i + 1}`}</span>
           <span class="world" style="color:${acc}">${p.displayName}</span>
-          <span class="name">${ch.levels.length} MISSIONS</span>
+          <span class="name">${ch ? ch.levels.length : 5} MISSIONS</span>
           <span class="best">${p.summary}</span>
-          <span class="best">gravity ${(gravityFor(ch.planet) / 6).toFixed(2)} m/s² · ${p.atmosphere} atmosphere${p.hazards.length ? ' · ' + p.hazards.join(', ') : ''}</span>
+          <span class="best">gravity ${(gravityFor(id) / 6).toFixed(2)} m/s² · ${p.atmosphere} atmosphere${p.hazards.length ? ' · ' + p.hazards.join(', ') : ''}</span>
         </button>`;
       }).join('');
       return `<div class="screen wide">
         <h2>EXPEDITION</h2>
-        <p class="tag">Choose a body. Five missions, escalating from introduction to mastery.</p>
-        <div class="grid chapters">${cards}</div>
+        <p class="tag">Three bodies, in order, five missions each. Lose all three landers and you
+        start again at the Moon with whatever the hangar has bolted on.</p>
+        <div class="grid chapters centred">${cards}</div>
         <div class="btns">${btn('back', 'BACK', true, 'SPACE')}</div>
       </div>`;
     }
@@ -474,21 +481,21 @@ export function screenHTML(s) {
     case 'checkpoint': {
       const run = g.run;
       const checkpoint = g.state === 'checkpoint';
-      // M24: the route is not a choice any more. A roguelike run goes where
-      // the run sends it - the seed and the sector decide, deterministically,
-      // and the card is a briefing rather than a menu. `routeOffers` still
-      // does the eligibility work; the first offer is simply taken. Keeping
-      // the generator means the tiers, the withheld hazard and the
-      // distinctness rule all still apply to what you are told.
-      const offers = routeOffers(
-        [...meta.clearedChapters, ...(run.visited || [])],
-        run.seed, run.sector,
-      ).slice(0, 1);
+      // M25: the ladder is linear, so this is not a forecast to choose between
+      // any more. It shows every body already cleared - re-flyable, to farm
+      // salvage for the hangar - and the next one along. Going back is the
+      // safe, known, lower-paying option; going on is the other one.
+      const cleared = run.cleared || [];
+      const offers = routeChoices(cleared, run.sector, run.seed);
       g.routeOffers = offers;
       const cards = offers.map((c, i) => {
         const accent = WORLDS[PLANETS[c.planet].world].accent;
+        const tag = c.isNext
+          ? '<span class="route-tag next">NEXT</span>'
+          : '<span class="route-tag done">CLEARED · replay to farm</span>';
         return `
-        <button class="tile route" data-action="noop">
+        <button class="tile route${c.isNext ? ' is-next' : ' is-done'}" data-action="route:${i}">
+          ${tag}
           <span class="planet-mark" style="color:${accent}">${planetIcon(c.planet, accent, 62)}</span>
           <span class="world" style="color:${accent}">${c.name}</span>
           <span class="name">${'▮'.repeat(c.difficulty)}${'▯'.repeat(5 - c.difficulty)} · ${c.atmosphere === 'none' ? 'no air' : `${c.atmosphere} air`}</span>
@@ -500,19 +507,19 @@ export function screenHTML(s) {
       }).join('');
       const h = run.haul;
       return `<div class="screen wide">
-        <div class="eyebrow" style="color:#4dff9f">SECTOR ${run.sector} OF ${SECTORS}${checkpoint ? ' · CHECKPOINT' : ''}</div>
-        <h2>${checkpoint ? 'CARGO BANKED. SHUTTLES BACK.' : 'NEXT LEG'}</h2>
-        ${checkpoint
-          ? '<p class="body">Supply stop. This is the only place the hangar takes work and the loadout opens, so spend here or carry it. The next world is already set.</p>'
-          : '<p class="body">The expedition goes where it goes. This is what is waiting.</p>'}
+        <div class="eyebrow" style="color:#4dff9f">${cleared.length} OF ${PLANET_ORDER.length} BODIES CLEARED${checkpoint ? ' · SUPPLY STOP' : ''}</div>
+        <h2>${checkpoint ? 'CARGO BANKED. SHUTTLES BACK.' : 'WHERE NEXT'}</h2>
+        <p class="body">This is the only place the hangar takes salvage and the loadout opens, so
+        spend it here or carry it on. Go back to ground you have already cleared to farm for an
+        upgrade, or take the next body.</p>
         <table class="score">
           <tr><td>Transmitted salvage</td><td>${formatScore(h.salvageSafe)}</td></tr>
           <tr><td>Physical cargo ${checkpoint ? '(banking now)' : '(at risk until the next checkpoint)'}</td><td>${formatScore(h.salvageCargo)}</td></tr>
           <tr><td>Research data</td><td>${formatScore(h.data)}</td></tr>
           <tr class="tot"><td>SHUTTLES</td><td>${g.lives} / ${run.maxShuttles}</td></tr>
         </table>
-        <div class="grid routes">${cards}</div>
-        <div class="btns">${btn('route:0', 'FLY IT', true, 'SPACE')}${checkpoint ? btn('outfit', 'CHANGE LOADOUT') : ''}${checkpoint ? btn('hangar', 'HANGAR') : ''}${btn('abandon-run', 'END EXPEDITION')}</div>
+        <div class="grid routes centred">${cards}</div>
+        <div class="btns">${btn('outfit', 'LOADOUT')}${btn('hangar', 'HANGAR')}${btn('abandon-run', 'END EXPEDITION')}</div>
       </div>`;
     }
 

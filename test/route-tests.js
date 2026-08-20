@@ -1,5 +1,5 @@
 // Route eligibility and economy rules:  node test/route-tests.js
-import { eligibleBodies, routeOffers, isCheckpoint, isExpeditionComplete, MIN_OFFERS, SECTORS, TIERS } from '../src/route.js';
+import { eligibleBodies, routeOffers, routeChoices, isCheckpoint, isExpeditionComplete, MIN_OFFERS, nextPlanet, PLANET_ORDER, SECTORS, TIERS } from '../src/route.js';
 import { missionReward, addReward, settleHaul, bankHaul, freshHaul, CORE_PITY, DEBRIEF } from '../src/economy.js';
 import { PLANET_IDS } from '../src/planets.js';
 
@@ -60,13 +60,53 @@ check('the pool is never empty', eligibleBodies(PLANET_IDS).length > 0);
   check('offers still make a valid card', offers.every((o) => !!o.name));
 }
 
-// --- checkpoints
-check('an expedition runs five sectors', SECTORS === 5);
-check('it is not complete before the fifth is done',
-  !isExpeditionComplete(1) && !isExpeditionComplete(5));
-check('and it is complete once the fifth is behind you', isExpeditionComplete(6));
-check('no checkpoint before two chapters', !isCheckpoint(0) && !isCheckpoint(1));
-check('checkpoint every second chapter', isCheckpoint(2) && !isCheckpoint(3) && isCheckpoint(4));
+// --- the ladder (M25)
+//
+// These replace the old sector tests. An expedition used to run five sectors
+// with a checkpoint every second body; it is a linear three-body ladder now,
+// with a supply stop after every one. The property being protected is the same
+// - there is a place to spend, and there is an end - but both moved.
+check('the ladder is Moon, Mars, Europa in that order',
+  PLANET_ORDER.join(',') === 'LUNA,MARS,EUROPA');
+check('a fresh run starts at the Moon', nextPlanet([]) === 'LUNA');
+check('clearing the Moon points at Mars', nextPlanet(['LUNA']) === 'MARS');
+check('clearing Moon and Mars points at Europa', nextPlanet(['LUNA', 'MARS']) === 'EUROPA');
+check('the ladder ends after Europa', nextPlanet(['LUNA', 'MARS', 'EUROPA']) === null);
+check('an expedition is not complete part-way',
+  !isExpeditionComplete([]) && !isExpeditionComplete(['LUNA']) && !isExpeditionComplete(['LUNA', 'MARS']));
+check('and is complete once every body is cleared',
+  isExpeditionComplete(['LUNA', 'MARS', 'EUROPA']));
+check('order does not matter to completion', isExpeditionComplete(['EUROPA', 'LUNA', 'MARS']));
+
+// The bug this milestone was reported for: salvage reaches `meta.banked` only
+// when a checkpoint banks the haul, so a checkpoint that does not fire after
+// the first body means a whole chapter's pay is unspendable.
+check('every body is a supply stop', isCheckpoint(1) && isCheckpoint(2) && isCheckpoint(3));
+check('but not before one is cleared', !isCheckpoint(0));
+
+// --- what the route window offers
+{
+  const first = routeChoices([], 1, 4242);
+  check('before anything is cleared it offers one card', first.length === 1);
+  check('...and that card is the Moon, marked as next',
+    first[0].planet === 'LUNA' && first[0].isNext && !first[0].cleared);
+
+  const second = routeChoices(['LUNA'], 2, 4242);
+  check('after the Moon it offers two', second.length === 2);
+  check('...the Moon, replayable to farm', second[0].planet === 'LUNA' && second[0].cleared && !second[0].isNext);
+  check('...and Mars as the next body', second[1].planet === 'MARS' && second[1].isNext);
+
+  const third = routeChoices(['LUNA', 'MARS'], 3, 4242);
+  check('after Mars it offers all three', third.length === 3);
+  check('exactly one card is ever the next body',
+    [first, second, third].every((set) => set.filter((c) => c.isNext).length === 1));
+
+  const done = routeChoices(['LUNA', 'MARS', 'EUROPA'], 4, 4242);
+  check('with the ladder finished nothing is marked next',
+    done.length === 3 && done.every((c) => !c.isNext && c.cleared));
+  check('every card carries a readable forecast',
+    [...first, ...second, ...third].every((c) => !!c.name && !!c.rareMaterial && Array.isArray(c.hazards)));
+}
 
 // --- rewards
 {

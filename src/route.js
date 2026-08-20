@@ -15,6 +15,61 @@ export const MIN_OFFERS = 2;
 /** How many sectors an expedition runs before it is complete. */
 export const SECTORS = 5;
 
+/**
+ * The campaign, in order (M25). Tom's call: the progression is linear - Moon,
+ * then Mars, then Europa - and losing a run puts you back at the Moon. There is
+ * no "choose your next body" any more, because a roguelite run wants a known
+ * ladder rather than a forecast to read.
+ *
+ * What survives of the choice is *farming*: once a body is cleared it stays on
+ * the route screen and can be re-flown for salvage, so the decision at each
+ * window is "go on, or go back and pay for the hangar first". That is a real
+ * decision about risk and money, which the old four-card forecast never was.
+ *
+ * These are the three bodies with authored chapters. The other seven still fly
+ * generated surveys and are not on the ladder until they are written.
+ */
+export const PLANET_ORDER = ['LUNA', 'MARS', 'EUROPA'];
+
+/** The next body on the ladder, or null when the ladder is finished. */
+export function nextPlanet(cleared = []) {
+  const done = new Set(cleared);
+  return PLANET_ORDER.find((id) => !done.has(id)) || null;
+}
+
+/**
+ * What the route window offers: every body already cleared, in ladder order,
+ * plus the next one. Each card says which it is, so "replay to farm" and "go
+ * on" are visibly different choices rather than two identical buttons.
+ */
+export function routeChoices(cleared = [], sector = 1, seed = 0) {
+  const rng = makeRng((seed ^ (sector * 2654435761)) >>> 0);
+  const done = PLANET_ORDER.filter((id) => cleared.includes(id));
+  const next = nextPlanet(cleared);
+  const ids = [...done, ...(next ? [next] : [])];
+  return ids.map((id) => ({
+    ...planetCard(id, sector, rng),
+    cleared: done.includes(id),
+    isNext: id === next,
+  }));
+}
+
+// -------------------------------------------------------------------------
+// NOT WIRED TO THE GAME since M25. `TIERS`, `eligibleBodies`, `routeOffers`,
+// `MIN_OFFERS` and `SECTORS` are M9's discovery-tier machinery: they decided
+// which bodies could be *offered* when the route was a choice between two
+// forecasts. The ladder replaced that, and nothing outside this file calls them
+// any more.
+//
+// They are kept rather than deleted because the question they answer is still
+// open: seven bodies still fly generated surveys, and when those chapters are
+// authored they either join `PLANET_ORDER` or come back as a tiered choice
+// after the ladder. That is Tom's call, not a refactor - but until it is made,
+// this is dead code with passing tests, which is the state the M11 note warns
+// about ("a system only ever read by a screen has not been shown to work").
+// Delete it or wire it; do not leave it here indefinitely.
+// -------------------------------------------------------------------------
+
 export const TIERS = {
   opening: ['LUNA'],
   A: ['MARS', 'TITAN', 'EUROPA', 'ENCELADUS'],
@@ -118,15 +173,22 @@ export function routeOffers(clearedChapters, seed, sector = 1, count = MIN_OFFER
 }
 
 /**
- * A sector checkpoint falls after every two bodies. That is where the haul is
- * banked, the shuttles come back, and the loadout may be changed - the one
- * place mid-expedition where the player gets to re-plan.
+ * A checkpoint falls after **every body** (M25). It used to be every second
+ * one, and that was the bug Tom hit: mission salvage accumulates in `run.haul`
+ * and only reaches `meta.banked` - the pot `purchase()` and `buySkill()`
+ * actually spend from - when a checkpoint banks it. Clear the Moon, and there
+ * was no checkpoint, so a whole chapter's salvage and research sat in the run
+ * unspendable. M24 then closed the hangar outside that same window, which
+ * turned a delay into a wall: two bodies deep with nothing to spend.
+ *
+ * Banking every body is the fix, and it is also the shape the design wants -
+ * the window between bodies is where you decide whether to spend or press on.
  */
 export function isCheckpoint(chaptersCleared) {
-  return chaptersCleared > 0 && chaptersCleared % 2 === 0;
+  return chaptersCleared > 0;
 }
 
-/** Has the expedition run its five sectors? */
-export function isExpeditionComplete(sector) {
-  return sector > SECTORS;
+/** Every body on the ladder cleared. */
+export function isExpeditionComplete(cleared = []) {
+  return PLANET_ORDER.every((id) => cleared.includes(id));
 }
