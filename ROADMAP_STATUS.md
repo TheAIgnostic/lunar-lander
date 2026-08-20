@@ -8,13 +8,37 @@ Working document for the roguelite expansion.
 - **Architecture, dev hooks, environment gotchas:** `docs/ARCHITECTURE.md`
 - **How progression actually works, and where it is broken:** `docs/PROGRESSION.md`
 - **Measured behaviour at every milestone:** `test/BASELINE.md`
-- **Branch:** `v2`, cut from the tag `snapshot-2026-08-16`. `main` stays playable and untouched.
+- **Branch:** work on `v2`; `main` is what the world plays. See "Where it is published" below.
 - **Run everything:** `./test/run-all.sh 20`
 
 **Rule for every milestone:** ends with a playable build, a passing test pass, a commit, and this
-file updated. `main` stays untouched and playable throughout. **Commit before running
-`macos/build.sh`** — it revokes the agent's Desktop access on this machine, and the fix needs an app
-relaunch; see the environment notes in `docs/ARCHITECTURE.md`.
+file updated. **Commit before running `macos/build.sh`** — it revokes the agent's Desktop access on
+this machine, and the fix needs an app relaunch; see the environment notes in `docs/ARCHITECTURE.md`.
+
+### Where it is published
+
+`v2` landed on `main` on 2026-08-20 and **`main` is now the live game**, served by GitHub Pages from
+the repository root on two remotes:
+
+| remote | repo | plays at |
+| --- | --- | --- |
+| `origin` | `TheAIgnostic/lunar-lander` | https://theaignostic.github.io/lunar-lander/ |
+| `rogue` | `TheAIgnostic/lunar-lander-rogue` | https://theaignostic.github.io/lunar-lander-rogue/ |
+
+Both carry the full history and the same content — Tom's decision, 2026-08-20: the roguelite
+*replaces* the old lander rather than living beside it. The pre-roguelite game is not lost; it is
+`snapshot-2026-08-16`, and `v1.0` / `v1.1` / `snapshot-2026-08-19-mvp` are also intact on both.
+
+**To publish:** work on `v2`, then fast-forward and push.
+
+```bash
+git checkout main && git merge --ff-only v2 && git push origin main && git push rogue main && git checkout v2
+```
+
+Two things about the live build that do not apply locally: `dist/` is gitignored, so Pages serves
+`index.html` + `src/` as real ES modules rather than the single-file bundle; and Pages does **not**
+send `no-store` the way `serve.js` does, so a browser may hold old modules after a deploy. If an
+update looks like it did not land, hard-reload before believing it.
 
 ---
 
