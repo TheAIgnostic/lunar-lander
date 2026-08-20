@@ -457,101 +457,76 @@ None.
 
 ## Next task
 
-**M16-M22 — Tom's playtest, 2026-08-20.** One report, seven milestones. Order is chosen so each one
-unblocks the next: fix what is broken, then fix what things are *called*, then make the world
-readable, then rebuild the ground, then the things standing on it.
-
-Four decisions taken with Tom before starting:
-
-1. **Fragile ice pads are removed**, not repaired. Europa's difficulty comes from the surface and
-   the slide, not a hidden speed cap that punishes a landing the player would call clean.
-2. **Radiation damages the hull** over time. It was instrument noise only, which is why it read as
-   meaningless, and it gives Europa the hull bar it never had.
-3. **A fatal impact explodes on contact.** The M1 settle window stays for *survivable* landings,
-   where it exists to stop a one-frame speed spike failing a good approach.
-4. **The Pulse Laser failing on Blue Fracture is a bug**, not a design complaint. Investigate it.
-
----
-
-### M16 — the glitch sweep, and the rules of a run  ✅ done (this commit)
-
-Nothing new; only things that are wrong. This goes first because several later milestones would
-otherwise be built on top of it.
-
-- dead drones leave a wreck **hanging exactly where they died** — an air unit's wreck never falls.
-  Confirmed in `drawWreck`: it draws at `e.x, e.y` forever. Wrecks should fall and settle.
-- the Seeker Drone is a plain diamond; redraw it as a **guard drone for an abandoned mine**
-- **Europa 1**: landed inside the x2 zone and the game did not register it, then resolved the
-  mission seconds after drifting off the pad entirely
-- **Europa 2**: the Pulse Laser does not work
-- a fatal impact **bounces before it explodes**; it should destroy on the contact frame
-- **a clicking noise while a key is held** (S especially, sometimes space)
-- **the hangar and the loadout must be closed during an expedition** — permanent upgrades are
-  between runs, not mid-run
-- **no restarting a mission mid-expedition.** Losing a lander replays that mission; losing all three
-  ends the run and returns to the start, like any roguelite
-
-### M17 — what things are called  ✅ done (this commit)
-
-Cheap, wide, no physics. Doing it before the content work means the content is authored with the
-right names.
-
-- **OUTFIT becomes LOADOUT** everywhere
-- **mission names get simpler** and briefs get rewritten: natural, spoken, game-like. No dashes as
-  connectors — that habit is all over the current text
-- **expeditions run in sectors 1-5**, matching the classic campaign's shape
-- **the route screen offers two destinations, not four**, each with a themed planet icon; keep the
-  forecast of what a body pays, which Tom said works
-- **the loadout can be changed every two planets**, at the sector checkpoint, and nowhere else
-
-### M18 — hazards you can feel  ✅ done (this commit)
-
-Tom's line was that the effects are not noticeable enough. Every item here is a number that is too
-small to reach the hand.
-
-- **wind strong enough to fly against**, and a Gyro Stabilizer that is worth the slot
-- **Mars visibility that actually blinds**; the dust currently reads as a tint
-- **radiation damages the hull** on a timer you can watch, shielded by terrain and by the Ray Shield
-- **a hull bar on every body**, not only the ones with machines on them
-
-### M19 — terrain with teeth  ✅ done (this commit)
-
-The high-risk one, like M2 was. Everything here has to survive the mission validator.
-
-- **three times the relief**: taller, narrower, more to fly around
-- **ceilings closer**, and a cave you *fly into* — open sky at the entry, enclosed by the deep end
-- **rocks at many sizes**, including some far larger than today's
+Three content milestones remain from Tom's playtest, then a cleanup that is now overdue enough to
+be scheduled rather than mentioned. **M20, M21 and M22 are unblocked** — M19 rebuilt the ground they
+all stand on. M23 is a refactor with no behaviour change, which makes it the safest thing on this
+list to hand to a cold session.
 
 ### M20 — Europa, properly icy
 
-- spiky, fractured ice rather than the smooth basins it has now
-- fragile pads removed; the body's identity carried by the surface and the slide instead
+- spiky, fractured ice instead of the smooth basins it still has
+- **fragile pads removed** (Tom's decision, 2026-08-20): Europa's difficulty comes from the surface
+  and the slide, not a hidden speed cap that punishes a landing the player would call clean.
+  Touches `europa-2 THE CREVASSE` and `europa-5 THE FLOES`, plus the `fragile` field in
+  `terrain.js`, the fracture branch in `ship.finishTouchdown`, and the ICE approach text in
+  `render.drawTerrain`
+- M19b's cave mouth is per-mission (`caveMouth` / `caveShut`), so a second Europa mission could
+  become a cave now without it feeling like a lid. THE CREVASSE is the obvious candidate
 
 ### M21 — structures, and guards that belong somewhere
 
-Depends on M19's ground.
-
-- **turrets sit on flat, short ground or on towers**, never half-buried in a slope
-- **two to three times as many machines per mission**
+- **turrets sit on flat, short ground or on towers**, never half-buried in a slope. M19 made the
+  ground rougher, which made this worse, so it is more visible now than when Tom reported it
+- **two to three times as many machines per mission.** Read as more machines *across the map*, so a
+  player meets one to three at a time on a route rather than four at once in a fight. The sanctuary
+  rule is not up for negotiation without Tom saying so
 - **abandoned buildings and towers** where the mission fiction supports them, especially around the
-  turrets
+  turrets. Note that M19 gives a free precedent: a boulder is raised into the heightmap and collides
+  for nothing, and a tower can be built the same way
+- re-run the encounter audit either side
 
 ### M22 — ore you can read
 
-- material becomes **floating ore crates near the ground**
-- the light-ray marker goes
+- material becomes **floating ore crates near the ground**; the light-ray marker goes
+- the M23 import fix already separated placement from pricing, so this is a render change plus a
+  placement tweak in `terrain._placeMaterial`
 
----
+### M23 — the cleanup
 
-### Open questions carried into these milestones
+Not urgent, and deliberately scheduled rather than done piecemeal. Measured 2026-08-20:
 
-- **"Two to three times more turrets" against the spec's "1-3 at once, rarely 4"** (section 12).
-  Read as *more machines across the map*, so a player meets one to three at a time on a route
-  rather than four at once in a fight. The sanctuary rule is not up for negotiation without Tom
-  saying so: the near landing zone stays outside every machine's reach, which is what keeps a
-  weapon optional. To be re-measured with the encounter audit and shown to him.
-- **Mission fuel budgets** are still stale (see Known findings) and M19 makes the ground harder to
-  cross. The budget pass may have to happen inside M19 rather than after it.
+**The architecture is holding.** 9,187 lines over 26 modules, the dependency graph is a clean DAG,
+and **24 of 26 modules import three things or fewer**. The data-driven layers keep proving
+themselves: a chapter is data, an enemy is an `ENEMY_TYPES` entry plus a draw function, and M18's
+radiation damage was ~35 lines across two files. Nothing here needs a framework, a build step,
+TypeScript or an ECS, and the project's strength is that there is nothing between the code and the
+thing it does.
+
+Two files carry **39% of the codebase**, and that is the whole finding:
+
+| | lines | what is in it |
+| --- | ---: | --- |
+| `main.js` | 1,866 | loop glue (~770), the UI layer (`screenHTML` is **492 lines over 42 screens**), and `act()` (**220**) |
+| `render.js` | 1,686 | accumulation, not a monster: `drawTerrain` 288, `drawHUD` 179, `drawHangarShip` 116 |
+
+**Do it in this order, and know that step one is the expensive part:**
+
+1. **Extract the mutable state first.** `screenHTML` closes over **26 module-scope bindings** — `g`
+   (35 references), `btn` (32), `formatScore` (29), `meta` (15), plus `store`, `settings`,
+   `saveSource`, `pending`. Moving the screens without moving the state first means threading a
+   26-field context object through everything, which is worse than what is there now. A `state.js`
+   holding `g` / `meta` / `store` / `settings` is the real first commit.
+2. **Then the screens**, into `screens.js` or one module per screen group.
+3. **Then `act()`**, which is 220 lines of dispatch and mostly falls out once the state moved.
+4. **Then split `render.js`** — enemy drawing and the HUD are the two natural seams, and this should
+   happen *before* the remaining six enemy designs land, not after.
+5. **Auto-derive the bundler's module order** from the import graph. `build.js` keeps a hand-written
+   dependency-ordered `MODULES` list; it caught M8's vanished namespace import and M15's load-order
+   crash, so keep the guard, but the ordering is a trip hazard (M17 hit it). About 20 lines.
+
+**The refactor is proved by the fixtures.** A change with no behaviour change must leave both
+`test/physics-fixture.js` and `test/flight-fixture.js` untouched, which is a complete verification
+that needs none of the conversation that produced this plan.
 
 ### Superseded
 

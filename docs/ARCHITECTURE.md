@@ -12,15 +12,16 @@ Everything under `src/` is a plain ES module, loaded directly in the browser and
 | `src/main.js` | state machine, camera, run loop, every overlay screen, persistence glue | — |
 | `src/ship.js` | integration, collision, the touchdown settling window, hull, per-run spec | — |
 | `src/landing.js` | severity score, band thresholds, gear tier, every landing constant | M1 |
-| `src/terrain.js` | heightmap, the entry point, distance-banded pads, the fuel road, cargo, material deposits, ceilings, rocks | —/M14/M15 |
+| `src/terrain.js` | heightmap, the entry, distance-banded pads, the fuel road, cargo, deposits, the cave mouth, boulders raised into the ground | —/M14/M15/M19 |
 | `src/archetypes.js` | 7 macro silhouettes and their landing-zone anchors | M2 |
 | `src/spawn.js` | the starting position and momentum rule (the terrain owns the entry since M14) | M3/M14 |
 | `src/validate.js` | structural mission checks: spawn clearance, approach corridors, delta-v bound | M3 |
 | `src/planets.js` | 10 PlanetDefinitions and the gravity mapping | M4/M5 |
+| `src/planeticons.js` | one icon per body, for the route screen | M17 |
 | `src/missions.js` | authored Moon/Mars/Europa chapters, survey-chapter generator, `chapterFor` | M4-M9 |
 | `src/forces.js` | force/status interface: atmosphere, dust, wind channels, thermal, cryo, plumes, radiation | M5-M7 |
 | `src/save.js` | versioned MetaSave + RunState, legacy migration, corruption recovery | M8 |
-| `src/economy.js` | rewards, the carried haul, deposit worth, the transmitted/cargo split, settlement and banking | M9/M15 |
+| `src/economy.js` | rewards, the carried haul, what a deposit is worth, the transmitted/cargo split, settlement and banking | M9/M15 |
 | `src/route.js` | discovery tiers, four-card offers, checkpoint rule | M9 |
 | `src/components.js` | 5 component tracks, `deriveLoadout` / `deriveFull`, purchase rules | M10/M11 |
 | `src/skills.js` | 3 skill trees, `deriveSkills`, purchase and gating rules | M11 |
@@ -49,6 +50,19 @@ the starting tank; the deep one is deliberately not.
 only — shake, flashing, instrument size, contrast and key bindings never reach the simulation.
 `test/settings-tests.js` flies the same mission with all of them changed and asserts the result is
 byte-identical, so a player who needs the motion turned off is flying the same game as everyone else.
+
+**Which way the imports point.** The graph is a DAG and it is meant to stay one: `util` at the
+bottom, then leaves (`planets`, `skills`, `modules`, `objectives`, `forces`, `input`, `levels`,
+`planeticons`), then `landing` / `spawn` / `economy` / `archetypes` / `save` / `audio`, then `ship`,
+`terrain` and `enemies`, then `render`, then `main`. **24 of 26 modules import three things or
+fewer.**
+
+The rule that keeps it that way: **a generator may not import a concept.** `terrain.js` used to
+import `economy.js` and `objectives.js` so it could stamp a price and an objective onto the geometry
+it produced, and that direction cost a real crash — the bundler emits terrain first, so a
+module-level read of the price table threw "cannot access before initialization" in the single-file
+build and nowhere else. Terrain produces geometry; a deposit carries its distance `tier` and
+`economy.nodeWorth` prices it; the cargo spec is resolved in `missionToLevel`, where content lives.
 
 **The rule that makes reward a decision:** material is a physical deposit in the world, not a figure
 computed at touchdown. `missionReward` counts what the lander carried home and the landing grade
