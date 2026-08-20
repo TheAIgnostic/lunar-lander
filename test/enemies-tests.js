@@ -111,11 +111,16 @@ function shipAt(x, y, loadout = {}) {
         const a = i / 1100;
         target.x = e.x + Math.cos(a) * r;
         target.y = e.y - Math.abs(Math.sin(a)) * r - 20;
-        const before = field.shots.length;
-        field.update(1 / 120, i / 120, target);
-        for (let k = before; k < field.shots.length; k++) {
+        // Measure the *birth*, which the fire event reports, not the shot's
+        // position after the update. `field.update` fires and then steps every
+        // projectile in the same call, so reading `shots[k].x` afterwards is
+        // already one frame of travel late - at 255 px/s that is 2.1 px, and it
+        // reported a shot born at a legal 57.1 px as an illegal 55.0. The rule
+        // was never broken; the ruler was.
+        for (const ev of field.update(1 / 120, i / 120, target)) {
+          if (ev.kind !== 'fire') continue;
           born++;
-          minBirth = Math.min(minBirth, Math.hypot(field.shots[k].x - target.x, field.shots[k].y - target.y));
+          minBirth = Math.min(minBirth, Math.hypot(ev.x - target.x, ev.y - target.y));
         }
         if (target.hull <= 0) target.hull = target.hullMax;
       }

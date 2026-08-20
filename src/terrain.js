@@ -1,7 +1,7 @@
 // Procedural terrain: midpoint displacement heightmap with flat pads carved in,
 // plus an optional lethal ceiling for cave levels.
 
-import { clamp, makeRng } from './util.js';
+import { clamp, makeRng, smoothstep } from './util.js';
 import { buildArchetype } from './archetypes.js';
 import { cargoFor } from './objectives.js';
 import { MATERIAL_NODE } from './economy.js';
@@ -352,6 +352,30 @@ export class Terrain {
     for (const p of this.pads) {
       for (let i = Math.max(0, p.i1 - 8); i <= Math.min(n - 1, p.i2 + 8); i++) {
         c[i] = Math.min(c[i], p.y - clearance - 60);
+      }
+    }
+    // The mouth: open sky where you come in, a roof by the time you are deep.
+    //
+    // A cave used to be a lid over the entire level, so a cave mission began
+    // already indoors and the ceiling was a fact rather than an event. Lifting
+    // the roof clear of the world near the entry and bringing it down across
+    // the crossing makes it something you fly *into*: the sky closes over you
+    // somewhere around a third of the way in, and from there the corridor is
+    // the mission.
+    //
+    // It is still one array over the whole level, so every consumer - the hull
+    // collision, line of sight, the placement clearances, the corridor
+    // validator, the pilot's ceiling guard - keeps working untouched. Near the
+    // entry the roof is simply out of reach.
+    if (this.entry) {
+      const run = this.entry.dir > 0 ? this.width - this.entry.x : this.entry.x;
+      const open = cfg.caveMouth != null ? cfg.caveMouth : 0.20;   // fully open until here
+      const shut = cfg.caveShut != null ? cfg.caveShut : 0.52;     // fully roofed by here
+      const sky = -120;                                           // above the top of the world
+      for (let i = 0; i < n; i++) {
+        const frac = run > 0 ? clamp(Math.abs(i * this.step - this.entry.x) / run, 0, 1) : 1;
+        const t = 1 - smoothstep(clamp((frac - open) / Math.max(0.01, shut - open), 0, 1));
+        if (t > 0) c[i] = c[i] * (1 - t) + sky * t;
       }
     }
     this.ceiling = c;
