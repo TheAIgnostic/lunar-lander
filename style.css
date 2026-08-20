@@ -509,3 +509,40 @@ table.stats-table .m-w { text-align: right; color: #7f9db0; font-size: 11px; }
 @media (max-width: 720px) {
   .ladder .rung { font-size: 9px; letter-spacing: .1em; }
 }
+
+/* Ten forecast cards on the expedition start screen: the whole ladder, laid out
+   the way the supply stop lays out one. A fixed basis rather than the route
+   screen's grow-to-fill, so ten cards make even rows instead of one row of five
+   and one lonely row of two stretched across the width.
+
+   The panel is wider than the standard `wide` 880px for this screen alone. At
+   880 the cards fall three to a row, which makes a ten-body ladder four ragged
+   rows; at 1180 they fall **five and five**, which is the shape the ladder
+   actually has. It is still `min(…, 100%)`, so a narrow window just gets fewer
+   per row and the mobile rule below takes over. */
+.screen.wide.ladder-screen { width: min(1180px, 100%); }
+.grid.routes.centred.ladder-cards { gap: 12px; }
+.grid.routes.centred.ladder-cards > .tile {
+  flex: 0 1 208px;
+  max-width: 240px;
+  padding: 14px 14px 12px;
+  gap: 3px;
+}
+.grid.routes.centred.ladder-cards .planet-mark { margin: 0 0 4px; }
+.grid.routes.centred.ladder-cards .world { font-size: 15px; }
+@media (max-width: 720px) {
+  .grid.routes.centred.ladder-cards > .tile { flex: 1 1 100%; max-width: none; }
+}
+
+/* A body further down the ladder is a forecast, not an option: it is a `div`
+   with no action, so it must not offer a hover state or a pointer either. */
+.tile.route.is-ahead {
+  opacity: .5;
+  cursor: default;
+  border-color: rgba(159, 192, 212, .14);
+}
+.tile.route.is-ahead:hover {
+  border-color: rgba(159, 192, 212, .14);
+  background: rgba(255, 255, 255, .02);
+  transform: none;
+}

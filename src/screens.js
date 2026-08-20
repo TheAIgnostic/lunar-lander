@@ -18,7 +18,7 @@ import { ACTIVE_MODULES, PASSIVE_MODULES, moduleById, recommendedFor } from './m
 import { cargoFor } from './objectives.js';
 import { planetIcon } from './planeticons.js';
 import { PLANETS, gravityFor } from './planets.js';
-import { PLANET_ORDER, ladderTrail, routeChoices } from './route.js';
+import { PLANET_ORDER, ladderPreview, ladderTrail, routeChoices } from './route.js';
 import { ENVELOPE, normalizeAngle } from './ship.js';
 import { TREES, TREE_IDS, skillCheck } from './skills.js';
 import { audio, g, input, meta, saveSource, settings, ship, store } from './state.js';
@@ -42,6 +42,30 @@ export function drawHangarPreview() {
     cx.beginPath(); cx.moveTo(0, y); cx.lineTo(c.width, y); cx.stroke();
   }
   R.drawHangarShip(cx, c.width / 2, c.height / 2 + 10, 4.2, meta.componentLevels, g.hangarPick || 'gear', g.time);
+}
+
+/**
+ * A body's forecast card. **One renderer, two screens** - the supply stop
+ * between bodies and the expedition start screen - because a card that reads
+ * one way when you are choosing to set out and another way when you arrive is
+ * two designs pretending to be one. The card data comes from the same
+ * `planetCard` either way; this only decides what the tag says and whether it
+ * can be clicked.
+ */
+function bodyCardHTML(c, { tag, action, state = '' }) {
+  const accent = WORLDS[PLANETS[c.planet].world].accent;
+  const dead = !action;
+  return `
+    <${dead ? 'div' : 'button'} class="tile route ${state}"${dead ? '' : ` data-action="${action}"`}>
+      ${tag}
+      <span class="planet-mark" style="color:${accent}">${planetIcon(c.planet, accent, 62)}</span>
+      <span class="world" style="color:${accent}">${c.name}</span>
+      <span class="name">${'\u25ae'.repeat(c.difficulty)}${'\u25af'.repeat(5 - c.difficulty)} · ${c.atmosphere === 'none' ? 'no air' : `${c.atmosphere} air`}</span>
+      <span class="best">gravity ${(c.gravity / 6).toFixed(2)} m/s² · ${c.enemyIntensity} resistance${c.machines ? ` (up to ${c.machines})` : ''}</span>
+      <span class="best">weather: ${c.hazards.join(', ') || 'nothing reported'}${c.incomplete ? ' <i>· forecast incomplete</i>' : ''}</span>
+      <span class="best haul">brings home: ${c.rareMaterial}</span>
+      <span class="best rec">take: ${c.recommended.join(', ')}</span>
+    </${dead ? 'div' : 'button'}>`;
 }
 
 /**
@@ -226,29 +250,29 @@ export function screenHTML(s) {
       </div>`;
 
     case 'chapters': {
-      // M27: ten bodies, so this is a start button and a ladder rather than ten
-      // tiles. Only the first body is ever startable - a run always begins at
-      // the foot of the ladder (decision 2), and the rest are reached by
-      // clearing what is in front of them.
-      const start = PLANET_ORDER[0];
-      const sp = PLANETS[start];
-      const sch = Object.values(CHAPTERS).find((c) => c.planet === start);
-      const acc = WORLDS[sp.world].accent;
-      const card = `<button class="tile chapter" data-action="chapter:${start}">
-          <span class="route-tag next">START HERE</span>
-          <span class="world" style="color:${acc}">${sp.displayName}</span>
-          <span class="name">${sch ? sch.levels.length : 5} MISSIONS</span>
-          <span class="best">${sp.summary}</span>
-          <span class="best">gravity ${(gravityFor(start) / 6).toFixed(2)} m/s² · ${sp.atmosphere} atmosphere${sp.hazards.length ? ' · ' + sp.hazards.join(', ') : ''}</span>
-        </button>`;
-      return `<div class="screen wide">
+      // The whole ladder, as the same cards the supply stop deals. It used to be
+      // a single plain tile with the other nine bodies reduced to a row of
+      // names, and next to the between-bodies screen it read like a different
+      // game. A player about to commit to a ten-body run should be able to see
+      // what the run *is*.
+      //
+      // Only the first is startable - a run always begins at the foot of the
+      // ladder (decision 2) - and the rest are a forecast, not a menu, so they
+      // render as `div`s with no action rather than as disabled buttons.
+      const cards = ladderPreview().map((c) => bodyCardHTML(c, {
+        tag: c.locked
+          ? `<span class="route-tag done">BODY ${c.position}</span>`
+          : '<span class="route-tag next">START HERE</span>',
+        action: c.locked ? null : `chapter:${c.planet}`,
+        state: c.locked ? 'is-ahead' : 'is-next',
+      })).join('');
+      return `<div class="screen wide ladder-screen">
         <h2>EXPEDITION</h2>
         <p class="tag">${PLANET_ORDER.length} bodies, in one fixed order, five missions each. Every
         run starts at the Moon and none of it can be re-flown. Clearing a body returns one lander,
         never more, so what you lose on the way down stays lost. Lose the last one and you start
         again at the Moon with whatever the hangar has bolted on.</p>
-        <div class="grid chapters centred">${card}</div>
-        ${ladderHTML([])}
+        <div class="grid routes centred ladder-cards">${cards}</div>
         <div class="btns">${btn('back', 'BACK', true, 'SPACE')}</div>
       </div>`;
     }
@@ -509,21 +533,11 @@ export function screenHTML(s) {
       const cleared = run.cleared || [];
       const offers = routeChoices(cleared, run.sector, run.seed);
       g.routeOffers = offers;
-      const cards = offers.map((c, i) => {
-        const accent = WORLDS[PLANETS[c.planet].world].accent;
-        const tag = `<span class="route-tag next">BODY ${cleared.length + 1} OF ${PLANET_ORDER.length}</span>`;
-        return `
-        <button class="tile route is-next" data-action="route:${i}">
-          ${tag}
-          <span class="planet-mark" style="color:${accent}">${planetIcon(c.planet, accent, 62)}</span>
-          <span class="world" style="color:${accent}">${c.name}</span>
-          <span class="name">${'▮'.repeat(c.difficulty)}${'▯'.repeat(5 - c.difficulty)} · ${c.atmosphere === 'none' ? 'no air' : `${c.atmosphere} air`}</span>
-          <span class="best">gravity ${(c.gravity / 6).toFixed(2)} m/s² · ${c.enemyIntensity} resistance${c.machines ? ` (up to ${c.machines})` : ''}</span>
-          <span class="best">weather: ${c.hazards.join(', ') || 'nothing reported'}${c.incomplete ? ' <i>· forecast incomplete</i>' : ''}</span>
-          <span class="best haul">brings home: ${c.rareMaterial}</span>
-          <span class="best rec">take: ${c.recommended.join(', ')}</span>
-        </button>`;
-      }).join('');
+      const cards = offers.map((c, i) => bodyCardHTML(c, {
+        tag: `<span class="route-tag next">BODY ${cleared.length + 1} OF ${PLANET_ORDER.length}</span>`,
+        action: `route:${i}`,
+        state: 'is-next',
+      })).join('');
       // **What this table must show depends on which screen it is.** At a
       // supply stop the haul has already been banked - M25b moved that to the
       // way *in*, so the hangar opens on money that is actually there - and a

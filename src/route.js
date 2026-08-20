@@ -65,6 +65,27 @@ export function routeChoices(cleared = [], sector = 1, seed = 0) {
 }
 
 /**
+ * Every body on the ladder as a full forecast card, at the sector it will be
+ * flown at - what the expedition start screen shows before a run begins.
+ *
+ * The same `planetCard` the supply stop builds, so the two screens cannot drift
+ * apart: a body reads the same on the way in as it does when you get there. The
+ * rng is seeded per position rather than per run, so the withheld hazard is
+ * stable across re-renders instead of flickering each time the screen redraws.
+ */
+export function ladderPreview(cleared = []) {
+  const done = new Set(cleared);
+  const next = nextPlanet(cleared);
+  return PLANET_ORDER.map((id, i) => ({
+    ...planetCard(id, i + 1, makeRng((i + 1) * 2654435761 >>> 0)),
+    position: i + 1,
+    cleared: done.has(id),
+    isNext: id === next,
+    locked: id !== next && !done.has(id),
+  }));
+}
+
+/**
  * The ladder as a progress trail: all ten bodies in order, each marked cleared,
  * next, or still ahead. Non-interactive - it is how far this run got, drawn so
  * the player can see it, which is the thing the M25 route screen did carry and

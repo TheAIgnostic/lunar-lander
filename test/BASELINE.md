@@ -1946,6 +1946,21 @@ Both settle timers go through `settleAfter(ms, work)` now, which holds the pendi
 runs it early instead of imitating it. Re-verified with the exact script that was misled: it reaches
 the checkpoint, and the crash path still walks 3 → 2 → 1 → `expedition-over`.
 
+### The expedition start screen, after Tom looked at it
+
+The first draft reduced the start screen to one plain tile and a row of nine names, on the reasoning
+that ten route cards would be a wall of unclickable buttons. Tom's call, with both screens in front
+of him: it read like a different game from the supply stop two clicks later.
+
+It deals **the whole ladder as the same card**, five and five — `bodyCardHTML` is one renderer used
+by both screens, so a body reads the same on the way in as it does when you arrive. The nine ahead
+are `div`s with no action rather than disabled buttons: they are a forecast, not a menu. The panel
+goes to 1180 px for this screen alone, because at the standard 880 the cards fall three to a row and
+a ten-body ladder becomes four ragged rows.
+
+The trail stays where it earns its place — the supply stop, where the question is how far this run
+has got, not what the run is.
+
 ### What did not move
 
 **Both fixtures byte-identical.** Nothing in this milestone touches the simulation — it is the run's
