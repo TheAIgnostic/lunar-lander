@@ -1,6 +1,12 @@
 #!/bin/bash
 # Every check, in the order that fails fastest.  ./test/run-all.sh
+#
+# `set -o pipefail` matters more than it looks: every line below pipes through
+# `tail`, and without it the pipeline reports *tail's* exit status. The mission
+# validator failed two families and this script still printed "all checks
+# passed", which is the one thing a test runner must never do.
 set -e
+set -o pipefail
 cd "$(dirname "$0")/.."
 echo "=== unit: landing grader ==="   && node test/landing-tests.js  | tail -2
 echo "=== unit: forces + planets ===" && node test/forces-tests.js   | tail -2

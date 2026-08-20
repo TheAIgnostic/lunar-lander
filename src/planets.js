@@ -42,7 +42,7 @@ export const PLANETS = {
   }),
   MARS: P({
     id: 'MARS', displayName: 'MARS', realGravity: 3.71, world: 'MARS',
-    feelOffset: 1.0, atmosphere: 'thin', drag: 0.14, wind: 22, gust: 16, visibility: 0.85,
+    feelOffset: 1.0, atmosphere: 'thin', drag: 0.15, wind: 24, gust: 20, visibility: 0.85,
     hazards: ['wind', 'dust'],
     rareMaterial: 'Iron-oxide ceramic',
     terrainPalette: ['basin', 'canyon', 'dunes', 'mesa'],
@@ -59,7 +59,7 @@ export const PLANETS = {
   }),
   VENUS: P({
     id: 'VENUS', displayName: 'VENUS', realGravity: 8.87, world: 'MARS',
-    feelOffset: 0.96, atmosphere: 'dense', drag: 0.30, wind: 18, gust: 24, visibility: 0.6,
+    feelOffset: 0.96, atmosphere: 'dense', drag: 0.32, wind: 22, gust: 30, visibility: 0.6,
     hazards: ['drag', 'acid', 'downdraft'],
     rareMaterial: 'Sulfur-resistant ceramic',
     terrainPalette: ['canyon', 'mesa', 'ridge'],
@@ -68,7 +68,7 @@ export const PLANETS = {
   }),
   TITAN: P({
     id: 'TITAN', displayName: 'TITAN', realGravity: 1.35, world: 'TITAN',
-    feelOffset: 1.05, atmosphere: 'thick', drag: 0.20, wind: 26, gust: 20, visibility: 0.75,
+    feelOffset: 1.05, atmosphere: 'thick', drag: 0.22, wind: 30, gust: 26, visibility: 0.75,
     hazards: ['wind', 'glide'],
     rareMaterial: 'Hydrocarbon composite',
     terrainPalette: ['dunes', 'basin', 'canyon'],

@@ -403,27 +403,94 @@ export function drawMaterialBeacons(ctx, cam, W, H, terrain, time, strength, opt
 }
 
 /**
+ * Wind you can see.
+ *
+ * The physics has always known about the wind; the screen did not, so the only
+ * evidence was the lander drifting and a bar in the corner. These are streaks
+ * blowing through the flyable air, drawn in world space so they move past the
+ * lander rather than with it, and their speed and density follow `windNow` -
+ * which means the gusts are visible as gusts and a Gyro Stabilizer visibly
+ * calms the air.
+ */
+export function drawWind(ctx, cam, W, H, level, wind, time, opts = {}) {
+  const speed = Math.abs(wind || 0);
+  if (speed < 4) return;
+  const strength = clamp(speed / 60, 0, 1);
+  const dir = Math.sign(wind || 1);
+  const half = W / 2 / cam.scale;
+  const top = H / 2 / cam.scale;
+  const w = WORLDS[level.world];
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+  ctx.scale(cam.scale, cam.scale);
+  ctx.translate(-cam.x, -cam.y);
+  ctx.globalAlpha = 0.10 + 0.30 * strength * (opts.flash != null ? Math.max(0.4, opts.flash) : 1);
+  ctx.strokeStyle = `rgba(${w.dustRGB || '150,90,60'},0.9)`;
+  ctx.lineWidth = 1.2 / cam.scale;
+  const count = Math.round(18 + strength * 34);
+  const span = half * 2.4;
+  for (let i = 0; i < count; i++) {
+    // Each streak runs on its own loop so the field never pulses in step.
+    const drift = (time * (60 + speed * 3.2) * (0.7 + (i % 5) * 0.12)) % span;
+    const x = cam.x - half * 1.2 + ((i * 977) % span + dir * drift + span) % span;
+    const y = cam.y - top + ((i * 613) % (top * 2));
+    const len = (26 + (i % 6) * 22) * (0.5 + strength);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + dir * len, y + ((i % 3) - 1) * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/**
  * Dust haze over the world. The pads are redrawn on top afterwards: the spec is
  * explicit that the safe pad must stay visually distinct even in low
  * visibility, so dust hides the terrain, not the target.
  */
-export function drawDust(ctx, W, H, level, visibility, time) {
+export function drawDust(ctx, W, H, level, visibility, time, focus = null) {
   const v = clamp(visibility, 0, 1);
   if (v > 0.985) return;
   const w = WORLDS[level.world];
   const density = 1 - v;
+  const rgb = w.dustRGB || '150,90,60';
+
+  // A flat tint over everything. This used to be the whole effect, which is why
+  // Mars at 22% visibility still showed you the entire map through a filter:
+  // the terrain never went anywhere, so the storm cost nothing.
   const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, `rgba(${w.dustRGB || '150,90,60'},${(density * 0.5).toFixed(3)})`);
-  g.addColorStop(1, `rgba(${w.dustRGB || '150,90,60'},${(density * 0.78).toFixed(3)})`);
+  g.addColorStop(0, `rgba(${rgb},${(density * 0.55).toFixed(3)})`);
+  g.addColorStop(1, `rgba(${rgb},${(density * 0.72).toFixed(3)})`);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
 
-  // drifting streaks, so the front reads as moving rather than as a filter
+  // And the part that actually blinds you: the far field closes in. You keep a
+  // clear bubble around the lander and lose the rest, which is what flying in a
+  // storm is - the pad beacons are drawn *above* this, so the target you are
+  // aiming at never disappears even when the ground it sits on does.
+  if (density > 0.15) {
+    const cx = focus ? focus.x : W / 2;
+    const cy = focus ? focus.y : H / 2;
+    const reach = Math.hypot(W, H);
+    // At full density the clear bubble is barely wider than the lander.
+    const clear = reach * (0.30 - 0.24 * density);
+    const gone = reach * (0.82 - 0.36 * density);
+    const fog = ctx.createRadialGradient(cx, cy, Math.max(40, clear), cx, cy, Math.max(80, gone));
+    const peak = Math.min(0.97, density * 1.25);
+    fog.addColorStop(0, `rgba(${rgb},0)`);
+    fog.addColorStop(0.55, `rgba(${rgb},${(peak * 0.55).toFixed(3)})`);
+    fog.addColorStop(1, `rgba(${rgb},${peak.toFixed(3)})`);
+    ctx.fillStyle = fog;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // Drifting streaks, so the front reads as moving rather than as a filter.
   ctx.save();
-  ctx.globalAlpha = density * 0.5;
-  ctx.strokeStyle = `rgba(${w.dustRGB || '150,90,60'},0.8)`;
+  ctx.globalAlpha = density * 0.55;
+  ctx.strokeStyle = `rgba(${rgb},0.85)`;
   ctx.lineWidth = 1.4;
-  for (let i = 0; i < 26; i++) {
+  const streaks = Math.round(26 + density * 44);
+  for (let i = 0; i < streaks; i++) {
     const y = ((i * 137 + time * 40 * (1 + (i % 3) * 0.4)) % (H + 60)) - 30;
     const x = ((i * 271 + time * 130 * (1 + (i % 4) * 0.3)) % (W + 220)) - 110;
     const len = 60 + (i % 5) * 34;
@@ -1192,9 +1259,11 @@ export function drawHUD(ctx, W, H, g) {
   // ---- hazards: one loud warning, the rest quiet
   drawHazardStack(ctx, W, H, g, s, py, rad);
 
-  // ---- hull, once there is something in the world that can dent it
+  // ---- hull. Always shown now: since radiation eats hull, every body can take
+  //      it, and a bar that only appears once you are already losing is a bar
+  //      you learn to read too late.
   const threats = armed;
-  if (ship.hullMax && (ship.hull < ship.hullMax || threats)) {
+  if (ship.hullMax) {
     const hy = py + ph + 8;
     panel(ctx, px, hy, pw, 40 * s, ship.hull < ship.hullMax * 0.35 ? 'rgba(255,59,92,0.4)' : 'rgba(95,245,255,0.25)');
     label(ctx, 'HULL', px + 14, hy + 18 * s, 10 * s);
@@ -1205,7 +1274,7 @@ export function drawHUD(ctx, W, H, g) {
     const hc = hf > 0.55 ? GREEN : hf > 0.25 ? AMBER : RED;
     ctx.fillStyle = hc;
     ctx.shadowColor = hc;
-    ctx.shadowBlur = ship.hitFlash > 0 ? 18 : 6;
+    ctx.shadowBlur = ship.hitFlash > 0 ? 18 : ship.hullBurn > 0 ? 14 : 6;
     ctx.fillRect(px + 14, hy + 24 * s, hbw * hf, 8 * s);
     ctx.shadowBlur = 0;
     ctx.fillStyle = '#dff6ff';

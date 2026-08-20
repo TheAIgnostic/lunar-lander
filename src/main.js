@@ -765,6 +765,9 @@ function draw() {
 
   const present = { flash: settings.flash, contrast: !!settings.highContrast };
   R.drawTerrain(ctx, cam, W, H, g.terrain, g.level, g.time, present);
+  // Wind, drawn between the ground and the ship so it reads as air moving
+  // through the scene rather than as an overlay on top of it.
+  if (g.level.wind || g.level.gust) R.drawWind(ctx, cam, W, H, g.level, ship.windNow, g.time, present);
   if (g.state === 'play' && ship.alive && !ship.landed) R.drawTrajectory(ctx, ship, g.level, g.terrain, cam);
   particles.draw(ctx);
   R.drawEnemies(ctx, g.field, ship, g.time, {
@@ -781,7 +784,12 @@ function draw() {
   // Dust sits over the world but under the pad beacons and the HUD.
   const vis = ship.env ? ship.env.visibility : 1;
   if (vis < 0.985) {
-    R.drawDust(ctx, W, H, g.level, vis, g.time);
+    // The storm closes in around the lander, so it needs to know where the
+    // lander is on screen rather than assuming the middle of the viewport.
+    R.drawDust(ctx, W, H, g.level, vis, g.time, {
+      x: W / 2 + (ship.x - cam.x) * cam.scale,
+      y: H / 2 + (ship.y - cam.y) * cam.scale,
+    });
     R.drawPadBeacons(ctx, cam, W, H, g.terrain, g.level, g.time, 1 - vis, present);
     R.drawMaterialBeacons(ctx, cam, W, H, g.terrain, g.time, 1 - vis, present);
   }

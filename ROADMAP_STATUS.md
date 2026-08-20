@@ -387,6 +387,35 @@ scheduled until the MVP is stable — the spec says the same.
     every screen offers a full set of *distinct* bodies at every stage still holds, and now catches
     a duplicate pair where it used to catch three-cards-instead-of-four
 
+- [x] **M18 — hazards you can feel** (this commit)
+  - **radiation takes hull** past 55% exposure, and stops at 35% of it. It softens you up; it never
+    finishes you. Without that floor, Europa 5 lost more than a whole hull to sweep plus drones and
+    the deep route became unsurvivable however well it was flown
+  - exposure also builds far more slowly: it went clean to saturated in **three seconds**, which
+    left no time to reach a shadow. Counterplay measured over 50 s of sweeps: 72 hull with nothing,
+    **97 with Environmental Seals**, 94 with the Ray Shield, 100 with both. Europa's route card
+    recommends the Ray Shield now, which it did not
+  - **gusts fall off near the ground** (32% at the deck, full above 260 px). Scaling the gust until
+    it could be felt made the crossing exciting and the touchdown a lottery; the last hundred pixels
+    are where a metre per second decides the grade
+  - **`windChannels` ignored `disturbanceResist`**, so THE CANYON, the mission built entirely around
+    wind, was the one place the anti-wind gear did nothing. Found in the M15 loadout audit. Fixed,
+    and it is what makes the Gyro Stabilizer matter: mars-2 goes 3/12 bare to **7/12** with gyro and
+    dampers, which is *better than before this milestone* despite the stronger wind
+  - **wind is visible**, as streaks moving through the air in world space at a speed and density
+    that follow `windNow`
+  - **Mars dust blinds.** It was a tint over a fully legible map; the far field closes in now, with
+    a clear bubble that shrinks as the storm thickens. Pad beacons and ore markers still draw above
+    it, so you lose the ground and not the target
+  - **the hull bar is on every body**, since radiation can take hull anywhere
+  - **`run-all.sh` printed "all checks passed" while the validator failed two families** — every
+    line pipes through `tail`, so the pipeline reported tail's status. `set -o pipefail` now
+  - **the combat proof flew the wrong route**: no `padIndex` targets the deep pad, so it was testing
+    "you can take the prize unarmed" rather than the sanctuary guarantee the design actually makes.
+    Verified before changing it — the safe route loses **0 of 20** to fire on every armed mission
+  - **the physics fixture moved for the first time since M0**, because the boundary layer makes
+    gusts altitude-dependent. A deliberate model change, not drift, and recorded as such
+
 ## Decisions (Tom, 2026-08-16)
 
 1. **Gravity** — compressed mapping is the *baseline*, then a per-body hand-tuned offset so each
@@ -451,7 +480,7 @@ right names.
   forecast of what a body pays, which Tom said works
 - **the loadout can be changed every two planets**, at the sector checkpoint, and nowhere else
 
-### M18 — hazards you can feel
+### M18 — hazards you can feel  ✅ done (this commit)
 
 Tom's line was that the effects are not noticeable enough. Every item here is a number that is too
 small to reach the hand.

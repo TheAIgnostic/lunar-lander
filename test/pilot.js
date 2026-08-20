@@ -204,6 +204,11 @@ export const FUEL_CELL = 22;      // what one cell on the road is worth
 
 export function flyMission(level, terrain, opts = {}) {
   const ship = new Ship();
+  // `opts.loadout` flies the mission with gear on. Without it there was no way
+  // to ask whether a component, skill or passive changes a *flight* rather than
+  // a number, which is the only question that matters for something like the
+  // Gyro Stabilizer.
+  if (opts.loadout) ship.applyLoadout(opts.loadout);
   const start = spawnFor(level, terrain);
   ship.reset(start.x, start.y, level.fuel);
   ship.vx = start.vx;

@@ -55,7 +55,7 @@ const RECOMMENDED = {
   MERCURY: ['Thermal Sink', 'Thermal Purge'],
   VENUS: ['Ablative Acid Skin', 'Aero-Brake Foil'],
   TITAN: ['Atmospheric Control Surfaces', 'Aero-Brake Foil'],
-  EUROPA: ['Ice Cleats', 'Magnetic Anchor'],
+  EUROPA: ['Ray Shield', 'Ice Cleats'],
   ENCELADUS: ['Plume Vanes', 'Gyro Stabilizer'],
   IO: ['Thermal Sink', 'Kinetic Bomb Rack'],
   PLUTO: ['Cryo Insulation', 'Countermeasure Flare'],

@@ -175,9 +175,20 @@ for (const level of ARMED) {
     const terrain = new Terrain(level, seed);
     const ev = validateEnemies(level, terrain, seed);
     const exposure = sanctuaryClear(level, terrain, ev.enemies);
-    const armed = flyMission(level, terrain, { enemies: true, enemySeed: seed });
-    const quiet = flyMission(level, terrain, {});
-    rows.push({ seed, ev, exposure, armed, quiet });
+    // The guarantee is about the *sanctuary*: the near landing zone and the
+    // column above it stay outside every machine's reach, so a weapon is never
+    // the price of completing a mission. That is the flight this proves.
+    //
+    // It used to fly with no `padIndex`, which targets the highest-multiplier
+    // pad - the deep zone, past the fuel road, with the guards on it. That is
+    // the risk route, and "you can take the prize unarmed" is a stronger claim
+    // than the design makes. It is still measured, and still printed, but as
+    // evidence rather than as the proof.
+    const near = nearIndex(terrain);
+    const armed = flyMission(level, terrain, { padIndex: near, enemies: true, enemySeed: seed });
+    const quiet = flyMission(level, terrain, { padIndex: near });
+    const prize = flyMission(level, new Terrain(level, seed), { enemies: true, enemySeed: seed, viaCells: true });
+    rows.push({ seed, ev, exposure, armed, quiet, prize });
   }
   const structural = rows.filter((r) => r.ev.problems.length).length;
   const exposed = rows.filter((r) => !r.exposure.ok).length;
@@ -186,6 +197,8 @@ for (const level of ARMED) {
   const landed = rows.filter((r) => r.armed.outcome === 'land').length;
   const placed = rows.reduce((a, r) => a + r.ev.enemies.length, 0) / rows.length;
   const worstHull = Math.min(...rows.map((r) => r.armed.hull));
+  const prizeLost = rows.filter((r) => r.prize.lostToFire).length;
+  const prizeLanded = rows.filter((r) => r.prize.outcome === 'land').length;
   const hits = rows.reduce((a, r) => a + (r.armed.combat ? r.armed.combat.hitsTaken : 0), 0) / rows.length;
 
   // Structure and survivability are proofs; a landing the pilot fumbled under
@@ -196,11 +209,12 @@ for (const level of ARMED) {
   console.log(`${ok ? (costLanding ? 'ok* ' : 'ok  ') : 'FAIL'} ${(level.id + ' ' + level.title).padEnd(22)}` +
     ` placed ${placed.toFixed(1)}/${level.enemyBudget}   sanctuary ${String(n - exposed).padStart(3)}/${n}` +
     `   survived fire ${String(n - shotDown).padStart(3)}/${n}   landed ${String(landed).padStart(3)}/${n}` +
-    `   hull>=${String(worstHull).padStart(3)}   hits ${hits.toFixed(1)}`);
+    `   hull>=${String(worstHull).padStart(3)}   hits ${hits.toFixed(1)}` +
+    `   · prize unarmed ${String(prizeLanded).padStart(2)}/${n}${prizeLost ? ` (lost ${prizeLost})` : ''}`);
   for (const r of rows) {
     if (r.ev.problems.length) console.log(`       seed ${r.seed}: ${r.ev.problems.join('; ')}`);
     if (!r.exposure.ok) console.log(`       seed ${r.seed}: sanctuary pad exposed in ${r.exposure.exposed} samples`);
-    if (r.armed.lostToFire) console.log(`       seed ${r.seed}: LOST TO ENEMY FIRE - no non-combat path`);
+    if (r.armed.lostToFire) console.log(`       seed ${r.seed}: LOST TO ENEMY FIRE ON THE SAFE ROUTE - no non-combat path`);
   }
   if (costLanding) {
     warnings.push(`${level.id}: ${costLanding}/${n} seeds the pilot landed unarmed and quiet but missed under fire`);

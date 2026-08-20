@@ -109,6 +109,7 @@ export class Ship {
     this.shieldActive = false;
     this.shieldHp = 0;
     this.shieldHazard = false;
+    this.hullBurn = 0;
     this.anchor = 1;
     this.beaconBoost = 1;
     this.revealed = false;
@@ -128,6 +129,33 @@ export class Ship {
    * fuel or the controls - being shot must not take the aircraft away from the
    * pilot, only the margin.
    */
+  /**
+   * Continuous damage from the environment rather than from a hit.
+   *
+   * Deliberately not `damage()`: that counts a hit, flashes the hull hard and
+   * feeds the threat statistics, none of which is true of standing in a
+   * radiation sweep. A shield still absorbs it first, which is what makes the
+   * Ray Shield worth its slot on Europa.
+   */
+  damageOverTime(amount, source = 'hazard') {
+    if (!this.alive || this.landed || this.hull <= 0 || amount <= 0) return 0;
+    let left = amount;
+    if (this.shieldActive && this.shieldHp > 0) {
+      const absorbed = Math.min(this.shieldHp, left);
+      this.shieldHp -= absorbed;
+      left -= absorbed;
+      if (this.shieldHp <= 0) this.shieldActive = false;
+    }
+    if (left <= 0) return 0;
+    this.hull = Math.max(0, this.hull - left);
+    this.hullBurn = 0.6;                 // a slow glow, not the hit flash
+    if (this.hull <= 0) {
+      this.lostToFire = false;
+      this.damageSource = source;
+    }
+    return left;
+  }
+
   damage(amount, source = 'hit') {
     // A wreck cannot be wrecked further: once the hull is gone the loss is
     // already decided, and counting more hits would double-report it.
@@ -183,6 +211,7 @@ export class Ship {
     if (this.touchdown) return this.settle(dt, level, terrain);
 
     if (this.hitFlash > 0) this.hitFlash = Math.max(0, this.hitFlash - dt);
+    if (this.hullBurn > 0) this.hullBurn = Math.max(0, this.hullBurn - dt);
     const hasFuel = this.fuel > 0;
     this.thrusting = input.thrust && hasFuel;
     this.rcsLeft = input.left && hasFuel;

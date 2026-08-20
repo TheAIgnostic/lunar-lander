@@ -198,7 +198,7 @@ export const EUROPA_MISSIONS = [
     width: 3100, relief: 320, detail: 1.4, rough: 220, fuel: 116,
     terrain: { archetype: 'ridge' },
     pads: [{ mult: 3, width: 125 }, { mult: 2, width: 175 }],
-    hazards: [{ type: 'radiation', period: 15, duty: 0.45, rate: 30 }],
+    hazards: [{ type: 'radiation', period: 15, duty: 0.45, rate: 13 }],
     optionalObjective: { id: 'low-rads', text: 'Land with radiation exposure under 30%', reward: { data: 45 } },
     enemyBudget: 2, fuelCells: 2,
   },
@@ -208,7 +208,7 @@ export const EUROPA_MISSIONS = [
     width: 3200, relief: 260, detail: 1.6, rough: 200, fuel: 126,
     terrain: { archetype: 'canyon' }, cave: true, clearance: 290,
     pads: [{ mult: 3, width: 130 }],
-    hazards: [{ type: 'radiation', period: 18, duty: 0.35, rate: 22 }],
+    hazards: [{ type: 'radiation', period: 18, duty: 0.35, rate: 11 }],
     optionalObjective: { id: 'probe-lost', text: 'Recover the probe that went quiet under the shelf', reward: { salvage: 80 } },
     enemyBudget: 2, enemySets: ['seeker-drone'], fuelCells: 2,
   },
@@ -218,7 +218,7 @@ export const EUROPA_MISSIONS = [
     width: 3300, relief: 300, detail: 1.5, rough: 230, fuel: 124,
     terrain: { archetype: 'caldera' },
     pads: [{ mult: 5, width: 96, fragile: 14 }, { mult: 2, width: 180 }],
-    hazards: [{ type: 'radiation', period: 13, duty: 0.5, rate: 32 }],
+    hazards: [{ type: 'radiation', period: 13, duty: 0.5, rate: 14 }],
     optionalObjective: { id: 'perfect', text: 'Set down on the plate without cracking it', reward: { cores: 2 } },
     // Two, not the three the ramp allows: Europa's drones ram, the plate is
     // fragile, and at three an unarmed flight to the prize fell from 20/20 to

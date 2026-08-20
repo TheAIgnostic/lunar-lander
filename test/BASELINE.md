@@ -757,3 +757,118 @@ there"* — 20 of the 24 material banked came from the hold, 4 from the stipend.
 lander with the same hold aboard printed *"CARGO LOST — 26 MATERIAL · 68 SALVAGE"* and banked
 nothing, per the existing cargo rules. The HOLD instrument sits below the threat panel whether or
 not a machine has woken yet, so it never jumps mid-flight.
+
+---
+
+## M18 — hazards you can feel (2026-08-20)
+
+Tom's note was that the effects are not noticeable enough: the wind should be strong enough to feel,
+the Gyro Stabilizer should be worth its slot, Mars dust should make a difference, and radiation
+should mean something. Every item here was a number too small to reach the hand, and the honest
+difficulty is that the **autopilot is the measuring instrument and it is a poor crosswind pilot** —
+recorded as such since M13. Raising a hazard costs measured landings faster than it costs a human.
+
+### Radiation now takes hull
+
+It raised instrument noise and nothing else, which is why it read as meaningless. Past 55% exposure
+it eats hull, at a rate that climbs with exposure, and **it stops at 35% of the hull**: radiation
+softens you up, it never finishes you. Without the floor, Europa 5 (a 48 second deep run with two
+drones on it) lost more than a full hull to sweep plus fire, and the route the map is built to tempt
+you down became the route that killed you regardless of how well you flew.
+
+Exposure also builds far more slowly than it did. At the old rate a lander went from clean to
+saturated in **three seconds**, which left no room to reach a shadow; the sweep is a warning before
+it is a wound now.
+
+Counterplay, measured over 50 s of unsheltered sweeps:
+
+| | hull left |
+| --- | ---: |
+| nothing equipped | 72 / 100 |
+| Environmental Seals ×2 | **97 / 100** |
+| Ray Shield, used on cooldown | **94 / 100** |
+| both | **100 / 100** |
+
+The route screen now recommends the Ray Shield for Europa, which it did not.
+
+What it costs an autopilot that uses none of that, over 12 seeds:
+
+| | deep route, radiation off | radiation on |
+| --- | ---: | ---: |
+| europa-3 RADIATION PASS | 12/12 | 9/12 |
+| europa-5 THE FLOES | 10/12 | 5/12 |
+
+### Wind, and the boundary layer
+
+Wind went up on the three atmospheric bodies, but the interesting change is shape rather than size.
+**Gusts now fall off near the ground** (32% at the deck, full strength above 260 px): the crossing
+keeps the whole gust, and the last hundred pixels, where a metre per second decides the grade, stay
+flyable. A full-strength gust at touchdown is not difficulty, it is noise.
+
+| | before | after |
+| --- | --- | --- |
+| Mars | wind 22, gust 16, drag 0.14 | **24 / 20 / 0.15** |
+| Titan | wind 26, gust 20, drag 0.20 | **30 / 26 / 0.22** |
+| Venus | wind 18, gust 24, drag 0.30 | **22 / 30 / 0.32** |
+
+**`windChannels` ignored `disturbanceResist` entirely.** THE CANYON is the mission built around wind
+and it was the one place where the gear sold to answer wind did nothing. Found in the M15 loadout
+audit, fixed here, and it is what makes the Gyro Stabilizer matter:
+
+| mission | bare hull | gyro | gyro + dampers |
+| --- | ---: | ---: | ---: |
+| mars-2 THE CANYON | 3/12 | 5/12 | **7/12** |
+| mars-5 STORM EYE | 6/12 | 8/12 | 8/12 |
+| mars-3 BURIED ARRAY | 8/12 | 10/12 | **11/12** |
+
+Wind is also *visible* now, as streaks blowing through the flyable air in world space, with speed and
+density following `windNow`. The physics always knew about the wind; the screen did not.
+
+### How far the wind could be pushed
+
+Measured against the project's own "the way home is always there" bar (90% of near-zone landings):
+
+| Mars wind / gust / drag | way home | mars-2 |
+| --- | ---: | ---: |
+| 22 / 16 / 0.14 (before) | 95% | 5/12 |
+| **24 / 20 / 0.15 (shipped)** | **93%** | **7/12** |
+| 26 / 24 / 0.16 | 87% | 4/12 |
+| 28 / 30 / 0.17 | 84% | 2/12 |
+| 30 / 34 / 0.18 | 81% | 1/12 |
+
+Anything past the shipped value breaks the guarantee *as the autopilot measures it*. Note that
+mars-2 is **better** than before at the shipped setting, because the gyro fix outweighs the stronger
+wind. If Tom still wants more weather, the honest next step is a human playtest rather than a bigger
+number, because the number that breaks is the test pilot rather than the mission.
+
+### Mars dust actually blinds
+
+It was a translucent tint: at 22% visibility the whole map was still legible through a filter, so the
+storm cost nothing. The far field closes in now, with a clear bubble around the lander that shrinks
+as the storm thickens. The pad beacons and the ore markers are still drawn *above* it, per the
+spec's rule that the target must stay distinct in low visibility, so what you lose is the ground,
+not the thing you are aiming at.
+
+### The hull bar is on every body
+
+It only appeared once something could shoot at you. Radiation can take hull anywhere now, and a bar
+that appears once you are already losing is a bar you learn to read too late.
+
+### Two faults in the tests themselves
+
+- **`run-all.sh` reported "all checks passed" while the mission validator was failing two families.**
+  Every line pipes through `tail`, so the pipeline reported *tail's* exit status. `set -o pipefail`
+  now. This is the one thing a test runner must never do, and it had been true for some time.
+- **The combat proof was flying the wrong route.** It flew with no `padIndex`, which targets the
+  highest-multiplier pad: the deep zone, past the fuel road, with the guards on it. The guarantee
+  the design actually makes is about the *sanctuary* — the near zone and the column above it. The
+  proof flies that now, and "you can take the prize unarmed" is still measured and printed, as
+  evidence rather than as the promise. Verified before changing it: the safe route loses **0 of 20**
+  flights to fire on every armed mission, so the guarantee holds; every failure was on the prize.
+
+### The physics fixture moved, for the first time since M0
+
+The gust boundary layer makes gusts depend on altitude, which is a deliberate change to the flight
+model rather than drift. One case moved by fractions of a pixel at step 7, where the lander is high
+enough that the shear is near 1. Re-recorded with that reason. Everything else about the flight
+model is untouched.

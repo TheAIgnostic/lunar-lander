@@ -19,7 +19,26 @@ export function hazardScale(ship, channel) {
   return covered ? base * (ship.shieldFactor != null ? ship.shieldFactor : 0.15) : base;
 }
 
-/** Status channels a hazard can raise. Damage models consume these later. */
+/**
+ * When exposure stops being a readout and starts being damage. Below `bite` the
+ * only consequence is instrument noise, which gives the player a warning they
+ * can act on before anything is lost.
+ */
+/**
+ * The boundary layer. `floor` is how much of the gust survives at ground level,
+ * `fullAt` is the altitude above which it blows at full strength.
+ */
+export const GUST = { floor: 0.32, fullAt: 260 };
+
+const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+export const RADIATION = {
+  bite: 55,             // exposure % at which it stops warning and starts biting
+  hullPerSecond: 2.5,   // hull per second at full exposure, unsheltered
+  floor: 0.45,          // it will never take you below this fraction of the hull
+};
+
+/** Status channels a hazard can raise. */
 export const STATUS_CHANNELS = ['heat', 'cold', 'corrosion', 'radiation', 'charge'];
 
 export function freshStatus() {
@@ -45,11 +64,20 @@ function atmosphere(cfg) {
   const drag = cfg.drag || 0;
   return {
     id: 'atmosphere',
-    apply(ship, level, t, dt) {
+    apply(ship, level, t, dt, terrain) {
       // Inertial dampers and the gyro passive settle the gust component, not
       // the steady wind - you still have to fly the weather.
       const damp = (ship.loadout && ship.loadout.disturbanceResist) || 1;
-      const g2 = gust * damp;
+      // Gusts fall off near the surface.
+      //
+      // Scaling the gust up until you can feel it made the *crossing* exciting
+      // and the touchdown a lottery: the last hundred pixels are where a metre
+      // per second of drift decides the grade, and a full-strength gust there
+      // is not difficulty, it is noise. A boundary layer is also simply what
+      // wind does. The crossing keeps the whole gust; the deck keeps a third.
+      const alt = terrain ? Math.max(0, terrain.heightAt(ship.x) - ship.y) : GUST.fullAt;
+      const shear = GUST.floor + (1 - GUST.floor) * clamp01(alt / GUST.fullAt);
+      const g2 = gust * damp * shear;
       const w = wind + Math.sin(t * 0.7) * g2 + Math.sin(t * 1.9 + 1.3) * g2 * 0.4;
       ship.windNow = w;
       if (drag) {
@@ -145,7 +173,14 @@ function windChannels(cfg) {
     apply(ship, level, t, dt) {
       const band = Math.floor(ship.y / bandHeight);
       const dir = band % 2 === 0 ? 1 : -1;
-      const w = dir * strength * (1 + Math.sin(t * 0.6 + band) * drift);
+      // The dampers work here too. They did not, and that was a real hole: the
+      // canyon is the mission built entirely around wind, and it was the one
+      // place where the gear sold to answer wind did nothing at all. The steady
+      // band still stands - you fly the weather - but the swing between bands
+      // is a disturbance like any other.
+      const damp = (ship.loadout && ship.loadout.disturbanceResist) || 1;
+      const swing = Math.sin(t * 0.6 + band) * drift * damp;
+      const w = dir * strength * (1 + swing);
       ship.windNow = w;
       const d = level.drag || 0.12;
       ship.vx += (w - ship.vx) * d * dt;
@@ -161,7 +196,10 @@ function windChannels(cfg) {
 function radiation(cfg) {
   const period = cfg.period || 16;
   const duty = cfg.duty != null ? cfg.duty : 0.4;
-  const rate = cfg.rate || 26;
+  // How fast exposure climbs. Slow enough that the sweep is a warning before
+  // it is a wound: at the old rate a lander went from clean to saturated in
+  // three seconds, which left no room to reach a shadow.
+  const rate = cfg.rate || 12;
   const shieldReach = cfg.shieldReach || 220;
   return {
     id: 'radiation',
@@ -183,7 +221,30 @@ function radiation(cfg) {
       ship.env.shielded = shielded;
       const res = hazardScale(ship, 'radiation');
       const take = (shielded ? rate * 0.15 : rate) * res;
-      ship.statusLevels.radiation = Math.min(100, ship.statusLevels.radiation + take * dt);
+      const before = ship.statusLevels.radiation;
+      ship.statusLevels.radiation = Math.min(100, before + take * dt);
+
+      // Exposure has to cost something, or it is a number that goes up.
+      //
+      // Until now radiation only made the instruments lie, which is why Tom
+      // could not say what it did: the honest answer was "nothing you can lose
+      // anything to". Past `RADIATION.bite` it eats hull, at a rate that climbs
+      // with exposure, so sitting in a sweep in the open is a decision with a
+      // price and the terrain shadow and the Ray Shield both become worth using.
+      const exposure = ship.statusLevels.radiation;
+      if (exposure > RADIATION.bite && ship.damageOverTime) {
+        // A floor, deliberately. Radiation softens you up; it never finishes
+        // you on its own. Europa 5 is a 48-second deep run with two drones on
+        // it, and without this the sweep and the machines together took more
+        // than a full hull - the route the map is built to tempt you down
+        // became the route that killed you regardless of how well you flew.
+        const floor = ship.hullMax * RADIATION.floor;
+        const room = ship.hull - floor;
+        if (room > 0) {
+          const over = (exposure - RADIATION.bite) / (100 - RADIATION.bite);
+          ship.damageOverTime(Math.min(room, RADIATION.hullPerSecond * over * dt), 'radiation');
+        }
+      }
     },
   };
 }
