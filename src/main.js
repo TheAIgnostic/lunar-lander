@@ -11,7 +11,7 @@ import { Ship, ENVELOPE, normalizeAngle, DEFAULT_SETTINGS } from './ship.js';
 import { LANDING, capsFor } from './landing.js';
 import { PLANETS, gravityFor } from './planets.js';
 import * as Save from './save.js';
-import { missionReward, addReward, settleHaul } from './economy.js';
+import { missionReward, addReward, settleHaul, nodeWorth, haulOf } from './economy.js';
 import { planetIcon } from './planeticons.js';
 import { routeOffers, SECTORS, isExpeditionComplete, isCheckpoint } from './route.js';
 import { COMPONENTS, COMPONENT_IDS, deriveFull, purchaseCheck, purchase } from './components.js';
@@ -387,12 +387,13 @@ function pickups() {
       continue;
     }
     if (got.kind === 'material') {
-      g.carried.material += got.material;
-      g.carried.salvage += got.salvage;
+      const worth = nodeWorth(got.tier);
+      g.carried.material += worth.material;
+      g.carried.salvage += worth.salvage;
       g.carried.nodes++;
       particles.sparks(got.x, got.y, 24, 1);
       particles.ring(got.x, got.y, 150, 0.45, MATERIAL_TINT);
-      particles.text(got.x, got.y - 22, `+${got.material} MATERIAL`, MATERIAL_TINT, 19);
+      particles.text(got.x, got.y - 22, `+${nodeWorth(got.tier).material} MATERIAL`, MATERIAL_TINT, 19);
       audio.arpeggio([523.25, 698.46], 0.05);
       continue;
     }
@@ -545,7 +546,7 @@ function onLand() {
     combat: g.field && !g.field.empty ? g.field.summary() : null,
     combatSalvage: g.combatSalvage || 0,
     carried: { ...g.carried },
-    materialLeft: g.terrain.materialLeft ? g.terrain.materialLeft() : null,
+    materialLeft: g.terrain.materialLeft ? haulOf(g.terrain.materialLeft()) : null,
     hull: Math.round(ship.hull), hullMax: ship.hullMax,
     abilityUsed: g.abilities ? g.abilities.used : 0,
   };
@@ -555,7 +556,7 @@ function onLand() {
 
   if (g.run) {
     g.run.missionsCleared++;
-    const left = g.terrain.materialLeft ? g.terrain.materialLeft() : { material: 0, salvage: 0, nodes: 0 };
+    const left = haulOf(g.terrain.materialLeft ? g.terrain.materialLeft() : []);
     const reward = missionReward({
       grade: q, padMultiplier: mult, fuelLeft: ship.fuel, maxFuel: ship.maxFuel,
       rareMaterial: g.level.rareMaterial, firstClear: true, offPad,

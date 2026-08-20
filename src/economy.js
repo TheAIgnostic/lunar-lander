@@ -27,11 +27,30 @@ export const RESOURCES = ['salvage', 'data', 'cores'];
  * landing does is *multiply* the haul, not create it.
  */
 export const MATERIAL_NODE = {
-  radius: 62,                    // the same reach as a fuel cell
-  padGuard: 150,                 // never this near a landing zone
   material: [0, 13, 24],         // by distance tier
   salvage: [0, 34, 64],
 };
+
+/** What one deposit in a given distance band is worth. */
+export function nodeWorth(tier) {
+  const t = Math.max(0, Math.min(2, tier | 0));
+  return { material: MATERIAL_NODE.material[t], salvage: MATERIAL_NODE.salvage[t] };
+}
+
+/**
+ * Price a list of deposits. Terrain hands over geometry - where they are and
+ * which band they sit in - and this decides what that is worth, which is the
+ * direction the dependency should have run all along.
+ */
+export function haulOf(nodes = []) {
+  let material = 0, salvage = 0;
+  for (const n of nodes) {
+    const w = nodeWorth(n.tier);
+    material += w.material;
+    salvage += w.salvage;
+  }
+  return { material, salvage, nodes: nodes.length };
+}
 
 /**
  * What a landing does to the haul you flew home. This is deliberately gentler

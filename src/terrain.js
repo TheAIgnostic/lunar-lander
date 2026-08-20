@@ -3,13 +3,18 @@
 
 import { clamp, makeRng, smoothstep } from './util.js';
 import { buildArchetype } from './archetypes.js';
-import { cargoFor } from './objectives.js';
-import { MATERIAL_NODE } from './economy.js';
 
-// Read inside the methods, never at module load. The bundler emits terrain
-// before economy, so a module-level `const X = MATERIAL_NODE.padGuard` throws
-// "cannot access before initialization" the moment the single-file build boots.
-// The macOS self-test caught it; nothing else would have.
+/**
+ * Where a deposit may sit, in pixels. Geometry, which is terrain's business.
+ *
+ * What a deposit is *worth* is economy's business and lives there. Terrain used
+ * to import the price table to stamp a value onto every node, which pointed a
+ * low-level generator at a high-level concept and cost us a real crash: the
+ * bundler emits terrain before economy, so a module-level read of that table
+ * threw "cannot access before initialization" in the single-file build and
+ * nowhere else. A node carries its distance `tier` now, and economy prices it.
+ */
+export const MATERIAL_SITE = { radius: 62, padGuard: 150 };
 
 /**
  * The three knobs M19 tunes, in one place so the whole game moves together
@@ -531,7 +536,9 @@ export class Terrain {
    * sample" is a route decision rather than a line of text on the briefing.
    */
   _placeCargo(cfg, rng) {
-    const spec = cargoFor(cfg);
+    // The mission's cargo spec arrives on the level config, put there by
+    // `missionToLevel`. Terrain does not need to know what an objective is.
+    const spec = cfg.cargoSpec;
     if (!spec || !this.entry || !this.pads.length) return [];
     const deep = this.pads.reduce((a, p) => ((p.reach || 0) > (a.reach || 0) ? p : a), this.pads[0]);
     const mid = (deep.x1 + deep.x2) / 2;
@@ -600,18 +607,14 @@ export class Terrain {
     const add = (x, y, kind) => {
       const tier = this.bandAt(x).tier;
       if (!tier) return false;                                  // never in the near band
-      if (!this._clearOfPads(x, MATERIAL_NODE.padGuard)) return false;
+      if (!this._clearOfPads(x, MATERIAL_SITE.padGuard)) return false;
       if (out.some((n) => Math.hypot(n.x - x, n.y - y) < 150)) return false;
       // Never close enough to a cell or a crate to be swept up with it. Two
       // pickups on one pass is one decision, and the ore is supposed to be its
       // own decision - that is the entire point of where it lies.
       const near = (list) => (list || []).some((c) => Math.hypot(c.x - x, c.y - y) < 150);
       if (near(this.fuelCells) || near(this.cargo)) return false;
-      out.push({
-        x, y, tier, kind, taken: false, phase: rng.range(0, 6.28),
-        material: MATERIAL_NODE.material[tier],
-        salvage: MATERIAL_NODE.salvage[tier],
-      });
+      out.push({ x, y, tier, kind, taken: false, phase: rng.range(0, 6.28) });
       return true;
     };
 
@@ -670,14 +673,9 @@ export class Terrain {
     return out;
   }
 
-  /** What is still lying out there, for the results screen. */
+  /** The deposits still lying out there. Pricing them is `economy.haulOf`. */
   materialLeft() {
-    let material = 0, salvage = 0, nodes = 0;
-    for (const n of this.materialNodes || []) {
-      if (n.taken) continue;
-      material += n.material; salvage += n.salvage; nodes++;
-    }
-    return { material, salvage, nodes };
+    return (this.materialNodes || []).filter((n) => !n.taken);
   }
 
   /**
@@ -697,7 +695,7 @@ export class Terrain {
     }
     for (const m of this.materialNodes || []) {
       if (m.taken) continue;
-      if (Math.hypot(m.x - x, m.y - y) < Math.max(radius, MATERIAL_NODE.radius)) {
+      if (Math.hypot(m.x - x, m.y - y) < Math.max(radius, MATERIAL_SITE.radius)) {
         m.taken = true;
         got.push({ ...m, kind: 'material', ref: m });
       }

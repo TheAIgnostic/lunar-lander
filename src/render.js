@@ -4,6 +4,7 @@ import { clamp, TAU, makeRng } from './util.js';
 import { HULL, LEGS, ENVELOPE, normalizeAngle } from './ship.js';
 import { WORLDS } from './levels.js';
 import { ENEMY_TYPES } from './enemies.js';
+import { nodeWorth } from './economy.js';
 
 const FONT = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
@@ -1468,7 +1469,7 @@ function drawMaterialPointers(ctx, W, H, g) {
     ctx.fillStyle = VIOLET;
     ctx.font = `700 10px ${FONT}`;
     ctx.textAlign = 'center';
-    ctx.fillText(`${m.material}`, cx - Math.cos(ang) * 20, cy - Math.sin(ang) * 20 + 4);
+    ctx.fillText(`${nodeWorth(m.tier).material}`, cx - Math.cos(ang) * 20, cy - Math.sin(ang) * 20 + 4);
   }
 }
 

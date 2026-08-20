@@ -8,7 +8,7 @@ import { DEG, clamp } from './util.js';
 import { SHIP } from './ship.js';
 import { spawnFor } from './spawn.js';
 import { COMBAT, ENEMY_TYPES, placeEnemies, sanctuaryPad, sanctuaryGates, lineOfSight } from './enemies.js';
-import { MATERIAL_NODE } from './economy.js';
+import { MATERIAL_SITE } from './terrain.js';
 
 export const VALIDATION = {
   shipHalfWidth: 20,
@@ -144,8 +144,8 @@ export function validateTerrain(level, terrain, cfg = VALIDATION) {
     const label = `material@${Math.round(m.x)}`;
     if (!m.tier) problems.push(`${label} sits in the near band - collecting must be a detour, not a freebie`);
     for (const p of terrain.pads) {
-      if (m.x > p.x1 - MATERIAL_NODE.padGuard && m.x < p.x2 + MATERIAL_NODE.padGuard) {
-        problems.push(`${label} is within ${MATERIAL_NODE.padGuard} px of a landing zone`);
+      if (m.x > p.x1 - MATERIAL_SITE.padGuard && m.x < p.x2 + MATERIAL_SITE.padGuard) {
+        problems.push(`${label} is within ${MATERIAL_SITE.padGuard} px of a landing zone`);
         break;
       }
     }
@@ -157,7 +157,7 @@ export function validateTerrain(level, terrain, cfg = VALIDATION) {
     }
     // And never sitting in the corridor the safe landing descends through: the
     // safe route stays the safe route, with nothing on it to tempt a diversion.
-    if (gates && gates.some((pt) => Math.hypot(m.x - pt.x, m.y - pt.y) < MATERIAL_NODE.radius + 60)) {
+    if (gates && gates.some((pt) => Math.hypot(m.x - pt.x, m.y - pt.y) < MATERIAL_SITE.radius + 60)) {
       problems.push(`${label} sits in the sanctuary approach corridor`);
     }
   }

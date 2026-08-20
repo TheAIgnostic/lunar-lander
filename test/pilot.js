@@ -4,6 +4,7 @@
 import { Ship, DEFAULT_SETTINGS } from '../src/ship.js';
 import { spawnFor } from '../src/spawn.js';
 import { EnemyField } from '../src/enemies.js';
+import { nodeWorth } from '../src/economy.js';
 
 const THRUST = 130;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -256,7 +257,13 @@ export function flyMission(level, terrain, opts = {}) {
     // that had ore in it, and every flight number here would have been a lie.
     const cells = got.filter((c) => c.kind === 'fuel').length;
     if (cells) ship.fuel = Math.min(ship.maxFuel, ship.fuel + FUEL_CELL * cells);
-    for (const m of got) if (m.kind === 'material') { carried.material += m.material; carried.salvage += m.salvage; carried.nodes++; }
+    for (const m of got) {
+      if (m.kind !== 'material') continue;
+      const worth = nodeWorth(m.tier);
+      carried.material += worth.material;
+      carried.salvage += worth.salvage;
+      carried.nodes++;
+    }
     if (leg < road.length) {
       // Move on when the cell is taken, or when this leg has plainly failed -
       // a cell in a hole the pilot cannot reach must not strand the flight.

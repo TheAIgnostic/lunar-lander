@@ -4,7 +4,7 @@ import { OBJECTIVES, OBJECTIVE_IDS, objectiveDef, cargoFor, evaluateObjective } 
 import { Terrain } from '../src/terrain.js';
 import { spawnFor } from '../src/spawn.js';
 import { flyMission } from './pilot.js';
-import { missionReward } from '../src/economy.js';
+import { missionReward, nodeWorth, haulOf } from '../src/economy.js';
 import { MOON_LEVELS, MARS_LEVELS, EUROPA_LEVELS, generateChapter } from '../src/missions.js';
 import { LEVELS } from '../src/levels.js';
 
@@ -165,7 +165,7 @@ const report = (over = {}) => ({
       check(`${lvl.id}: no deposit in the near band`, t.materialNodes.every((m) => m.tier > 0));
       check(`${lvl.id}: no deposit on a landing zone`, t.materialNodes.every((m) => !t.padAt(m.x)));
       check(`${lvl.id}: the deep band pays more per deposit`,
-        t.materialNodes.every((m) => m.material === (m.tier === 2 ? 24 : 13)));
+        t.materialNodes.every((m) => nodeWorth(m.tier).material === (m.tier === 2 ? 24 : 13)));
     }
   }
   // Collecting one is the terrain's rule, like every other pickup.
@@ -173,10 +173,15 @@ const report = (over = {}) => ({
   const node = t.materialNodes[0];
   check('a deposit is collected when touched', (() => {
     const got = t.collect(node.x, node.y);
-    return got.length === 1 && got[0].kind === 'material' && got[0].material > 0;
+    return got.length === 1 && got[0].kind === 'material' && nodeWorth(got[0].tier).material > 0;
   })());
   check('and only once', t.collect(node.x, node.y).length === 0);
-  check('what is left is countable', t.materialLeft().nodes === t.materialNodes.length - 1);
+  check('what is left is countable', t.materialLeft().length === t.materialNodes.length - 1);
+  // Terrain says where the ore is; economy says what it is worth. The two used
+  // to be the same object, which pointed the generator at the economy and cost
+  // us a load-order crash in the bundled build.
+  check('and economy is what prices it', haulOf(t.materialLeft()).material > 0
+    && t.materialNodes.every((m) => m.material === undefined));
   check('a legacy level has no deposits', new Terrain(LEVELS[0], 1000).materialNodes.length === 0);
 }
 

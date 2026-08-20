@@ -18,6 +18,7 @@
 // `pads` array moves them across the map.
 
 import { PLANETS, gravityFor } from './planets.js';
+import { cargoFor } from './objectives.js';
 import { makeRng } from './util.js';
 
 export const MOON_MISSIONS = [
@@ -114,6 +115,9 @@ export function missionToLevel(mission) {
     pads: mission.pads,
 
     optionalObjective: mission.optionalObjective || null,
+    // Resolved here, where content lives, so the terrain generator can place a
+    // crate without knowing what an objective is.
+    cargoSpec: cargoFor(mission),
     enemyBudget: mission.enemyBudget || 0,
     // A mission may name its own machines; otherwise it inherits whatever the
     // body is allowed to field, so content stays data and the roster can grow.
