@@ -5,7 +5,10 @@ and where it does not. Measured from the code at `d941106` (after M26), not from
 
 Written because Tom lost the overview after M24–M26 changed the run shape three times, and because
 the audit found a blocker that no test catches: **four of the five hangar tracks cannot be climbed
-at all on the current ladder.**
+at all on the three-body ladder M25 shipped.**
+
+The run's shape has since been decided and the fix is scheduled as **M27–M29** in
+`ROADMAP_STATUS.md`. This document is the reasoning behind those milestones; the roadmap is the plan.
 
 **Re-measure before trusting any number here.** Every figure below is reproducible with the
 snippets in the last section.
@@ -162,10 +165,12 @@ set piece each, three signature hazards.
 
 ---
 
-## The proposed full ladder
+## The ladder
 
-Ordered by measured difficulty. Fixes the inverted ramp for free — Europa becomes a *teaching* body
-for ice at position 2 rather than a limp finale, and Venus is a genuine wall to end on.
+**Decided — see "Decided (Tom, 2026-08-20)" below for the reasoning and the four rules that go with
+it.** Ordered by measured difficulty, which fixes the inverted ramp for free: Europa becomes a
+*teaching* body for ice at position 2 rather than a limp finale, and Venus is a genuine wall to end
+on. Scheduled as M27.
 
 | # | body | gravity | teaches | state |
 | ---: | --- | ---: | --- | --- |
@@ -180,9 +185,10 @@ for ice at position 2 rather than a limp finale, and Venus is a genuine wall to 
 | 9 | Pluto | 3.12 | cold and darkness | survey |
 | 10 | Venus | **10.48** | the wall — dense drag, heaviest | survey |
 
-### The material map must be re-cut against whatever ladder is chosen
+### The material map must be re-cut against it
 
-This is not automatic. Laying today's costs over the ladder above:
+This is not automatic, and M27 does not do it — restoring the bodies makes the materials
+reachable, but not well-ordered. Laying today's costs over the ladder above:
 
 - **Hull L3 needs Venus (body 10)** while **Hull L4 needs Io (body 7)** — L4 cannot be bought before
   L3, so Hull caps at L2 until the last body of the run. That is the track that answers two-shot
