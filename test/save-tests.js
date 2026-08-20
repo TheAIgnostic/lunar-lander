@@ -119,6 +119,39 @@ console.log('save, migration and recovery');
   check('an unparseable run is ignored', loadRun(s) === null);
 }
 
+// --- M25: an expedition saved before the ladder existed
+//
+// `cleared` is what the ladder and the completion check read, and a run written
+// by any build before M25 has no such field. A player mid-expedition across the
+// upgrade is exactly the save that exists in the wild, so it is reconstructed
+// rather than defaulted to empty: `visited` is pushed on entry and a body is
+// always cleared before the next is chosen, so the first `chaptersCleared`
+// entries are the finished ones.
+{
+  const old = (extra) => mkStore({
+    [KEYS.run]: JSON.stringify({ chapterId: 'MARS', missionIndex: 2, shuttles: 2, ...extra }),
+  });
+  const midMars = loadRun(old({ visited: ['LUNA', 'MARS'], chaptersCleared: 1 }));
+  check('a pre-M25 run mid-Mars knows the Moon is behind it',
+    JSON.stringify(midMars.cleared) === '["LUNA"]');
+
+  const midMoon = loadRun(old({ visited: ['LUNA'], chaptersCleared: 0 }));
+  check('...and one still on its first body has cleared nothing',
+    JSON.stringify(midMoon.cleared) === '[]');
+
+  const midEuropa = loadRun(old({ visited: ['LUNA', 'MARS', 'EUROPA'], chaptersCleared: 2 }));
+  check('...and one on Europa has two behind it',
+    JSON.stringify(midEuropa.cleared) === '["LUNA","MARS"]');
+
+  const noVisited = loadRun(old({ chaptersCleared: 3 }));
+  check('a run with no visited list survives the reconstruction',
+    Array.isArray(noVisited.cleared) && noVisited.cleared.length === 0);
+
+  const already = loadRun(old({ visited: ['LUNA'], chaptersCleared: 0, cleared: ['LUNA', 'MARS'] }));
+  check('a run that already has the field keeps it',
+    JSON.stringify(already.cleared) === '["LUNA","MARS"]');
+}
+
 // --- banking: a failed expedition must still leave something behind
 {
   const meta = defaultMeta();

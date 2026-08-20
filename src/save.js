@@ -184,6 +184,18 @@ export function loadRun(store = safeStore) {
     if (!r || typeof r !== 'object' || typeof r.chapterId !== 'string') return null;
     if (typeof r.missionIndex !== 'number' || r.missionIndex < 0) return null;
     if (typeof r.shuttles !== 'number' || r.shuttles < 0) return null;
+    // M25 added `cleared` - the bodies this run has actually finished, which
+    // the ladder and the completion check both read. A run saved before M25 has
+    // no such field, and an expedition in progress across the upgrade is
+    // exactly the save a player will be holding. It can be reconstructed from
+    // what the old run already recorded: `visited` is pushed when a body is
+    // *entered*, and a body is always cleared before the next one is chosen, so
+    // the first `chaptersCleared` entries are precisely the finished ones.
+    if (!Array.isArray(r.cleared)) {
+      const visited = Array.isArray(r.visited) ? r.visited : [];
+      const done = Math.max(0, Math.min(visited.length, r.chaptersCleared || 0));
+      r.cleared = visited.slice(0, done);
+    }
     return r;
   } catch {
     return null;
