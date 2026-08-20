@@ -95,6 +95,7 @@ export function screenHTML(s) {
       return `<div class="screen menu">
         <h1 class="title">TERMINAL<span>VELOCITY</span></h1>
         <p class="tag">A vector lander. Finite fuel. One shot at the pad.</p>
+        ${meta.godMode ? '<div class="notice god">GOD MODE IS ON — resources are bottomless and any body can be started. Settings → GOD MODE to turn it off.</div>' : ''}
         ${saveSource === 'corrupt' ? '<div class="notice">A damaged save was set aside and progress reset. The old data is kept under <b>tv_save_corrupt</b>.</div>' : ''}
         ${saveSource === 'newer' ? '<div class="notice">This save was written by a newer build, so it was left untouched.</div>' : ''}
         <div class="stats"><span>HIGH SCORE</span><b>${formatScore(store.high)}</b></div>
@@ -259,19 +260,27 @@ export function screenHTML(s) {
       // Only the first is startable - a run always begins at the foot of the
       // ladder (decision 2) - and the rest are a forecast, not a menu, so they
       // render as `div`s with no action rather than as disabled buttons.
-      const cards = ladderPreview().map((c) => bodyCardHTML(c, {
-        tag: c.locked
-          ? `<span class="route-tag done">BODY ${c.position}</span>`
-          : '<span class="route-tag next">START HERE</span>',
-        action: c.locked ? null : `chapter:${c.planet}`,
-        state: c.locked ? 'is-ahead' : 'is-next',
-      })).join('');
+      // God mode is the only thing that makes a body other than the first
+      // startable. The card still says which body it is, and says *why* it is
+      // clickable, so a screen full of live cards is never a mystery.
+      const god = !!meta.godMode;
+      const cards = ladderPreview().map((c) => {
+        const open = !c.locked || god;
+        return bodyCardHTML(c, {
+          tag: c.locked
+            ? `<span class="route-tag ${god ? 'god' : 'done'}">BODY ${c.position}${god ? ' · JUMP HERE' : ''}</span>`
+            : '<span class="route-tag next">START HERE</span>',
+          action: open ? `chapter:${c.planet}` : null,
+          state: c.locked ? (god ? 'is-god' : 'is-ahead') : 'is-next',
+        });
+      }).join('');
       return `<div class="screen wide ladder-screen">
         <h2>EXPEDITION</h2>
         <p class="tag">${PLANET_ORDER.length} bodies, in one fixed order, five missions each. Every
         run starts at the Moon and none of it can be re-flown. Clearing a body returns one lander,
         never more, so what you lose on the way down stays lost. Lose the last one and you start
         again at the Moon with whatever the hangar has bolted on.</p>
+        ${god ? '<div class="notice god">GOD MODE — every body is startable and the pot is bottomless. Turn it off in settings before judging how the game plays.</div>' : ''}
         <div class="grid routes centred ladder-cards">${cards}</div>
         <div class="btns">${btn('back', 'BACK', true, 'SPACE')}</div>
       </div>`;
@@ -347,6 +356,16 @@ export function screenHTML(s) {
           <div class="btns">
             ${btn('log-copy', 'COPY TO CLIPBOARD')}${btn('log-export', 'EXPORT .TXT')}${btn('log-export-json', 'EXPORT .JSON')}${btn('log-clear', 'CLEAR')}
           </div>
+        </div>
+        <div class="setting">
+          <div class="setting-name">GOD MODE${meta.godMode ? ' · <b style="color:#ffcf4d">ON</b>' : ''}</div>
+          <p class="body">A test switch. Starts a run at <b>any</b> body on the ladder, tops the pot
+          up to ${formatScore(999999)} salvage, research and cores with every material and every
+          blueprint, and keeps it topped up as you spend. It grants resources and a starting
+          position and nothing else — the flight model, the landing bands, the damage numbers and
+          the terrain are untouched, so what you fly under it is the real game.
+          ${meta.godMode ? '<b style="color:#ffcf4d">Every playtest log exported while this is on says so in its header.</b>' : ''}</p>
+          <div class="btns">${btn('god', meta.godMode ? 'TURN GOD MODE OFF' : 'TURN GOD MODE ON')}</div>
         </div>
         <div class="setting">
           <div class="setting-name">NEW GAME</div>

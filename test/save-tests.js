@@ -1,7 +1,7 @@
 // Save, migration and corruption tests:  node test/save-tests.js
 import {
   SAVE_VERSION, KEYS, defaultMeta, migrateLegacy, loadMeta, saveMeta,
-  newRun, loadRun, saveRun, clearRun, bankRun,
+  newRun, loadRun, saveRun, clearRun, bankRun, resetAll,
 } from '../src/save.js';
 import { settleHaul } from '../src/economy.js';
 import { purchase } from '../src/components.js';
@@ -274,6 +274,31 @@ console.log('save, migration and recovery');
   check('quitting at any stage reloads to the same place', ok);
   check('a completed purchase is deducted exactly once', meta.banked.salvage === 1000 - 260, String(meta.banked.salvage));
   check('the bought level stuck', meta.componentLevels.rcs === 2);
+}
+
+// --- god mode is a test switch, and must behave like one
+//
+// It lives in the save so it survives a reload - which is exactly why it has to
+// default off and be cleared by NEW GAME. A flag that quietly persisted into
+// what someone thinks is a fresh game would make every number after it a lie.
+{
+  check('god mode is off on a new save', defaultMeta().godMode === false);
+
+  const s = mkStore();
+  const on = { ...defaultMeta(), godMode: true, banked: { salvage: 999999, data: 0, cores: 0, materials: {} } };
+  saveMeta(on, s);
+  check('god mode survives a save and reload', loadMeta(s).meta.godMode === true);
+
+  const reset = resetAll(on, s);
+  check('NEW GAME clears god mode', reset.godMode === false);
+  check('NEW GAME clears what god mode granted', reset.banked.salvage === 0);
+
+  // A save written before the flag existed must not come back with it on.
+  const legacy = { ...defaultMeta() };
+  delete legacy.godMode;
+  const s2 = mkStore({ [KEYS.meta]: JSON.stringify(legacy) });
+  check('a save from before the flag existed loads with it off',
+    loadMeta(s2).meta.godMode === false);
 }
 
 console.log(`\n  ${pass} passed, ${fail} failed`);

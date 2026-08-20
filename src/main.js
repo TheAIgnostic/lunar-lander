@@ -153,14 +153,32 @@ function startLevel(index, freshSeed = true) {
 }
 
 /** Start a fresh expedition: three shuttles, one seed, five missions. */
-function beginExpedition() {
+function beginExpedition(startId = null) {
   // M25: the ladder is linear and a run always starts at its foot. Losing an
   // expedition puts you back here, at the Moon, with the hangar you built.
-  const planetId = PLANET_ORDER[0];
+  //
+  // God mode is the one exception, and the flag is re-read here rather than
+  // trusted from the caller - the chapters screen only offers other bodies when
+  // it is on, but a stale button or a console call must not be able to skip
+  // eight bodies on a real save.
+  const wanted = meta.godMode && startId && PLANET_ORDER.includes(startId) ? startId : PLANET_ORDER[0];
+  const position = PLANET_ORDER.indexOf(wanted);
   const seed = g.forcedSeed != null ? g.forcedSeed : (Math.random() * 1e9) | 0;
-  g.run = Save.newRun(planetId, seed);
-  g.chapter = chapterFor(planetId, seed, 1);
-  g.campaign = planetId;
+  g.run = Save.newRun(wanted, seed);
+  // Starting part-way down means the run has to *look* like it got there, or
+  // the trail, the sector depth and the completion check all disagree with the
+  // screen. The sector is the ladder position, and the chapter seed is the one
+  // the route handler would have used arriving here normally, so a god-mode
+  // Titan is the same Titan a real run would have been dealt.
+  const sector = position + 1;
+  if (position > 0) {
+    g.run.cleared = PLANET_ORDER.slice(0, position);
+    g.run.chaptersCleared = position;
+    g.run.visited = [...g.run.cleared, wanted];
+    g.run.sector = sector;
+  }
+  g.chapter = chapterFor(wanted, position > 0 ? seed + sector * 101 : seed, sector);
+  g.campaign = wanted;
   g.endless = false;
   g.score = 0; g.combo = 0; g.newRecord = false;
   g.lives = g.run.shuttles;

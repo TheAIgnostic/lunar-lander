@@ -4,6 +4,7 @@ import { makeRng } from '../src/util.js';
 import { missionReward, addReward, settleHaul, bankHaul, freshHaul, CORE_PITY, DEBRIEF } from '../src/economy.js';
 import { PLANET_IDS, PLANETS } from '../src/planets.js';
 import { chapterFor } from '../src/missions.js';
+import { everyMaterial } from '../src/components.js';
 
 let pass = 0, fail = 0;
 const check = (n, c, e = '') => { if (c) pass++; else { fail++; console.log(`  FAIL  ${n}  ${e}`); } };
@@ -40,6 +41,16 @@ check('every body in the game is on it', new Set(PLANET_ORDER).size === PLANET_I
 // it.
 check('every rare material in the game is on the ladder',
   PLANET_IDS.every((id) => PLANET_ORDER.some((b) => PLANETS[b].rareMaterial === PLANETS[id].rareMaterial)));
+// The stronger form, and the one that will still be doing work after M28's
+// re-authoring pass: every material a *component asks for* is produced by a body
+// the player actually flies to. This is the M27 blocker stated as an invariant -
+// it is what fails if a re-cut points a cost at something unreachable.
+{
+  const produced = new Set(PLANET_ORDER.map((id) => PLANETS[id].rareMaterial));
+  const orphans = everyMaterial().filter((m) => !produced.has(m));
+  check('every material the hangar charges for is produced somewhere on the ladder',
+    orphans.length === 0, orphans.join(', '));
+}
 
 check('a fresh run starts at the Moon', nextPlanet([]) === 'LUNA');
 check('clearing the Moon points at Europa', nextPlanet(['LUNA']) === 'EUROPA');

@@ -24,8 +24,12 @@ export function defaultMeta() {
     clearedChapters: [],
     discoveredPlanets: ['LUNA'],
     // M24: mission select is earned, not given. Set the first time an
-    // expedition is carried through all five sectors.
+    // expedition is carried through all ten bodies.
     gameCompleted: false,
+    // A test switch, off for every real save. Declared here rather than left to
+    // fall out of `coerceMeta`'s spread so that NEW GAME clears it and so that
+    // "is god mode on?" has one answer with one owner. See `act('god')`.
+    godMode: false,
     banked: { salvage: 0, data: 0, cores: 0, materials: {} },
     componentLevels: { hull: 1, gear: 1, engine: 1, rcs: 1, power: 1, sensors: 1, utility: 1 },
     purchasedSkills: {},

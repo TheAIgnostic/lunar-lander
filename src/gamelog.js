@@ -62,6 +62,10 @@ export function asText(meta = null) {
   if (meta) {
     const b = meta.banked || {};
     const st = meta.stats || {};
+    // A run flown under the test switch is not a normal run, and the person
+    // reading this log did not necessarily fly it. It says so, first, before
+    // any number that god mode could have produced.
+    if (meta.godMode) head.push('*** GOD MODE WAS ON — resources granted, any body startable ***');
     const comp = Object.entries(meta.componentLevels || {}).map(([k, v]) => `${k}${v}`).join(' ');
     head.push(`components ${comp}`);
     head.push(`skills ${Object.keys(meta.purchasedSkills || {}).length} · equipped ${(meta.equipped && [meta.equipped.active, meta.equipped.passive].filter(Boolean).join('+')) || 'nothing'}`);
@@ -87,6 +91,7 @@ export function asJSON(meta = null) {
       banked: meta.banked,
       stats: meta.stats,
       gameCompleted: meta.gameCompleted,
+      godMode: !!meta.godMode,
     } : null,
     events: state.entries,
   }, null, 2);

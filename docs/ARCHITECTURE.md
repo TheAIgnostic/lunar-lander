@@ -202,6 +202,23 @@ grind their way out. Every run has to leave them measurably stronger than the la
 deadlocks. M13's anti-frustration debrief is the existing hook, and verifying that floor is the
 first thing M28 does — before any number is tuned.
 
+**God mode is a test switch with a deliberately narrow blast radius.** Settings → GOD MODE grants
+**resources and a starting position**, and nothing else: 999,999 of every currency, every material
+(read from `components.js`'s own cost tables, so an M28 re-cut cannot leave one behind), every
+blueprint, every body on the ladder startable, and the hangar window held open so the pot can
+actually be spent. It does not touch the flight model, the landing bands, the damage numbers or the
+terrain — a test build that flies differently from the real one cannot answer "does this feel
+right?", which is the only question the playtest log exists to serve. Everything is bought through
+the same `purchase()` and `buySkill()` a player uses, so an upgrade fitted under it is the same
+upgrade.
+
+Three rules hold it honest. It is **stamped into the playtest log's header** in both text and JSON,
+because Tom pastes that log into chat and a run flown with a bottomless pot starting at Venus is not
+a normal run. It is **marked in amber on the menu and the expedition screen**, so a screenshot taken
+under it looks wrong at a glance. And `beginExpedition` **re-reads the flag itself** rather than
+trusting its caller, so a stale button or a console call cannot skip eight bodies on a real save.
+`meta.godMode` is declared in `defaultMeta()`, which is what makes NEW GAME clear it.
+
 **The playtest log is not the logbook.** `meta.stats` is the player's career record: aggregated,
 lossy, permanent. `gamelog.js` is the opposite — an ordered event trace of one sitting, in memory
 only, built to be pasted into a conversation or exported. It records what was *measured* (the actual

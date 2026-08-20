@@ -10,12 +10,12 @@
 
 import * as Log from './gamelog.js';
 import * as Save from './save.js';
-import { purchase } from './components.js';
+import { everyMaterial, purchase } from './components.js';
 import { settleHaul } from './economy.js';
 import { chapterFor } from './missions.js';
-import { routeChoices } from './route.js';
+import { PLANET_ORDER, routeChoices } from './route.js';
 import { flightAssist } from './screens.js';
-import { STARTER_PASSIVES } from './modules.js';
+import { ACTIVE_MODULES, PASSIVE_MODULES, STARTER_PASSIVES } from './modules.js';
 import { buySkill } from './skills.js';
 import { audio, g, input, meta, saveSettings, setMeta, settings, ship } from './state.js';
 
@@ -23,13 +23,37 @@ import { audio, g, input, meta, saveSettings, setMeta, settings, ship } from './
 let flow = null;
 export function wireFlow(fns) { flow = fns; }
 
+/**
+ * Top the pot up to "you will not run out". Not `Infinity`: the figures are
+ * formatted, summed and written to JSON, and one non-finite number would run
+ * through all three. 999,999 salvage is about seventy-eight full hangars, which
+ * is unlimited in every sense that matters to a test session.
+ *
+ * Materials are read from the cost tables rather than listed, so M28's
+ * re-authoring pass cannot leave a material behind that god mode does not grant.
+ * Blueprints too: the route card recommends modules for every body, and a
+ * forecast saying "take: Ray Shield, Ice Cleats" is not testable if the switch
+ * that unlocks Europa does not also hand over the things it tells you to bring.
+ */
+const GOD_STOCK = 999999;
+
+function grantEverything() {
+  const materials = { ...meta.banked.materials };
+  for (const m of everyMaterial()) materials[m] = GOD_STOCK;
+  meta.banked = { salvage: GOD_STOCK, data: GOD_STOCK, cores: GOD_STOCK, materials };
+  const every = [...Object.keys(ACTIVE_MODULES), ...Object.keys(PASSIVE_MODULES)];
+  meta.unlockedBlueprints = [...new Set([...meta.unlockedBlueprints, ...every])];
+}
+
 export function act(action) {
   audio.unlock();
   audio.ui();
   if (action.startsWith('chapter:')) {
-    // The ladder decides where a run starts, so the body named here is ignored.
-    // The action is kept because the menu and the chapters screen both fire it.
-    flow.beginExpedition();
+    // The ladder decides where a run starts (decision 2), so the body named here
+    // is ignored - *unless* god mode is on, which is the one thing that switch
+    // exists to allow. `beginExpedition` re-checks the flag itself rather than
+    // trusting the caller, so a stale button cannot start a run at Venus.
+    flow.beginExpedition(action.slice(8));
     return;
   }
   if (action === 'noop') return;
@@ -39,6 +63,7 @@ export function act(action) {
     if (res) {
       meta.purchasedSkills = res.purchased;
       meta.banked.data = res.researchData;
+      if (meta.godMode) grantEverything();
       Save.saveMeta(meta);
       audio.arpeggio([659.25, 880], 0.06);
     }
@@ -95,6 +120,35 @@ export function act(action) {
   }
   if (action === 'log-clear') { Log.clearLog(); flow.toast('Playtest log cleared.'); flow.renderOverlay(); return; }
 
+  // --- GOD MODE (test switch) ------------------------------------------
+  //
+  // What it does is deliberately narrow: it hands over **resources and a
+  // starting position**, and nothing else. It does not touch the simulation,
+  // the landing bands, the damage numbers or the terrain, because a test build
+  // that flies differently from the real one cannot answer "does this feel
+  // right?" - which is the only question the playtest log exists to serve.
+  //
+  // Everything it grants is bought through the same `purchase()` and
+  // `buySkill()` the player uses, so an upgrade fitted under god mode is the
+  // same upgrade. That is what makes it useful for testing the later bodies
+  // rather than a separate code path to debug.
+  //
+  // It is **stamped into the playtest log's header**, on purpose. Tom pastes
+  // that log into chat, and a run flown with 999,999 salvage and a start at
+  // Venus is not a normal run - the log has to say so without being asked.
+  if (action === 'god') {
+    const on = !meta.godMode;
+    meta.godMode = on;
+    if (on) grantEverything();
+    Save.saveMeta(meta);
+    Log.log('god-mode', { on: on ? 1 : 0 });
+    flow.toast(on
+      ? 'God mode on. Every body is startable, resources are topped up, and the playtest log now says so.'
+      : 'God mode off. What you already bought stays bought.');
+    flow.renderOverlay();
+    return;
+  }
+
   // --- NEW GAME --------------------------------------------------------
   // Erasing everything is one press away from a settings screen, so it arms
   // first and fires second. A refusal that is silent reads as a broken button
@@ -142,19 +196,27 @@ export function act(action) {
     // window between bodies - the same moment the loadout opens. That is the
     // trade the run economy is built on: a permanent upgrade now, or the
     // modules and skills to survive the next body.
-    if (g.run && !g.loadoutWindow) {
-      flow.toast('The hangar only takes work between bodies.');
-      return;
-    }
-    if (!g.run) {
-      flow.toast('Upgrades are fitted during an expedition, in the window between bodies.');
-      return;
+    // God mode opens the window too. Without that the switch grants a pot it
+    // cannot spend - the whole point is fitting upgrades to test the later
+    // bodies with, and outside a supply stop the hangar refuses every one of
+    // them. The refusals themselves are untouched: turn god mode off and the
+    // window closes again exactly as it did.
+    if (!meta.godMode) {
+      if (g.run && !g.loadoutWindow) {
+        flow.toast('The hangar only takes work between bodies.');
+        return;
+      }
+      if (!g.run) {
+        flow.toast('Upgrades are fitted during an expedition, in the window between bodies.');
+        return;
+      }
     }
     const id = action.slice(4);
     const result = purchase(id, meta.componentLevels, meta.banked);
     if (result) {
       meta.banked = result.banked;
       meta.componentLevels = result.componentLevels;
+      if (meta.godMode) grantEverything();
       Save.saveMeta(meta);
       audio.arpeggio([523.25, 659.25, 880], 0.07);
     }

@@ -161,6 +161,21 @@ export function purchaseCheck(componentId, componentLevels, banked) {
 }
 
 /** Spend and level up. Returns a new banked record and levels - never mutates. */
+/**
+ * Every material any component level asks for, derived from the cost tables
+ * rather than listed. A hand-kept list would drift the moment a cost is
+ * re-authored, and M28 is a re-authoring pass over exactly these tables.
+ */
+export function everyMaterial() {
+  const names = new Set();
+  for (const id of COMPONENT_IDS) {
+    for (const lvl of COMPONENTS[id].levels) {
+      for (const m of Object.keys((lvl.cost && lvl.cost.materials) || {})) names.add(m);
+    }
+  }
+  return [...names];
+}
+
 export function purchase(componentId, componentLevels, banked) {
   const check = purchaseCheck(componentId, componentLevels, banked);
   if (!check.ok) return null;
