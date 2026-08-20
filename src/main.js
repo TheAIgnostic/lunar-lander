@@ -12,7 +12,8 @@ import { LANDING, capsFor } from './landing.js';
 import { PLANETS, gravityFor } from './planets.js';
 import * as Save from './save.js';
 import { missionReward, addReward, settleHaul } from './economy.js';
-import { routeOffers, isCheckpoint } from './route.js';
+import { planetIcon } from './planeticons.js';
+import { routeOffers, SECTORS, isExpeditionComplete, isCheckpoint } from './route.js';
 import { COMPONENTS, COMPONENT_IDS, deriveFull, purchaseCheck, purchase } from './components.js';
 import { TREES, TREE_IDS, deriveSkills, skillCheck, buySkill } from './skills.js';
 import { ACTIVE_MODULES, PASSIVE_MODULES, derivePassive, recommendedFor, MOON_BLUEPRINTS, STARTER_PASSIVES, COMBAT_BLUEPRINT, moduleById } from './modules.js';
@@ -626,7 +627,10 @@ function onLand() {
         meta.stats.bodies[body] = (meta.stats.bodies[body] || 0) + 1;
         g.run.shuttles = g.lives;
         persistRun();
-        setState(isCheckpoint(g.run.chaptersCleared) ? 'checkpoint' : 'route');
+        // The checkpoint is the one place mid-expedition where the loadout
+        // opens. It closes again as soon as the next leg is chosen.
+        g.loadoutWindow = isCheckpoint(g.run.chaptersCleared);
+        setState(g.loadoutWindow ? 'checkpoint' : 'route');
         return;
       }
       if (g.level && (g.chapter || CHAPTERS[g.campaign])) {
@@ -893,7 +897,7 @@ function screenHTML(s) {
           ${chapterName || g.run ? btn('abandon-run', 'ABANDON EXPEDITION') : ''}
           ${btn('help', 'HOW TO FLY')}
           ${chapterName || g.run ? '' : btn('hangar', 'HANGAR')}
-          ${chapterName || g.run ? '' : btn('outfit', 'OUTFIT')}
+          ${chapterName || g.run ? '' : btn('outfit', 'LOADOUT')}
           ${btn('stats', 'LOGBOOK')}
           ${btn('settings', 'SETTINGS')}
         </div>
@@ -904,10 +908,10 @@ function screenHTML(s) {
       return `<div class="screen">
         <h2>HOW TO FLY</h2>
         <div class="keys">
-          <div><kbd>SPACE</kbd><kbd>W</kbd><kbd>↑</kbd><span>Main booster — pushes along the nose</span></div>
+          <div><kbd>SPACE</kbd><kbd>W</kbd><kbd>↑</kbd><span>Main booster, pushes along the nose</span></div>
           <div><kbd>A</kbd><kbd>←</kbd><span>Left attitude burner (rotates you)</span></div>
           <div><kbd>D</kbd><kbd>→</kbd><span>Right attitude burner</span></div>
-          <div><kbd>S</kbd><kbd>↓</kbd><span>Attitude hold — burns fuel to kill spin</span></div>
+          <div><kbd>S</kbd><kbd>↓</kbd><span>Attitude hold, burns fuel to kill spin</span></div>
           <div><kbd>E</kbd><kbd>Q</kbd><span>Fire the equipped active module</span></div>
           <div><kbd>R</kbd><span>Retry</span><kbd>P</kbd><span>Pause</span><kbd>M</kbd><span>Mute</span></div>
         </div>
@@ -918,13 +922,13 @@ function screenHTML(s) {
         </div>
         <p class="body">Land with <b>both legs</b> inside a flashing pad. Keep descent under
         <b>${(ENVELOPE.GOOD.vy / 6).toFixed(1)}</b>, drift under <b>${(ENVELOPE.GOOD.vx / 6).toFixed(1)}</b>
-        and tilt inside the green arc. Smaller pads pay bigger multipliers, and leftover fuel is worth points —
+        and tilt inside the green arc. Smaller pads pay bigger multipliers, and leftover fuel is worth points, so
         so is a landing streak. Three lander losses ends the run.</p>
         <p class="body">Miss the pad and a clean touchdown on <b>level ground</b> still survives, at the base
         rate with the streak broken. Steep ground, a hard arrival, the hull touching first, or the ice
-        ceiling on Europa — those are all wreckage.</p>
-        <p class="body">Some ground is defended. Old security machines <b>telegraph every shot</b> — a
-        line locks on and a ring closes before anything is fired — and hits cost <b>hull</b>, not control.
+        ceiling on Europa. Those are all wreckage.</p>
+        <p class="body">Some ground is defended. Old security machines <b>telegraph every shot</b>: a
+        line locks on and a ring closes before anything is fired. Hits cost <b>hull</b>, not control.
         Terrain is cover, a turret cannot shoot at something sitting on top of it, and every mission
         keeps one pad no machine can reach. Destroying them pays, but it is never the way through.</p>
         <div class="btns">${btn('back', 'BACK', true, 'SPACE')}</div>
@@ -974,14 +978,14 @@ function screenHTML(s) {
     case 'result': {
       const r = g.lastResult;
       const color = r.offPad ? '#ffb347' : r.q === 'PERFECT' ? '#4dff9f' : r.q === 'GOOD' ? '#5ff5ff' : '#ffb347';
-      const head = r.offPad ? 'DOWN SAFE — OFF PAD' : `${r.q} LANDING`;
+      const head = r.offPad ? 'DOWN SAFE, OFF PAD' : `${r.q} LANDING`;
       return `<div class="screen">
         <div class="verdict" style="color:${color};text-shadow:0 0 30px ${color}">${head}</div>
-        ${r.offPad ? '<p class="body">Level ground held the legs, but there is no bonus off the pad — and the streak resets.</p>' : ''}
+        ${r.offPad ? '<p class="body">Level ground held the legs. There is no bonus off the pad, and the streak resets.</p>' : ''}
         ${r.detail ? metricsTable(r.detail) : ''}
         ${r.objective ? `<div class="objective${r.objective.met ? ' met' : ''}">
           <span>${r.objective.met ? 'OBJECTIVE MET' : 'OBJECTIVE'}</span> ${r.objective.text}
-          — <b>${r.objective.progress}</b>${r.objective.met && r.objective.reward
+          · <b>${r.objective.progress}</b>${r.objective.met && r.objective.reward
             ? ` · +${Object.entries(r.objective.reward).map(([k, v]) => `${v} ${k}`).join(', ')}` : ''}</div>` : ''}
         ${haulPanel(r)}
         ${r.combat ? `<div class="objective"><span>THREATS</span>
@@ -1027,7 +1031,7 @@ function screenHTML(s) {
         <div class="verdict" style="color:#4dff9f;text-shadow:0 0 30px #4dff9f">${g.chapter ? 'CHAPTER COMPLETE' : 'PROGRAM COMPLETE'}</div>
         <p class="body">${g.chapter
           ? `${chapterTitle(g.campaign)} is surveyed. Five landings, and the lander still flies.`
-          : 'All twelve missions flown. The unsurveyed sectors are open — they do not end.'}</p>
+          : 'All twelve missions flown. The unsurveyed sectors are open, and they do not end.'}</p>
         <div class="stats big"><span>SCORE</span><b>${formatScore(g.score)}</b></div>
         <div class="btns">${btn('next', 'ENTER ENDLESS', true, 'SPACE')}${btn('menu', 'MENU')}</div>
       </div>`;
@@ -1062,12 +1066,12 @@ function screenHTML(s) {
         <div class="setting">
           <div class="setting-name">STEERING</div>
           <div class="opts">
-            ${opt('steering', 'classic', 'CLASSIC', 'Side burners rotate the lander. Point the nose, then burn — the 1969 problem, and the only way to fly the tight pads well.')}
+            ${opt('steering', 'classic', 'CLASSIC', 'Side burners rotate the lander. Point the nose, then burn. The 1969 problem, and the only way to fly the tight pads well.')}
             ${opt('steering', 'direct', 'DIRECT', 'Side burners push the lander sideways and the hull stays upright. Left means left on its own, no attitude to manage.')}
           </div>
         </div>
         <div class="setting${settings.steering === 'direct' ? ' dimmed' : ''}">
-          <div class="setting-name">ROTATION${settings.steering === 'direct' ? ' — classic only' : ''}</div>
+          <div class="setting-name">ROTATION${settings.steering === 'direct' ? ' (classic only)' : ''}</div>
           <div class="opts">
             ${opt('invertRotation', false, 'NORMAL', 'Left burner tips the nose left, so left plus booster drifts you left.')}
             ${opt('invertRotation', true, 'INVERTED', 'Left burner tips the nose right. Some pilots read the stick the other way round.')}
@@ -1101,7 +1105,7 @@ function screenHTML(s) {
           <div class="setting-name">CONTRAST</div>
           <div class="opts">
             ${opt('highContrast', false, 'STANDARD', 'Pads and threats in their usual colours.')}
-            ${opt('highContrast', true, 'HIGH', 'Pads outlined and labelled, threats ringed and lettered — every marker readable without relying on colour.')}
+            ${opt('highContrast', true, 'HIGH', 'Pads outlined and labelled, threats ringed and lettered, so every marker reads without relying on colour.')}
           </div>
         </div>
         <div class="setting">
@@ -1226,8 +1230,8 @@ function screenHTML(s) {
       }).join('');
 
       return `<div class="screen wide">
-        <div class="eyebrow" style="color:#5ff5ff">OUTFIT</div>
-        <h2>SKILLS &amp; LOADOUT</h2>
+        <div class="eyebrow" style="color:#5ff5ff">LOADOUT</div>
+        <h2>SKILLS AND MODULES</h2>
         <div class="stats"><span>RESEARCH DATA</span><b>${formatScore(data)}</b></div>
         <div class="trees">${trees}</div>
         <div class="setting"><div class="setting-name">ACTIVE MODULE</div><div class="grid comps">${slot(ACTIVE_MODULES, 'active')}</div></div>
@@ -1289,27 +1293,49 @@ function screenHTML(s) {
         run.seed, run.sector,
       );
       g.routeOffers = offers;
-      const cards = offers.map((c, i) => `
+      const cards = offers.map((c, i) => {
+        const accent = WORLDS[PLANETS[c.planet].world].accent;
+        return `
         <button class="tile route" data-action="route:${i}">
-          <span class="world" style="color:${WORLDS[PLANETS[c.planet].world].accent}">${c.name}</span>
-          <span class="name">${'▮'.repeat(c.difficulty)}${'▯'.repeat(5 - c.difficulty)} · ${c.atmosphere} atmosphere</span>
-          <span class="best">gravity ${(c.gravity / 6).toFixed(2)} m/s² · enemies ${c.enemyIntensity}</span>
-          <span class="best">hazards: ${c.hazards.join(', ') || 'none reported'}${c.incomplete ? ' <i>· forecast incomplete</i>' : ''}</span>
-          <span class="best">material: ${c.rareMaterial}</span>
-          <span class="best rec">counters: ${c.recommended.join(', ')}</span>
-        </button>`).join('');
+          <span class="planet-mark" style="color:${accent}">${planetIcon(c.planet, accent, 62)}</span>
+          <span class="world" style="color:${accent}">${c.name}</span>
+          <span class="name">${'▮'.repeat(c.difficulty)}${'▯'.repeat(5 - c.difficulty)} · ${c.atmosphere === 'none' ? 'no air' : `${c.atmosphere} air`}</span>
+          <span class="best">gravity ${(c.gravity / 6).toFixed(2)} m/s² · ${c.enemyIntensity} resistance</span>
+          <span class="best">weather: ${c.hazards.join(', ') || 'nothing reported'}${c.incomplete ? ' <i>· forecast incomplete</i>' : ''}</span>
+          <span class="best haul">brings home: ${c.rareMaterial}</span>
+          <span class="best rec">take: ${c.recommended.join(', ')}</span>
+        </button>`;
+      }).join('');
       const h = run.haul;
       return `<div class="screen wide">
-        <div class="eyebrow" style="color:#4dff9f">${checkpoint ? `SECTOR ${run.sector} CHECKPOINT` : 'CHAPTER CLEARED'}</div>
-        <h2>${checkpoint ? 'CARGO BANKED · SHUTTLES RESTORED' : 'PLOT THE NEXT LEG'}</h2>
+        <div class="eyebrow" style="color:#4dff9f">SECTOR ${run.sector} OF ${SECTORS}${checkpoint ? ' · CHECKPOINT' : ''}</div>
+        <h2>${checkpoint ? 'CARGO BANKED. SHUTTLES BACK.' : 'WHERE NEXT?'}</h2>
+        ${checkpoint ? '<p class="body">Supply stop. Change your loadout here if you want to, then pick the next world.</p>' : ''}
         <table class="score">
           <tr><td>Transmitted salvage</td><td>${formatScore(h.salvageSafe)}</td></tr>
           <tr><td>Physical cargo ${checkpoint ? '(banking now)' : '(at risk until the next checkpoint)'}</td><td>${formatScore(h.salvageCargo)}</td></tr>
           <tr><td>Research data</td><td>${formatScore(h.data)}</td></tr>
           <tr class="tot"><td>SHUTTLES</td><td>${g.lives} / ${run.maxShuttles}</td></tr>
         </table>
-        <div class="grid chapters">${cards}</div>
-        <div class="btns">${btn('abandon-run', 'END EXPEDITION')}</div>
+        <div class="grid routes">${cards}</div>
+        <div class="btns">${checkpoint ? btn('outfit', 'CHANGE LOADOUT') : ''}${btn('abandon-run', 'END EXPEDITION')}</div>
+      </div>`;
+    }
+
+    case 'expedition-complete': {
+      const b = meta.banked;
+      const sum = g.lastRunSummary || { missions: 0 };
+      return `<div class="screen">
+        <div class="verdict" style="color:#4dff9f;text-shadow:0 0 30px #4dff9f">EXPEDITION COMPLETE</div>
+        <p class="body">Five sectors, and the lander came home. Everything you carried is banked.
+        The next expedition starts wherever you want it to.</p>
+        <table class="score">
+          <tr><td>Missions flown</td><td>${sum.missions}</td></tr>
+          <tr><td>Run score</td><td>${formatScore(g.score)}</td></tr>
+          <tr class="tot"><td>BANKED SALVAGE</td><td>${formatScore(b.salvage)}</td></tr>
+          <tr class="run"><td>BANKED RESEARCH</td><td>${formatScore(b.data)}</td></tr>
+        </table>
+        <div class="btns">${btn('chapters', 'NEW EXPEDITION', true, 'SPACE')}${btn('hangar', 'HANGAR')}${btn('menu', 'MENU')}</div>
       </div>`;
     }
 
@@ -1317,8 +1343,8 @@ function screenHTML(s) {
       const b = meta.banked;
       return `<div class="screen">
         <div class="verdict bad">EXPEDITION LOST</div>
-        <p class="body">All three shuttles are gone. What was transmitted stays transmitted —
-        the expedition ends, the programme does not.</p>
+        <p class="body">All three shuttles are gone. What you transmitted is still yours.
+        The expedition ends. The programme does not.</p>
         <table class="score">
           <tr><td>Missions cleared</td><td>${g.lastRunSummary ? g.lastRunSummary.missions : 0}</td></tr>
           <tr><td>Run score</td><td>${formatScore(g.score)}</td></tr>
@@ -1353,7 +1379,7 @@ function threatBrief() {
   const threats = describeThreats(g.level);
   if (!threats.length) return '';
   const rows = threats.map((t) =>
-    `<div><b>${t.name}</b> <i>${t.kind === 'air' ? 'airborne' : 'ground'}</i> — ${t.counterplay}</div>`).join('');
+    `<div><b>${t.name}</b> <i>${t.kind === 'air' ? 'airborne' : 'ground'}</i> · ${t.counterplay}</div>`).join('');
   return `<div class="threats"><span>HOSTILE SYSTEMS</span>${rows}</div>`;
 }
 
@@ -1370,7 +1396,7 @@ function haulPanel(r) {
   const mult = rw && rw.haulMult != null ? rw.haulMult : 1;
   return `<div class="objective haul${c.nodes ? ' met' : ''}">
     <span>${c.nodes ? 'RECOVERED' : 'NOTHING RECOVERED'}</span>
-    ${c.nodes} of ${c.nodes + left.nodes} deposit${c.nodes + left.nodes === 1 ? '' : 's'} —
+    ${c.nodes} of ${c.nodes + left.nodes} deposit${c.nodes + left.nodes === 1 ? '' : 's'} ·
     <b>${c.material} material · ${c.salvage} salvage</b>${mult !== 1 ? ` × ${mult.toFixed(2)} landing` : ''}${
     left.nodes ? ` · <i>${left.material} material still out there</i>` : ''}</div>`;
 }
@@ -1415,22 +1441,22 @@ function flightAssist() {
   const planet = PLANETS[g.level.planet] || null;
   const hazard = (g.level.hazards || []).map((h) => (typeof h === 'string' ? h : h.type))[0];
   const TIPS = {
-    dust: 'the storm runs on a cycle — learn the ground in a clear window, then commit during the next one',
-    windChannels: 'the wind reverses between altitude bands — drop through them one at a time instead of straight down',
-    atmosphere: 'the air answers late here — start braking earlier than feels right, and trim into the gust',
-    radiation: 'ridges throw a shadow — the sheltered route is slower and keeps your instruments honest',
-    thermal: 'heat builds while you burn — short bursts, not a long hold',
-    cryo: 'the cold builds while you coast — a little thrust keeps it back',
-    plumes: 'the vents fire on a cycle — cross the field between them',
+    dust: 'the storm runs on a cycle, so learn the ground in a clear window and commit during the next one',
+    windChannels: 'the wind reverses between altitude bands, so drop through them one at a time instead of straight down',
+    atmosphere: 'the air answers late here, so start braking earlier than feels right and trim into the gust',
+    radiation: 'ridges throw a shadow, and the sheltered route is slower but keeps you alive',
+    thermal: 'heat builds while you burn, so use short bursts rather than a long hold',
+    cryo: 'the cold builds while you coast, and a little thrust keeps it back',
+    plumes: 'the vents fire on a cycle, so cross the field between them',
   };
   const tips = [];
   if (TIPS[hazard]) tips.push(TIPS[hazard]);
   if (g.level.surfaceFriction != null && g.level.surfaceFriction < 0.3) {
-    tips.push('this surface barely holds you — arrive slow and straight, and expect to slide');
+    tips.push('this surface barely holds you, so arrive slow and straight and expect to slide');
   }
-  if (g.level.cave) tips.push('the ceiling is as fatal as the floor — climb in small steps');
-  if (g.field && !g.field.empty) tips.push('the safe pad is out of every gun\'s reach — the small pad is the one being watched');
-  if (!tips.length) tips.push(planet ? planet.summary.toLowerCase() : 'take the wide pad and the base rate — a landing beats a multiplier');
+  if (g.level.cave) tips.push('the ceiling is as fatal as the floor, so climb in small steps');
+  if (g.field && !g.field.empty) tips.push('the safe pad is out of every gun\'s reach. The small pad is the one being watched');
+  if (!tips.length) tips.push(planet ? planet.summary.toLowerCase() : 'take the wide pad and the base rate. A landing beats a multiplier');
 
   // A loaner only when the player has nothing equipped for this body.
   const rec = recommendedFor(g.level.planet);
@@ -1456,8 +1482,8 @@ function crashReason() {
   const tilt = Math.abs(normalizeAngle(ship.angle)) / DEG;
   if (g.terrain.ceiling && ship.contact && ship.contact.y < g.terrain.height * 0.5) return 'Struck the ice ceiling.';
   if (ship.fuel <= 0) return 'Tanks dry on final approach.';
-  if (Math.abs(ship.vy) > ENVELOPE.HARD.vy) return `Descent rate ${(Math.abs(ship.vy) / 6).toFixed(1)} — far outside the envelope.`;
-  if (Math.abs(ship.vx) > ENVELOPE.HARD.vx) return `Lateral drift ${(Math.abs(ship.vx) / 6).toFixed(1)} — the legs sheared off.`;
+  if (Math.abs(ship.vy) > ENVELOPE.HARD.vy) return `Descent rate ${(Math.abs(ship.vy) / 6).toFixed(1)}, far outside the envelope.`;
+  if (Math.abs(ship.vx) > ENVELOPE.HARD.vx) return `Lateral drift ${(Math.abs(ship.vx) / 6).toFixed(1)}. The legs sheared off.`;
   if (tilt > 15) return `Attitude ${tilt.toFixed(0)}° off vertical at contact.`;
   return 'Touched down off the pad. The surface is not level enough to hold a lander.';
 }
@@ -1535,7 +1561,9 @@ function act(action) {
     if (!card || !g.run) return;
     const run = g.run;
     if (g.state === 'checkpoint') {
-      // A checkpoint banks everything and restores the expedition.
+      // A checkpoint banks everything and restores the expedition. It is also
+      // the only place mid-run where the loadout may be changed, so the window
+      // closes again the moment the next leg is chosen.
       const settled = settleHaul(run.haul, { completed: true });
       meta = Save.bankRun(meta, run, { completed: true, settled, id: `sector-${run.sector}` });
       Save.saveRun(run);
@@ -1543,7 +1571,19 @@ function act(action) {
       run.haul = { salvageSafe: 0, salvageCargo: 0, data: 0, cores: 0, materials: {} };
       run.sector++;
       g.lives = run.maxShuttles;
+      // Five sectors is an expedition. Reaching the end of the fifth is the
+      // win condition the run never had.
+      if (isExpeditionComplete(run.sector)) {
+        g.lastRunSummary = { missions: run.missionsCleared, chapter: run.chapterId, settled, complete: true };
+        run.score = g.score;
+        Save.clearRun();
+        g.run = null;
+        g.loadoutWindow = false;
+        setState('expedition-complete');
+        return;
+      }
     }
+    g.loadoutWindow = false;
     run.chapterId = card.planet;
     run.missionIndex = 0;
     run.shuttles = g.lives;
@@ -1631,7 +1671,13 @@ function act(action) {
       break;
     case 'help': setState('help'); break;
     case 'stats': setState('stats'); break;
-    case 'back': setState(g.settingsFrom === 'paused' ? 'paused' : 'menu'); g.settingsFrom = null; break;
+    case 'back':
+      // Coming out of the loadout during a supply stop returns to the stop,
+      // not to the main menu - the expedition is still running.
+      if (g.loadoutWindow && g.run) { setState('checkpoint'); break; }
+      setState(g.settingsFrom === 'paused' ? 'paused' : 'menu');
+      g.settingsFrom = null;
+      break;
     case 'launch': launch(); break;
     case 'next':
       if (g.state === 'victory') {
@@ -1720,7 +1766,7 @@ input.bind('*', (key) => {
   const action = g.rebinding;
   const next = input.rebind(action, key);
   if (!next) {
-    g.rebindNote = `${keyLabel(key)} is reserved for the interface — pick another key.`;
+    g.rebindNote = `${keyLabel(key)} is reserved for the interface. Pick another key.`;
   } else {
     settings.keys = next;
     g.rebindNote = null;
@@ -1789,6 +1835,7 @@ window.__goMission = (chapterId, mission = 1) => {
 
 /** Dev: the live enemy field, and a way to fire the module from a test. */
 window.__field = () => g.field;
+window.__setState = (name) => { setState(name); return g.state; };   // drive any screen in a test
 window.__audio = audio;   // so a test can count what actually gets played
 window.__useAbility = () => (g.abilities ? g.abilities.trigger(ship) : false);
 

@@ -51,7 +51,7 @@ export const LEVELS = [
   L({
     id: 5, world: 'MARS', title: 'RILLE RUN', gravity: 45, fuel: 122, rough: 260, width: 3200, fuelCells: 2,
     pads: [{ width: 150, mult: 3 }, { width: 78, mult: 5 }],
-    brief: 'Thin tanks. Fuel cells float in the canyon — worth the detour.',
+    brief: 'Thin tanks. There are fuel cells floating in the canyon and they are worth the detour.',
   }),
   L({
     id: 6, world: 'MARS', title: 'OLYMPUS SHELF', gravity: 48, fuel: 116, rough: 300, width: 3400, fuelCells: 2,

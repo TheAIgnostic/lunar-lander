@@ -22,8 +22,8 @@ import { makeRng } from './util.js';
 
 export const MOON_MISSIONS = [
   {
-    id: 'moon-1', planet: 'LUNA', index: 1, name: 'FIRST SCAR',
-    brief: 'A bowl crater with the pad on an offset inner shelf. You cannot simply fall onto it — carry your speed across the bowl and set down level.',
+    id: 'moon-1', planet: 'LUNA', index: 1, name: 'THE CRATER',
+    brief: 'A wide bowl with the pad on a shelf inside it. You cannot just drop in. Carry your speed across the bowl, then set down flat.',
     width: 2700, relief: 250, detail: 1.0, rough: 150, fuel: 124,
     terrain: { archetype: 'crater' },
     pads: [{ mult: 3, width: 130 }, { mult: 2, width: 200 }],
@@ -31,8 +31,8 @@ export const MOON_MISSIONS = [
     enemyBudget: 0,
   },
   {
-    id: 'moon-2', planet: 'LUNA', index: 2, name: 'RILLE RUN',
-    brief: 'A deep rille with the pad on the floor, under a cliff. Kill your lateral speed early — boulders make a late correction expensive.',
+    id: 'moon-2', planet: 'LUNA', index: 2, name: 'THE TRENCH',
+    brief: 'A deep channel with the pad on the floor, tucked under a cliff. Kill your sideways drift early. Down here a late correction costs more than you have.',
     width: 2900, relief: 300, detail: 1.6, rough: 170, fuel: 116,
     terrain: { archetype: 'canyon' },
     pads: [{ mult: 3, width: 120 }],
@@ -40,8 +40,8 @@ export const MOON_MISSIONS = [
     enemyBudget: 1,
   },
   {
-    id: 'moon-3', planet: 'LUNA', index: 3, name: 'FAR-SIDE RELAY',
-    brief: 'Broken ridges and a relay platform cut into the flank. Telemetry is intermittent out here; fly what you can see.',
+    id: 'moon-3', planet: 'LUNA', index: 3, name: 'THE RELAY',
+    brief: 'Broken ridges, and a landing platform cut into the side of one. Telemetry drops in and out this far around, so fly what you can see.',
     width: 3000, relief: 290, detail: 1.2, rough: 200, fuel: 112,
     terrain: { archetype: 'ridge' },
     pads: [{ mult: 3, width: 110 }, { mult: 2, width: 180 }],
@@ -49,8 +49,8 @@ export const MOON_MISSIONS = [
     enemyBudget: 1,
   },
   {
-    id: 'moon-4', planet: 'LUNA', index: 4, name: 'SILENT BATTERY',
-    brief: 'A crater rim strewn with wreckage. Two old security turrets still track movement — they are slow, and they can be flown around.',
+    id: 'moon-4', planet: 'LUNA', index: 4, name: 'OLD BATTERY',
+    brief: 'A crater rim covered in wreckage. Two security guns still track anything that moves. They are slow, and you can fly around them.',
     width: 3100, relief: 280, detail: 1.8, rough: 210, fuel: 108,
     terrain: { archetype: 'mesa' },
     pads: [{ mult: 3, width: 110 }, { mult: 2, width: 170 }],
@@ -58,8 +58,8 @@ export const MOON_MISSIONS = [
     enemyBudget: 2, enemySets: ['sentry-turret'],
   },
   {
-    id: 'moon-5', planet: 'LUNA', index: 5, name: 'TYCHO DESCENT',
-    brief: 'Tall walls, a central peak, and a terrace barely wider than the lander. Everything the Moon has taught you, with the fuel to do it once.',
+    id: 'moon-5', planet: 'LUNA', index: 5, name: 'TYCHO',
+    brief: 'Tall walls, a peak in the middle, and a terrace barely wider than your legs. Everything the Moon has taught you, with fuel for one attempt.',
     width: 3200, relief: 320, detail: 1.4, rough: 230, fuel: 104,
     terrain: { archetype: 'caldera' },
     pads: [{ mult: 5, width: 78 }, { mult: 2, width: 170 }],
@@ -120,8 +120,8 @@ export const MOON_LEVELS = MOON_MISSIONS.map(missionToLevel);
 
 export const MARS_MISSIONS = [
   {
-    id: 'mars-1', planet: 'MARS', index: 1, name: 'RED VEIL',
-    brief: 'Thin air, but enough to matter: the lander answers late and drifts on the gusts. The pad sits behind a low ridge, and a dust front is crossing the basin.',
+    id: 'mars-1', planet: 'MARS', index: 1, name: 'RED BASIN',
+    brief: 'Thin air, but enough to matter. The lander answers late and drifts on the gusts. The pad sits behind a low ridge and there is dust coming in.',
     width: 3000, relief: 240, detail: 1.2, rough: 190, fuel: 136,
     terrain: { archetype: 'basin' },
     pads: [{ mult: 3, width: 120 }, { mult: 2, width: 190 }],
@@ -130,8 +130,8 @@ export const MARS_MISSIONS = [
     enemyBudget: 0,
   },
   {
-    id: 'mars-2', planet: 'MARS', index: 2, name: 'VALLES CROSSWIND',
-    brief: 'The canyon stacks its wind in layers, and each layer runs the other way. Drop through them one at a time — a straight descent will be thrown into a wall.',
+    id: 'mars-2', planet: 'MARS', index: 2, name: 'THE CANYON',
+    brief: 'The wind here stacks in layers, and each layer runs the other way. Drop through them one at a time. Go straight down and it will throw you into a wall.',
     width: 3100, relief: 300, detail: 1.4, rough: 200, fuel: 132,
     terrain: { archetype: 'canyon' },
     pads: [{ mult: 3, width: 130 }],
@@ -141,7 +141,7 @@ export const MARS_MISSIONS = [
   },
   {
     id: 'mars-3', planet: 'MARS', index: 3, name: 'BURIED ARRAY',
-    brief: 'Dune country, with a sensor array half swallowed by it. The dust comes in hard and often; learn the ground during the clear windows.',
+    brief: 'Dune country, with a sensor array half swallowed by it. The dust comes in hard and often, so learn the ground while you can still see it.',
     width: 3200, relief: 230, detail: 1.8, rough: 210, fuel: 128,
     terrain: { archetype: 'dunes' },
     pads: [{ mult: 3, width: 130 }, { mult: 2, width: 180 }],
@@ -151,7 +151,7 @@ export const MARS_MISSIONS = [
   },
   {
     id: 'mars-4', planet: 'MARS', index: 4, name: 'IRON RAIN',
-    brief: 'Iron-rich mesas, old ground batteries, a patrol drone that still flies its beat, and salvage sitting exactly where the safe route is not. The gusts do not care that you are being shot at.',
+    brief: 'Iron mesas, old ground guns, a drone still flying its patrol, and salvage sitting exactly where the safe route is not. The wind does not care that you are being shot at.',
     width: 3300, relief: 290, detail: 1.6, rough: 230, fuel: 124,
     terrain: { archetype: 'mesa' },
     pads: [{ mult: 3, width: 115 }, { mult: 2, width: 175 }],
@@ -161,7 +161,7 @@ export const MARS_MISSIONS = [
   },
   {
     id: 'mars-5', planet: 'MARS', index: 5, name: 'STORM EYE',
-    brief: 'A storm walks the crater on a cycle. The pad is on the central mesa, and you will only see it in the gaps — and something is still flying in it. Memorise the ground, then commit.',
+    brief: 'A storm walks the crater on a cycle. The pad is on the mesa in the middle and you will only see it in the gaps. Something is still flying in there. Learn the ground, then commit.',
     width: 3400, relief: 320, detail: 1.5, rough: 240, fuel: 120,
     terrain: { archetype: 'caldera' },
     pads: [{ mult: 5, width: 84 }, { mult: 2, width: 175 }],
@@ -175,8 +175,8 @@ export const MARS_LEVELS = MARS_MISSIONS.map(missionToLevel);
 
 export const EUROPA_MISSIONS = [
   {
-    id: 'europa-1', planet: 'EUROPA', index: 1, name: 'GLASS LANDING',
-    brief: 'Smooth ice, and almost nothing to hold you. Touchdown is only half the landing here — you will keep moving after the legs are down, so arrive slow and arrive straight.',
+    id: 'europa-1', planet: 'EUROPA', index: 1, name: 'GLASS',
+    brief: 'Smooth ice, and almost nothing to hold you. Touching down is only half the landing here. You will keep moving after the legs are down, so arrive slow and arrive straight.',
     width: 2900, relief: 200, detail: 0.8, rough: 150, fuel: 122,
     terrain: { archetype: 'basin' },
     pads: [{ mult: 3, width: 130 }, { mult: 2, width: 200 }],
@@ -184,8 +184,8 @@ export const EUROPA_MISSIONS = [
     enemyBudget: 0,
   },
   {
-    id: 'europa-2', planet: 'EUROPA', index: 2, name: 'BLUE FRACTURE',
-    brief: 'The pad is an ice bridge over a crevasse. It will hold a gentle lander and nothing heavier — the fracture limit is printed on the approach.',
+    id: 'europa-2', planet: 'EUROPA', index: 2, name: 'THE CREVASSE',
+    brief: 'The pad is a bridge of ice over a crack you cannot see the bottom of. Come in gently. There is nothing under it if you do not.',
     width: 3000, relief: 300, detail: 1.2, rough: 190, fuel: 118,
     terrain: { archetype: 'canyon' },
     pads: [{ mult: 5, width: 120, fragile: 16 }],
@@ -194,7 +194,7 @@ export const EUROPA_MISSIONS = [
   },
   {
     id: 'europa-3', planet: 'EUROPA', index: 3, name: 'RADIATION PASS',
-    brief: 'Jupiter sweeps this face on a cycle. Ice blades throw a long shadow — the sheltered route is slower, and it is the one that keeps your instruments honest.',
+    brief: 'Jupiter sweeps this face on a cycle. The ice blades throw long shadows, and the sheltered route is the slow one. Take it anyway.',
     width: 3100, relief: 320, detail: 1.4, rough: 220, fuel: 116,
     terrain: { archetype: 'ridge' },
     pads: [{ mult: 3, width: 125 }, { mult: 2, width: 175 }],
@@ -203,8 +203,8 @@ export const EUROPA_MISSIONS = [
     enemyBudget: 2, fuelCells: 2,
   },
   {
-    id: 'europa-4', planet: 'EUROPA', index: 4, name: 'UNDER-ICE SIGNAL',
-    brief: 'A fractured shelf with something buried under it — and something buried in it that wakes when you pass. The corridor is tight, the ceiling is ice, and neither forgives a fast approach.',
+    id: 'europa-4', planet: 'EUROPA', index: 4, name: 'UNDER THE ICE',
+    brief: 'A cracked shelf with something buried under it, and something buried in it that wakes up when you pass. The corridor is tight and the ceiling is ice. Neither forgives a fast approach.',
     width: 3200, relief: 260, detail: 1.6, rough: 200, fuel: 126,
     terrain: { archetype: 'canyon' }, cave: true, clearance: 290,
     pads: [{ mult: 3, width: 130 }],
@@ -213,8 +213,8 @@ export const EUROPA_MISSIONS = [
     enemyBudget: 2, enemySets: ['seeker-drone'], fuelCells: 2,
   },
   {
-    id: 'europa-5', planet: 'EUROPA', index: 5, name: 'DRIFTING PLATE',
-    brief: 'Separated floes, a fragile plate at the centre of them, and Jupiter overhead. Everything Europa has taught you, on ice that will not hold a mistake.',
+    id: 'europa-5', planet: 'EUROPA', index: 5, name: 'THE FLOES',
+    brief: 'Separated plates of ice, one of them worth landing on, and Jupiter overhead. Everything Europa has taught you, on ground that will not hold a mistake.',
     width: 3300, relief: 300, detail: 1.5, rough: 230, fuel: 124,
     terrain: { archetype: 'caldera' },
     pads: [{ mult: 5, width: 96, fragile: 14 }, { mult: 2, width: 180 }],
@@ -230,11 +230,11 @@ export const EUROPA_MISSIONS = [
 export const EUROPA_LEVELS = EUROPA_MISSIONS.map(missionToLevel);
 
 const SURVEY_NAMES = [
-  ['FIRST SURVEY', 'The first look at a body always costs more than the map suggests.'],
-  ['LOW APPROACH', 'Second landing, tighter ground. The forecast was optimistic.'],
+  ['FIRST LOOK', 'Nobody has landed here. The map always costs less than the ground does.'],
+  ['LOW PASS', 'Second landing, tighter ground. The forecast was optimistic.'],
   ['DEEP FIELD', 'Further in, where the terrain stops being scenery.'],
-  ['HARD SHOULDER', 'A narrow shelf, and reasons not to be here.'],
-  ['LAST LIGHT', 'The mastery landing. Everything this body does, at once.'],
+  ['THE SHELF', 'A narrow ledge, and good reasons not to be standing on it.'],
+  ['LAST LIGHT', 'The one that asks for everything this world does, all at once.'],
 ];
 
 /**

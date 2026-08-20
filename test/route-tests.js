@@ -1,5 +1,5 @@
 // Route eligibility and economy rules:  node test/route-tests.js
-import { eligibleBodies, routeOffers, isCheckpoint, TIERS } from '../src/route.js';
+import { eligibleBodies, routeOffers, isCheckpoint, isExpeditionComplete, MIN_OFFERS, SECTORS, TIERS } from '../src/route.js';
 import { missionReward, addReward, settleHaul, bankHaul, freshHaul, CORE_PITY, DEBRIEF } from '../src/economy.js';
 import { PLANET_IDS } from '../src/planets.js';
 
@@ -23,8 +23,11 @@ check('tier C opens after five',
 {
   const thin = eligibleBodies(['LUNA', 'MARS']);
   check('unexplored bodies come first', thin.slice(0, 3).every((b) => b !== 'MARS'), thin.join());
+  // A cleared body only comes back when the unexplored pool cannot fill the
+  // card slots. With two cards that needs the pool worn right down to one.
+  const worn = eligibleBodies(PLANET_IDS.filter((p) => p !== 'GANYMEDE'));
   check('a cleared body returns only to fill the card slots',
-    thin.includes('MARS') && thin.indexOf('MARS') === thin.length - 1, thin.join());
+    worn[0] === 'GANYMEDE' && worn.length > 1, worn.join());
   const wide = eligibleBodies(['LUNA', 'MARS', 'EUROPA']);
   check('with enough unexplored bodies, cleared ones stay out',
     !wide.includes('MARS') && !wide.includes('EUROPA'), wide.join());
@@ -34,7 +37,7 @@ check('the pool is never empty', eligibleBodies(PLANET_IDS).length > 0);
 // --- offers
 {
   const offers = routeOffers(['LUNA'], 4242, 1);
-  check('four offers are made', offers.length === 4, String(offers.length));
+  check('two offers are made', offers.length === MIN_OFFERS, String(offers.length));
   check('offers never repeat a body', new Set(offers.map((o) => o.planet)).size === offers.length);
   check('offers carry what a decision needs',
     offers.every((o) => o.gravity > 0 && o.rareMaterial && o.recommended.length && o.difficulty >= 1));
@@ -45,17 +48,23 @@ check('the pool is never empty', eligibleBodies(PLANET_IDS).length > 0);
   check('offers are ordered easiest first',
     offers.every((o, i) => i === 0 || offers[i - 1].difficulty <= o.difficulty));
   check('some forecasts are incomplete, as designed',
-    routeOffers(['LUNA'], 7, 1).concat(routeOffers(['LUNA'], 8, 1)).some((o) => o.incomplete));
+    [1, 7, 8, 42, 99, 1234, 5150].flatMap((sd) => routeOffers(['LUNA'], sd, 1)).some((o) => o.incomplete));
+  check('and some are complete, so incompleteness means something',
+    [1, 7, 8, 42, 99, 1234, 5150].flatMap((sd) => routeOffers(['LUNA'], sd, 1)).some((o) => !o.incomplete));
 }
 {
   // near the end of the campaign there are fewer bodies than card slots
   const nearlyDone = PLANET_IDS.filter((p) => p !== 'GANYMEDE');
   const offers = routeOffers(nearlyDone, 1, 5);
-  check('offers never exceed the pool', offers.length >= 1 && offers.length <= 4, String(offers.length));
+  check('offers never exceed the pool', offers.length >= 1 && offers.length <= MIN_OFFERS, String(offers.length));
   check('offers still make a valid card', offers.every((o) => !!o.name));
 }
 
 // --- checkpoints
+check('an expedition runs five sectors', SECTORS === 5);
+check('it is not complete before the fifth is done',
+  !isExpeditionComplete(1) && !isExpeditionComplete(5));
+check('and it is complete once the fifth is behind you', isExpeditionComplete(6));
 check('no checkpoint before two chapters', !isCheckpoint(0) && !isCheckpoint(1));
 check('checkpoint every second chapter', isCheckpoint(2) && !isCheckpoint(3) && isCheckpoint(4));
 
@@ -122,7 +131,12 @@ check('checkpoint every second chapter', isCheckpoint(2) && !isCheckpoint(3) && 
   check('an earned core is still an earned core', earned.cores === 1 && !earned.pityCore);
 }
 
-// --- the route always offers a real choice (section 13: never remove all four)
+// --- the route always offers a real choice.
+//
+// The rule survived the change from four cards to two: whatever has been
+// cleared and whatever sector the run is in, the screen must show a full set of
+// distinct bodies. Two identical-looking options is the failure this catches
+// now, where three-instead-of-four was the failure it caught before.
 {
   const shapes = [[], ['LUNA'], ['LUNA', 'MARS'], ['LUNA', 'MARS', 'EUROPA', 'TITAN', 'ENCELADUS'],
     ['LUNA', 'MARS', 'EUROPA', 'TITAN', 'ENCELADUS', 'MERCURY', 'VENUS', 'IO', 'PLUTO', 'GANYMEDE']];
@@ -132,14 +146,14 @@ check('checkpoint every second chapter', isCheckpoint(2) && !isCheckpoint(3) && 
       for (const seed of [1, 99, 12345, 777777]) {
         const offers = routeOffers(cleared, seed, sector);
         const ids = offers.map((o) => o.planet);
-        if (offers.length < 4 || new Set(ids).size !== ids.length) {
+        if (offers.length < MIN_OFFERS || new Set(ids).size !== ids.length) {
           ok = false;
           console.log(`  ...  cleared ${cleared.length}, sector ${sector}, seed ${seed}: ${ids.join()}`);
         }
       }
     }
   }
-  check('every route screen offers four distinct bodies, at every stage', ok);
+  check('every route screen offers two distinct bodies, at every stage', ok);
 }
 
 console.log(`\n  ${pass} passed, ${fail} failed`);

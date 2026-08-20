@@ -367,6 +367,26 @@ scheduled until the MVP is stable — the spec says the same.
   - **`__goMission('EUROPA', 2)` gave Europa 3** — the hook took a 0-based index while its name and
     the architecture note both say mission number
 
+- [x] **M17 — what things are called** (this commit)
+  - **OUTFIT is LOADOUT** on the menu and on the screen itself
+  - **all fifteen mission names are plainer**: FIRST SCAR became THE CRATER, RILLE RUN became THE
+    TRENCH, BLUE FRACTURE became THE CREVASSE, UNDER-ICE SIGNAL became UNDER THE ICE
+  - **every brief rewritten** in spoken English with no dash-connectors, and the same pass run over
+    the help screen, the results copy, the crash reasons and the briefing tips. `src/missions.js`
+    now contains zero em dashes; what is left elsewhere is the "no value" glyph in a table
+  - **the route screen offers two bodies, not four**, each led by its own icon. Ten icons in
+    `src/planeticons.js`, drawn from what makes a body different to fly: Europa's cracks, Io's
+    calderas, Enceladus venting from the south, Titan's haze standing well off the surface
+  - with only two cards a random pair can read the same, so the second is swapped for the most
+    *different* body still eligible. Two identical options is a choice in name only
+  - **an expedition runs sectors 1 to 5** and finishing the fifth completes it, which is a win
+    condition the run never had. `EXPEDITION COMPLETE` banks everything and offers the next one
+  - **the loadout opens at a checkpoint**, every two bodies, and closes again the moment the next
+    leg is chosen. That is the `g.loadoutWindow` the M16 guard was already checking for
+  - the route tests were rewritten around the two-card rule rather than deleted: the guarantee that
+    every screen offers a full set of *distinct* bodies at every stage still holds, and now catches
+    a duplicate pair where it used to catch three-cards-instead-of-four
+
 ## Decisions (Tom, 2026-08-16)
 
 1. **Gravity** — compressed mapping is the *baseline*, then a per-body hand-tuned offset so each
@@ -418,7 +438,7 @@ otherwise be built on top of it.
 - **no restarting a mission mid-expedition.** Losing a lander replays that mission; losing all three
   ends the run and returns to the start, like any roguelite
 
-### M17 — what things are called
+### M17 — what things are called  ✅ done (this commit)
 
 Cheap, wide, no physics. Doing it before the content work means the content is authored with the
 right names.
