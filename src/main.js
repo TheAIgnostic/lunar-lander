@@ -9,6 +9,8 @@ import { normalizeAngle } from './ship.js';
 import { LANDING } from './landing.js';
 
 import * as Save from './save.js';
+import * as Log from './gamelog.js';
+import { worstVisibility } from './forces.js';
 import { missionReward, addReward, settleHaul, nodeWorth, haulOf } from './economy.js';
 
 import { isCheckpoint } from './route.js';
@@ -195,6 +197,17 @@ function launch() {
   audio.unlock();
   // An attempt is a mission actually flown, not a mission looked at.
   meta.stats.attempts++;
+  const lv = g.level || {};
+  Log.log('mission-start', {
+    mission: lv.id, planet: lv.planet || g.campaign, seed: g.seed,
+    sector: g.run ? g.run.sector : 0, shuttles: g.lives,
+    fuel: ship.fuel, hull: ship.hull, gravity: lv.gravity,
+    // The worst visibility this mission reaches, not the ship's current one:
+    // no force has run at launch, so ship.env still reads the default 1.
+    visWorst: worstVisibility(lv),
+    machines: g.field && !g.field.empty ? g.field.summary().alive : 0,
+    active: (meta.equipped && meta.equipped.active) || '', passive: (meta.equipped && meta.equipped.passive) || '',
+  });
   const active = meta.equipped && meta.equipped.active;
   if (active) meta.stats.moduleFlights[active] = (meta.stats.moduleFlights[active] || 0) + 1;
   const passive = meta.equipped && meta.equipped.passive;
@@ -269,6 +282,7 @@ function combatEffect(e) {
         particles.text(ship.x, ship.y - 44, `-${Math.round(e.damage)} HULL`, '#ff3b5c', 16);
         g.cam.trauma = Math.min(1, g.cam.trauma + 0.35);
         meta.stats.hitsTaken++;
+        Log.log('hit', { damage: Math.round(e.damage), hull: ship.hull, alt: Math.round(g.terrain ? g.terrain.heightAt(ship.x) - ship.y : 0) });
       }
       break;
     case 'ram':
@@ -277,6 +291,7 @@ function combatEffect(e) {
       particles.sparks(e.x, e.y, 20, 0);
       g.cam.trauma = Math.min(1, g.cam.trauma + 0.5);
       meta.stats.hitsTaken++;
+      Log.log('rammed', { hull: ship.hull });
       break;
     case 'spark':
       particles.sparks(e.x, e.y, 4, 0);
@@ -291,6 +306,7 @@ function combatEffect(e) {
       particles.text(e.x, e.y - 24, `+${bonus} SALVAGE`, '#ffb347', 17);
       g.combatSalvage = (g.combatSalvage || 0) + bonus;
       meta.stats.threatsDestroyed++;
+      Log.log('kill', { salvage: bonus });
       break;
     }
     case 'shield-down':
@@ -512,6 +528,15 @@ function onLand() {
   }
   meta.stats.landings++;
   if (q === 'PERFECT') meta.stats.perfect++;
+  {
+    const r = ship.landingResult || {};
+    Log.log('landed', {
+      mission: g.level && g.level.id, grade: q,
+      vy: r.vy, vx: r.vx, tilt: r.tiltDeg != null ? r.tiltDeg : r.tilt,
+      onPad: !!r.onPad, mult: r.mult, fuel: ship.fuel, hull: ship.hull,
+      carried: g.carried ? g.carried.length : 0,
+    });
+  }
   // The weapon arrives once you have survived a mission that shot at you, not
   // a whole chapter later. M15 armed twelve of fifteen missions, so the old
   // timing meant meeting drones on Europa 2 with nothing to answer them and no
@@ -609,6 +634,10 @@ function onCrash() {
   audio.explosion();
   g.lives--;
   meta.stats.crashes++;
+  Log.log('crash', {
+    mission: g.level && g.level.id, reason: (ship.landingResult && ship.landingResult.blocker) || g.crashReason || 'impact',
+    vy: ship.vy, vx: ship.vx, hull: ship.hull, fuel: ship.fuel, shuttles: g.lives,
+  });
   recordFlight(null);
   if (g.run) persistRun(); else Save.saveMeta(meta);
   g.freeze = 0.12;
@@ -625,8 +654,17 @@ function onCrash() {
       // the same settlement a second time.
       Save.saveRun(g.run);
       Save.saveMeta(meta);
+      // M24: the run is the roguelike unit. Banking above still records the
+      // score and the bests - those are the logbook, not progress - and then
+      // the death takes the skills, the resources and the opened map. What the
+      // hangar built survives, which is the whole of the trade.
+      g.lastRunSummary.wiped = true;
+      Log.log('run-lost', { sector: g.run.sector, missions: g.run.missionsCleared, chapters: g.run.chaptersCleared });
+      setMeta(Save.wipeForDeath(meta));
+      Save.saveMeta(meta);
       Save.clearRun();
       g.run = null;
+      g.loadoutWindow = false;
       setState('expedition-over');
       return;
     }
@@ -921,6 +959,11 @@ window.__goMission = (chapterId, mission = 1) => {
 
 /** Dev: the live enemy field, and a way to fire the module from a test. */
 window.__field = () => g.field;
+// The playtest log as text, for pasting straight out of the console. The same
+// trace the settings screen copies and exports.
+window.__log = () => Log.asText(meta);
+window.__logJSON = () => Log.asJSON(meta);
+window.__logClear = () => Log.clearLog();
 window.__setState = (name) => { setState(name); return g.state; };   // drive any screen in a test
 window.__audio = audio;   // so a test can count what actually gets played
 window.__useAbility = () => (g.abilities ? g.abilities.trigger(ship) : false);

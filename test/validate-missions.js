@@ -162,13 +162,32 @@ for (const pid of PLANET_IDS) {
 
 // ---------------------------------------------------------------- combat
 //
-// The acceptance criterion for M12 is that a weapon is never required. So this
-// sweep flies every armed mission with the machines live, the same autopilot,
-// and nothing equipped: no laser, no shield, no evasive logic at all. If that
-// pilot still lands, a human with any of those has a path.
+// M12's acceptance criterion was that a weapon is never required, and it was
+// enforced here as "an unarmed autopilot survives the safe route on every
+// seed". **M24 retired that**, deliberately and on Tom's call: the guns hit for
+// half a hull, lock in a quarter second and shoot three times faster, and the
+// promise is now narrower and stated exactly:
+//
+//     the sanctuary PAD is unreachable. The crossing to it is not.
+//
+// So the hard gate is the geometry - `sanctuaryClear`, the lowest-multiplier
+// pad and the 420 px column above it, outside every machine's engagement disc.
+// That still holds 20/20 everywhere and still fails the run if it breaks.
+//
+// Surviving the crossing is now a *measurement*, not a proof. It is still flown
+// and still printed, because a number that nobody watches rots - but it is
+// evidence about difficulty, and the instrument producing it (an autopilot with
+// no weapon, no shield and no evasive logic whatsoever) measures the floor, not
+// what a person meets. Read a fall here as "this got harder", never as "this
+// broke"; the thing that would be broken is the sanctuary line above it.
 console.log(`\nvalidating combat: every armed mission, flown with no weapon\n`);
 const ARMED = [...MOON_LEVELS, ...MARS_LEVELS, ...EUROPA_LEVELS].filter((l) => l.enemyBudget > 0);
 let combatFail = 0;
+// Campaign-wide: how often the crossing to the safe pad kills an unarmed,
+// non-evading autopilot. M24 accepts this as difficulty rather than failure,
+// so it is tracked as a headline number instead of a gate.
+let crossingLost = 0;
+let crossingFlown = 0;
 for (const level of ARMED) {
   const rows = [];
   for (const seed of seedList) {
@@ -201,10 +220,13 @@ for (const level of ARMED) {
   const prizeLanded = rows.filter((r) => r.prize.outcome === 'land').length;
   const hits = rows.reduce((a, r) => a + (r.armed.combat ? r.armed.combat.hitsTaken : 0), 0) / rows.length;
 
-  // Structure and survivability are proofs; a landing the pilot fumbled under
-  // fire is evidence, and is reported as such.
-  const ok = structural === 0 && exposed === 0 && shotDown === 0;
-  if (!ok) { hardFail++; combatFail++; }
+  // The geometry is the proof. Everything else on this line is evidence.
+  const ok = structural === 0 && exposed === 0;
+  // A combat failure is not a structural one, and reporting it as one sent M24
+  // looking for terrain damage that did not exist. Counted as what it is.
+  if (!ok) { combatFail++; }
+  crossingLost += shotDown;
+  crossingFlown += rows.length;
   const n = rows.length;
   console.log(`${ok ? (costLanding ? 'ok* ' : 'ok  ') : 'FAIL'} ${(level.id + ' ' + level.title).padEnd(22)}` +
     ` placed ${placed.toFixed(1)}/${level.enemyBudget}   sanctuary ${String(n - exposed).padStart(3)}/${n}` +
@@ -214,7 +236,7 @@ for (const level of ARMED) {
   for (const r of rows) {
     if (r.ev.problems.length) console.log(`       seed ${r.seed}: ${r.ev.problems.join('; ')}`);
     if (!r.exposure.ok) console.log(`       seed ${r.seed}: sanctuary pad exposed in ${r.exposure.exposed} samples`);
-    if (r.armed.lostToFire) console.log(`       seed ${r.seed}: LOST TO ENEMY FIRE ON THE SAFE ROUTE - no non-combat path`);
+    if (r.armed.lostToFire) console.log(`       seed ${r.seed}: lost to fire on the crossing (the pad itself stayed clear)`);
   }
   if (costLanding) {
     warnings.push(`${level.id}: ${costLanding}/${n} seeds the pilot landed unarmed and quiet but missed under fire`);
@@ -231,7 +253,11 @@ if (warnings.length) {
   console.log('\nflight warnings (geometry is sound; the test pilot fell short):');
   for (const w of warnings) console.log(`  - ${w}`);
 }
+const crossPct = crossingFlown ? Math.round(100 * (crossingFlown - crossingLost) / crossingFlown) : 100;
+console.log(`\nthe crossing to the safe pad, flown unarmed with no evasive logic: ` +
+  `${crossingFlown - crossingLost}/${crossingFlown} survived (${crossPct}%). ` +
+  `M24 accepts this as difficulty - the guarantee is the pad, not the route to it.`);
 console.log(`\n${hardFail === 0 ? 'all mission families structurally valid' : `${hardFail} mission families STRUCTURALLY INVALID`}` +
-  `${combatFail === 0 ? `, ${ARMED.length} armed missions flyable with no weapon` : `, ${combatFail} armed missions WITHOUT a non-combat path`}` +
+  `${combatFail === 0 ? `, every armed mission keeps its sanctuary` : `, ${combatFail} armed missions WITH AN EXPOSED SANCTUARY`}` +
   `${warnings.length ? `, ${warnings.length} with flight warnings` : ''}\n`);
-process.exit(hardFail ? 1 : 0);
+process.exit(hardFail || combatFail ? 1 : 0);

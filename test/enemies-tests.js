@@ -22,13 +22,40 @@ const SEEDS = [1000, 1137, 1274, 1411, 1548, 1685];
 // --- the roster is complete enough to be fair
 for (const id of ENEMY_IDS) {
   const t = ENEMY_TYPES[id];
-  check(`${id}: telegraphs before it fires`, t.telegraph >= 0.8, String(t.telegraph));
+  check(`${id}: telegraphs before it fires`, t.telegraph > 0, String(t.telegraph));
   check(`${id}: recovers between shots`, t.cooldown >= t.telegraph);
   check(`${id}: has a range`, t.range > 100);
   check(`${id}: can be destroyed`, t.hp > 0);
   check(`${id}: pays out`, t.reward > 0);
   check(`${id}: states its counterplay`, typeof t.counterplay === 'string' && t.counterplay.length > 12);
-  check(`${id}: its shot is slower than it is telegraphed`, t.shot.speed < 400);
+  // M24 replaced two assertions here, and it is worth saying why rather than
+  // just changing the numbers. They used to be `telegraph >= 0.8` and
+  // `shot.speed < 400`, which encoded the M12 design: a slow, readable gun you
+  // could out-turn. Tom asked for the opposite - an 80% shorter turret lock and
+  // shots three times faster - so the old constants are not a contract any
+  // more, they are the previous decision.
+  //
+  // What survives the change is the *property* those numbers were protecting:
+  // there is a moment between being locked and being hit, and it is long enough
+  // to move. So the rule is now stated as the thing it always meant - the
+  // reaction window, measured at the machine's own range - instead of as two
+  // constants that happened to produce one.
+  const reaction = t.telegraph + t.range / t.shot.speed;
+  check(`${id}: leaves a second between the lock and the hit`, reaction >= 1.0, `${reaction.toFixed(2)}s`);
+}
+
+// --- M24: what a hit costs. Tom's rule is "two shots, with no upgrades".
+{
+  const BASE_HULL = 100;   // ship.js: hullMax = 100 * (level.hullMax || 1)
+  for (const id of ENEMY_IDS) {
+    const t = ENEMY_TYPES[id];
+    const shots = Math.ceil(BASE_HULL / t.shot.damage);
+    check(`${id}: kills an unupgraded lander in two shots`, shots === 2, `${shots} shots`);
+  }
+  // ...and the hull track has to be worth buying, so an upgraded hull survives
+  // a third. This is the consumer that stops "2 shots" becoming "always 2".
+  const upgraded = Math.ceil(150 / ENEMY_TYPES['sentry-turret'].shot.damage);
+  check('a hull upgrade buys a third shot', upgraded >= 3, `${upgraded} shots`);
 }
 
 // --- placement is deterministic, and obeys every fairness rule

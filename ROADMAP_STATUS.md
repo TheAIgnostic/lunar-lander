@@ -552,6 +552,40 @@ scheduled until the MVP is stable — the spec says the same.
     banked, hangar/skills/equip, settings to the DOM, pause and rebind, combat drawn — zero
     console errors
 
+- [x] **M24 — a harder game, and one game** (this commit)
+  - Tom's own list, eleven items, given in place of the four candidates that were queued
+  - **two hits end you**: turret and drone shots both 50 damage on a 100 hull, ram 50, and three
+    hits with a hull upgrade — the second number is what keeps the Hull track worth buying, and it
+    is asserted
+  - the turret's lock is **0.25 s** (was 1.25) and shots fly at **600/765 px/s** (was 200/255)
+  - **this broke the M12 guarantee, and the break was measured before it was decided**: unarmed
+    crossings of the safe route went 240/240 to **167/240**, and the deep route ~117/240 to 17/240.
+    The *sanctuary* never moved — 20/20 everywhere, placement untouched, only lethality changed.
+    What broke is the crossing, which the rule never covered
+  - **Tom chose to accept it.** The promise is narrower and now stated exactly: *the sanctuary pad is
+    unreachable, the crossing to it is not*. The validator was rewritten around that — geometry stays
+    a hard gate, surviving the crossing became a printed campaign-wide measurement rather than being
+    deleted. Read the 70% knowing the instrument has **no evasive logic at all**: it is the floor
+  - **visibility is `v³`, not `1-(1-v)×3`.** The linear form saturates everything under 0.67 and
+    flattened four of five Mars missions to one number — BURIED ARRAY and STORM EYE are authored two
+    stops apart and measured identical. Exponentiating keeps the ordering and is the physically right
+    answer: three times the dust in the air *is* v³. Airless bodies stay at exactly 1.0
+  - **one game mode.** Classic and endless are gone from the menu; `levels.js` stays as the M0
+    physics baseline that both fixtures regress against, reachable by no player
+  - **no route choice**, mission select earned by finishing all five sectors, and losing the last
+    shuttle takes skills, resources and the opened map while keeping the hangar, blueprints and
+    equipped modules — which is what makes a permanent upgrade cost the next sector's loadout
+  - **the hangar is readable always and takes salvage only at a checkpoint**, the same moment the
+    loadout opens. NEW GAME in settings, arming on the first press
+  - **`src/gamelog.js`**: an ordered playtest trace of one sitting — copy to clipboard, export .txt
+    or .json, plus `__log()` / `__logJSON()`. Never read back by the game, so it cannot move a flight
+  - **both fixtures byte-identical**, full suite green. Note that no automated test in this project
+    can measure the visibility change at all — the autopilot flies on state, not on what is drawn
+  - three faults found: the validator reported combat failures as *structural* ones; a phantom
+    `obscure()` import in `main.js` that the bundle built clean through and the browser caught (the
+    M23 lesson, holding); and three enemy assertions that encoded the old constants rather than the
+    property behind them
+
 ## Decisions (Tom, 2026-08-16)
 
 1. **Gravity** — compressed mapping is the *baseline*, then a per-body hand-tuned offset so each
@@ -569,8 +603,16 @@ None.
 
 ## Next task
 
-**Tom's playtest list is done** (M20–M22), **and so is the cleanup** (M23). Nothing is currently
-scheduled. The natural next milestones, in the spec's own production order (section 16, Phase 7):
+**M24 is done**, and it is the first milestone whose headline number is deliberately *worse* than the
+one before it. The game is harder, there is one mode, and a run is a run. What it needs next is not
+another number — it is **a human flying it**, because the two things M24 changed most (how lethal the
+crossing is, and how blind the weather is) are the two things this project's instrument cannot
+measure. The autopilot does not dodge, and it does not look at the screen.
+
+**The first question for the next session is Tom's, not the code's:** at 70% unarmed crossings and
+Mars at 0.05 visibility, is it hard or is it unfair? Everything below waits on that answer.
+
+The natural next milestones, in the spec's own production order (section 16, Phase 7):
 
 - **Titan and Enceladus chapters** — five authored missions each, replacing their generated survey
   chapters; atmosphere and plume contrast. `src/missions.js` is where authored content goes.

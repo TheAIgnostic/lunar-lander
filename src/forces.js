@@ -1,3 +1,5 @@
+import { clamp } from './util.js';
+
 // Environmental forces and status effects (roadmap section 14: "hazards should
 // apply explicit forces/status effects through a shared interface").
 //
@@ -45,6 +47,61 @@ export function freshStatus() {
   const s = {};
   for (const k of STATUS_CHANNELS) s[k] = 0;
   return s;
+}
+
+/**
+ * How hard the weather is to see through. M24: Tom asked for visibility "300%
+ * more challenging", and challenge is the *obscured* fraction, not the visible
+ * one - tripling obscuration takes Mars' 22% storm floor to near-blind while
+ * leaving Luna's vacuum exactly as clear as it was. Dividing visibility instead
+ * would have fogged an airless body, which is not weather, it is a bug.
+ *
+ * The floor exists because fully blind is not difficulty, it is a coin toss:
+ * the pad beacons and the ore crates still draw above the haze (M18/M22), so a
+ * player always has a target even when the ground is gone.
+ */
+export const VISIBILITY = {
+  challenge: 3,
+  floor: 0.05,
+};
+
+/**
+ * Apply the challenge multiplier to a raw visibility in 0..1.
+ *
+ * `v ** challenge`, not `1 - (1 - v) * challenge`. The first version tripled the
+ * *obscured* fraction linearly, which saturates: anything already below 0.67
+ * clamps to the floor, and four of the five Mars missions came out at exactly
+ * the same near-blind number. THE STORM EYE and BURIED ARRAY were authored two
+ * stops apart and measured identical, which throws away the content.
+ *
+ * Exponentiating is both better behaved and the physically right answer -
+ * transmission through a medium falls exponentially with its depth, so three
+ * times the dust in the air *is* v³. It is monotonic, so the ordering the
+ * missions were authored in survives; it leaves a vacuum at exactly 1.0; and it
+ * needs the floor only for the two deepest storms instead of for most of Mars.
+ */
+export function obscure(v) {
+  return clamp(Math.pow(clamp(v, 0, 1), VISIBILITY.challenge), VISIBILITY.floor, 1);
+}
+
+/**
+ * The worst visibility a mission ever reaches, after the challenge multiplier.
+ *
+ * Worth knowing: `dust` *overwrites* visibility rather than combining with the
+ * planet's, so on a body with weather the planet's own figure never applies -
+ * the storm floor is the only number that matters, and between fronts the air
+ * goes fully clear. That is longstanding behaviour and is left alone here; this
+ * helper exists so the playtest log records what a mission actually flies at
+ * its worst rather than a base value that a storm overrides.
+ */
+export function worstVisibility(level) {
+  let worst = obscure(level.visibility != null ? level.visibility : 1);
+  for (const h of level.hazards || []) {
+    const spec = typeof h === 'string' ? { type: h } : h;
+    if (spec.type !== 'dust') continue;
+    worst = Math.min(worst, obscure(spec.minVisibility != null ? spec.minVisibility : 0.35));
+  }
+  return worst;
 }
 
 /** Environment readings a force can write and the renderer/HUD can read. */
@@ -153,7 +210,7 @@ function dust(cfg) {
       const phase = ((t / period) + offset) % 1;
       // smooth in and out so the player can read the front coming
       const inStorm = phase < duty ? Math.sin((phase / duty) * Math.PI) : 0;
-      ship.env.visibility = 1 - (1 - floor) * inStorm;
+      ship.env.visibility = obscure(1 - (1 - floor) * inStorm);
       ship.env.dust = inStorm;
     },
   };
@@ -273,7 +330,7 @@ export function applyForces(ship, level, t, dt, terrain) {
   const list = forcesFor(level);
   if (!ship.env) ship.env = freshEnv();
   if (!ship.statusLevels) ship.statusLevels = freshStatus();
-  ship.env.visibility = level.visibility != null ? level.visibility : 1;
+  ship.env.visibility = obscure(level.visibility != null ? level.visibility : 1);
   ship.env.dust = 0;
   if (!list.length) { ship.windNow = 0; return; }
   for (const f of list) f.apply(ship, level, t, dt, terrain);

@@ -36,6 +36,7 @@ Everything under `src/` is a plain ES module, loaded directly in the browser and
 | `src/drawkit.js` | the shared drawing vocabulary: palette, type, `throb`, tint helpers, HUD panels | M23 |
 | `src/enemydraw.js` | machines, telegraphs, wrecks, shots, the laser and the shield | M23 |
 | `src/hud.js` | the instruments: HUD, pointers, panels, gauges | M23 |
+| `src/gamelog.js` | the playtest trace: one sitting's events, as text or JSON | M24 |
 | `src/debug.js` | F3 telemetry overlay, F4 landing-envelope bars, F5 enemy ranges | M0/M12 |
 | `src/particles.js` | pooled particles, debris, rings, floating text | — |
 | `src/audio.js` | synthesized engines, impacts, chimes | — |
@@ -112,13 +113,56 @@ A consequence worth knowing before raising a budget: **a map holds a finite numb
 non-overlapping engagements**, and past that the budget is fiction rather than difficulty. The
 budgets in `missions.js` were set from a measured capacity sweep and fill to 99%.
 
-**The rule that holds combat fair:** every mission keeps a *sanctuary* — its lowest-multiplier pad
-and the 420 px column above it — outside every machine's engagement range. `placeEnemies` and
-`validateEnemies` measure against the same points (`sanctuaryGates`), so the rule cannot drift
-between what is generated and what is checked. That is what makes "a weapon is never required" a
-statement about geometry rather than about skill. Note what it does *not* cover: the crossing. On a
-mission with a single pad the sanctuary is also the prize, so the route in is watched even though
-the pad is not — `europa-2` and `europa-4` are fired on across every seed, and survive every time.
+**The rule that holds combat fair, and what M24 narrowed it to.** Every mission keeps a
+*sanctuary* — its lowest-multiplier pad and the 420 px column above it — outside every machine's
+engagement range. `placeEnemies` and `validateEnemies` measure against the same points
+(`sanctuaryGates`), so the rule cannot drift between what is generated and what is checked. That is
+still a hard gate, still 20/20 on every mission, and still the thing that makes a promise here a
+statement about geometry rather than about skill.
+
+What it promises is now **narrower, and exactly this**:
+
+> The sanctuary **pad** is unreachable. The **crossing** to it is not.
+
+Until M24 the validator also required that an unarmed autopilot *survive* that crossing on every
+seed, and it did — machines cost hull, never the lander. M24 made a hit worth half a hull, cut the
+turret's lock to a quarter second and tripled shot speed, and 73 of 240 unarmed crossings now end in
+a loss. That was Tom's call, taken with the number in front of him. So surviving the crossing is a
+**measurement** in `validate-missions.js`, not a proof: it is flown, printed and watched, but a fall
+there reads as "this got harder", never as "this broke". The thing that would be broken is the
+sanctuary line above it.
+
+Read the number knowing what produced it: an autopilot with no weapon, no shield and **no evasive
+logic at all**. It measures the floor, not what a person meets.
+
+**What a run is, since M24.** There is one game mode: the expedition. The classic campaign and the
+endless run are gone from the menu — but *not* from the repo, and that distinction is load-bearing:
+`levels.js` and its twelve missions are the M0 physics baseline, and both fixtures regress against
+them. Deleting the content would delete the only proof the flight model has not drifted, so they
+stay as an engine fixture that no player can reach. `act()` keeps the `campaign` and `endless` cases
+as audible refusals rather than dropping them, so a stale key binding says why (the M16 rule).
+
+The run is the roguelike unit. There is no route choice — `routeOffers` still does the eligibility
+work and the tiering, and the first offer is simply taken, so the card is a briefing. Losing the last
+shuttle calls `Save.wipeForDeath`, and what that keeps is the whole of the design:
+
+| lost on death | kept on death |
+| --- | --- |
+| skills, every banked resource, the opened map | hangar component levels, blueprints, equipped modules |
+
+...which is what makes the hangar a *decision*. Salvage spent on a permanent upgrade is the only
+thing that survives a run, and it is spent at the sector checkpoint — the same moment, and the only
+moment, that the loadout opens. So a permanent upgrade is always bought at the price of the loadout
+you would otherwise carry into the next sector. The hangar is readable at any time; what it will not
+do outside that window is take your salvage. Mission select exists but is earned: `meta.gameCompleted`
+is set only by carrying an expedition through all five sectors.
+
+**The playtest log is not the logbook.** `meta.stats` is the player's career record: aggregated,
+lossy, permanent. `gamelog.js` is the opposite — an ordered event trace of one sitting, in memory
+only, built to be pasted into a conversation or exported. It records what was *measured* (the actual
+grade, fuel, hull, seed) rather than what was intended, because "that felt wrong" is only debuggable
+against numbers. Nothing in the game reads it back, so a log that is broken or full cannot change a
+flight — the same rule the accessibility settings live under.
 
 **The rule that holds the upgrade system together:** components, skills and the equipped passive are
 *derived* into a per-run ship spec at mission start (`deriveFull` then `ship.applyLoadout`). The
@@ -179,6 +223,7 @@ game or the pilot changes. Improving the pilot should move the second and leave 
 | `__useAbility()` | fire the equipped active module |
 | `__runChapter('MARS')` | fly a whole chapter headlessly (after `await __autopilotReady`) |
 | `__settleNow()` | resolve a pending landing or crash immediately |
+| `__log()` / `__logJSON()` / `__logClear()` | the playtest trace, for pasting straight out of the console |
 
 ## Environment notes that cost real time
 

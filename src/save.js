@@ -23,6 +23,9 @@ export function defaultMeta() {
     version: SAVE_VERSION,
     clearedChapters: [],
     discoveredPlanets: ['LUNA'],
+    // M24: mission select is earned, not given. Set the first time an
+    // expedition is carried through all five sectors.
+    gameCompleted: false,
     banked: { salvage: 0, data: 0, cores: 0, materials: {} },
     componentLevels: { hull: 1, gear: 1, engine: 1, rcs: 1, power: 1, sensors: 1, utility: 1 },
     purchasedSkills: {},
@@ -235,4 +238,40 @@ export function bankRun(meta, run, { completed, settled, id = 'final' }) {
   const prev = m.chapterBests[run.chapterId] || 0;
   if ((run.score || 0) > prev) m.chapterBests[run.chapterId] = run.score || 0;
   return m;
+}
+
+/**
+ * What a death costs, and what it does not (M24).
+ *
+ * The run is the roguelike unit now: losing the last shuttle sends you back to
+ * the beginning of the route, not back to a menu with your progress intact. So
+ * skills and every banked resource go, and the map you had opened up closes.
+ *
+ * What survives is what you *built*: hangar component levels, recovered
+ * blueprints and the equipped modules. That is the trade the design is making -
+ * spending a run's salvage on a permanent hangar upgrade is the only way to
+ * keep anything, and it costs you the loadout you would otherwise have carried
+ * into the next sector. Stats and settings are the player's record and their
+ * accessibility choices; neither is progress, so neither is taken.
+ */
+export function wipeForDeath(meta) {
+  const m = coerceMeta(meta);
+  m.purchasedSkills = {};
+  m.banked = { salvage: 0, data: 0, cores: 0, materials: {} };
+  m.clearedChapters = [];
+  m.discoveredPlanets = ['LUNA'];
+  return m;
+}
+
+/**
+ * NEW GAME: everything goes except the settings, which are how the player uses
+ * the machine rather than what they have earned. Wipes the run too, so there is
+ * no expedition left pointing at a save that no longer exists.
+ */
+export function resetAll(meta, store = safeStore) {
+  const fresh = defaultMeta();
+  fresh.settings = { ...fresh.settings, ...((meta && meta.settings) || {}) };
+  saveMeta(fresh, store);
+  clearRun(store);
+  return fresh;
 }

@@ -8,15 +8,16 @@
 // dispatch stays a leaf: main knows about actions, actions never knows about
 // main.
 
+import * as Log from './gamelog.js';
 import * as Save from './save.js';
 import { purchase } from './components.js';
 import { settleHaul } from './economy.js';
-import { LEVELS } from './levels.js';
 import { chapterFor } from './missions.js';
 import { isExpeditionComplete, routeOffers } from './route.js';
 import { flightAssist } from './screens.js';
+import { STARTER_PASSIVES } from './modules.js';
 import { buySkill } from './skills.js';
-import { audio, g, input, meta, saveSettings, setMeta, settings, ship, store } from './state.js';
+import { audio, g, input, meta, saveSettings, setMeta, settings, ship } from './state.js';
 
 // The loop's verbs, injected by main.js at startup.
 let flow = null;
@@ -59,6 +60,63 @@ export function act(action) {
     act('retry');
     return;
   }
+  // --- the playtest log (M24) ------------------------------------------
+  // Two ways out, because "copy into chat" and "export" are different jobs:
+  // the clipboard for a paste, a file for keeping. Neither reads back into the
+  // game, so a browser that refuses the clipboard costs a paste and nothing else.
+  if (action === 'log-copy') {
+    const text = Log.asText(meta);
+    const done = () => flow.toast(`Playtest log copied — ${Log.count()} events.`);
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, () => flow.toast('The browser refused the clipboard. Use EXPORT instead.'));
+      } else flow.toast('No clipboard here. Use EXPORT instead.');
+    } catch { flow.toast('No clipboard here. Use EXPORT instead.'); }
+    return;
+  }
+  if (action === 'log-export' || action === 'log-export-json') {
+    const json = action.endsWith('json');
+    const body = json ? Log.asJSON(meta) : Log.asText(meta);
+    try {
+      const blob = new Blob([body], { type: json ? 'application/json' : 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `tv-playtest-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.${json ? 'json' : 'txt'}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      flow.toast(`Exported ${Log.count()} events.`);
+    } catch { flow.toast('The browser refused the download.'); }
+    return;
+  }
+  if (action === 'log-clear') { Log.clearLog(); flow.toast('Playtest log cleared.'); flow.renderOverlay(); return; }
+
+  // --- NEW GAME --------------------------------------------------------
+  // Erasing everything is one press away from a settings screen, so it arms
+  // first and fires second. A refusal that is silent reads as a broken button
+  // (M16), and so does a wipe that happens without warning.
+  if (action === 'newgame') {
+    if (!g.confirmWipe) {
+      g.confirmWipe = true;
+      flow.toast('This erases every upgrade, skill and record. Press again to confirm.');
+      flow.renderOverlay();
+      return;
+    }
+    g.confirmWipe = false;
+    setMeta(Save.resetAll(meta));
+    meta.equipped = { active: null, passive: STARTER_PASSIVES[0] };
+    meta.unlockedBlueprints = [...STARTER_PASSIVES];
+    Save.saveMeta(meta);
+    Log.clearLog();
+    Log.log('new-game');
+    g.run = null; g.chapter = null; g.level = null; g.loadoutWindow = false;
+    g.score = 0; g.lives = 3; g.combo = 0; g.newRecord = false;
+    flow.toast('New game. Everything is back to the beginning.');
+    flow.setState('menu');
+    return;
+  }
   if (action === 'keys') { g.rebinding = null; g.rebindNote = null; flow.setState('keys'); return; }
   if (action === 'keys-reset') {
     settings.keys = null;
@@ -77,6 +135,19 @@ export function act(action) {
   }
   if (action.startsWith('pick:')) { g.hangarPick = action.slice(5); flow.renderOverlay(); return; }
   if (action.startsWith('buy:')) {
+    // M24: the hangar is a *window*, not a shop. You may always walk in and
+    // look at what the tracks cost, but salvage is only ever spent at a sector
+    // checkpoint - which is the same moment the loadout opens. That is the
+    // trade the run economy is built on: a permanent upgrade now, or the
+    // modules and skills to survive the next sector.
+    if (g.run && !g.loadoutWindow) {
+      flow.toast('The hangar only takes work at a sector checkpoint.');
+      return;
+    }
+    if (!g.run) {
+      flow.toast('Upgrades are fitted during an expedition, at a checkpoint.');
+      return;
+    }
     const id = action.slice(4);
     const result = purchase(id, meta.componentLevels, meta.banked);
     if (result) {
@@ -108,6 +179,9 @@ export function act(action) {
       if (isExpeditionComplete(run.sector)) {
         g.lastRunSummary = { missions: run.missionsCleared, chapter: run.chapterId, settled, complete: true };
         run.score = g.score;
+        // M24: carrying an expedition through all five sectors is what opens
+        // mission select. It is the only thing that does.
+        if (!meta.gameCompleted) { meta.gameCompleted = true; Save.saveMeta(meta); }
         Save.clearRun();
         g.run = null;
         g.loadoutWindow = false;
@@ -161,35 +235,32 @@ export function act(action) {
   }
   switch (action) {
     case 'chapters': flow.setState('chapters'); break;
+    // M24: the classic campaign and the endless run are gone as game modes.
+    // The twelve legacy missions stay in `levels.js` because they are the M0
+    // physics baseline and both fixtures regress against them - deleting them
+    // would delete the only proof the flight model has not drifted. They are
+    // simply no longer somewhere a player can go. The refusals are kept rather
+    // than the cases deleted, so a stale key binding says why (M16).
     case 'campaign':
-      // Switching modes used to leave the expedition running underneath: the
-      // campaign started, `g.run` and `g.chapter` stayed set, and the "classic"
-      // mission you were flying was still mars-1. An expedition is left
-      // deliberately, through RESUME or ABANDON, or not at all.
-      if (g.run) { flow.toast('Finish or abandon the expedition first.'); break; }
-      g.campaign = 'classic';
-      g.chapter = null;
-      g.endless = false;
-      g.score = 0; g.lives = 3; g.combo = 0; g.newRecord = false;
-      flow.startLevel(Math.min(store.unlocked - 1, LEVELS.length - 1));
-      break;
     case 'endless':
-      if (g.run) { flow.toast('Finish or abandon the expedition first.'); break; }
-      g.campaign = 'classic';
-      g.chapter = null;
-      g.endless = true;
-      g.score = 0; g.lives = 3; g.combo = 0; g.newRecord = false;
-      flow.startLevel(LEVELS.length);
+      flow.toast('There is one game now: the expedition.');
       break;
     case 'select':
       if (g.run) { flow.toast('Finish or abandon the expedition first.'); break; }
+      // Mission select is earned by carrying an expedition through all five
+      // sectors. Before that it would be a way around the run.
+      if (!meta.gameCompleted) {
+        flow.toast('Mission select opens when an expedition is carried to the end.');
+        break;
+      }
       flow.setState('select');
       break;
     // Permanent upgrades belong between expeditions. Refitting mid-run turns a
     // lost lander into a shopping trip, which is the opposite of a roguelite.
     // The one exception is the sector checkpoint, which opens the loadout.
+    // The hangar is readable at any time - what it will not do outside a
+    // checkpoint is take your salvage. See the `buy:` handler.
     case 'hangar':
-      if (g.run) { flow.toast('The hangar is closed while an expedition is under way.'); break; }
       flow.setState('hangar');
       break;
     case 'outfit':
@@ -197,6 +268,7 @@ export function act(action) {
       flow.setState('outfit');
       break;
     case 'settings':
+      g.confirmWipe = false;
       if (g.state !== 'keys') g.settingsFrom = g.state;
       g.rebinding = null;
       flow.setState('settings');
@@ -213,8 +285,9 @@ export function act(action) {
     case 'launch': flow.launch(); break;
     case 'next':
       if (g.state === 'victory') {
-        if (g.chapter) { g.campaign = 'classic'; g.chapter = null; g.level = null; flow.setState('menu'); break; }
-        g.endless = true; flow.startLevel(LEVELS.length);
+        g.campaign = 'classic'; g.chapter = null; g.level = null;
+        flow.setState('menu');
+        break;
       }
       else flow.startLevel(g.levelIndex + 1);
       break;
@@ -237,7 +310,7 @@ export function act(action) {
       break;
     case 'restart':
       g.score = 0; g.lives = 3; g.combo = 0; g.newRecord = false;
-      flow.startLevel(g.endless ? LEVELS.length : 0);
+      flow.startLevel(0);
       break;
     case 'resume': flow.setState('play'); break;
   }

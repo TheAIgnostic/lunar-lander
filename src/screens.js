@@ -5,6 +5,7 @@
 // `data-action` attribute `btn()` stamps on it - so this file changes when a
 // screen changes, and the game flow does not.
 
+import * as Log from './gamelog.js';
 import * as R from './render.js';
 import * as Save from './save.js';
 import { COMPONENTS, COMPONENT_IDS, purchaseCheck } from './components.js';
@@ -58,12 +59,10 @@ export function screenHTML(s) {
         <div class="btns">
           ${chapterName ? btn('resume-run', 'RESUME EXPEDITION', true, 'SPACE') : ''}
           ${btn('chapters', 'EXPEDITION', !chapterName, chapterName ? '' : 'SPACE')}
-          ${chapterName || g.run ? '' : btn('campaign', 'CLASSIC CAMPAIGN')}
-          ${chapterName || g.run ? '' : btn('select', 'MISSIONS')}
-          ${chapterName || g.run ? '' : btn('endless', 'ENDLESS RUN')}
+          ${chapterName || g.run || !meta.gameCompleted ? '' : btn('select', 'MISSIONS')}
           ${chapterName || g.run ? btn('abandon-run', 'ABANDON EXPEDITION') : ''}
           ${btn('help', 'HOW TO FLY')}
-          ${chapterName || g.run ? '' : btn('hangar', 'HANGAR')}
+          ${btn('hangar', 'HANGAR')}
           ${chapterName || g.run ? '' : btn('outfit', 'LOADOUT')}
           ${btn('stats', 'LOGBOOK')}
           ${btn('settings', 'SETTINGS')}
@@ -94,10 +93,14 @@ export function screenHTML(s) {
         <p class="body">Miss the pad and a clean touchdown on <b>level ground</b> still survives, at the base
         rate with the streak broken. Steep ground, a hard arrival, the hull touching first, or the ice
         ceiling on Europa. Those are all wreckage.</p>
-        <p class="body">Some ground is defended. Old security machines <b>telegraph every shot</b>: a
-        line locks on and a ring closes before anything is fired. Hits cost <b>hull</b>, not control.
-        Terrain is cover, a turret cannot shoot at something sitting on top of it, and every mission
-        keeps one pad no machine can reach. Destroying them pays, but it is never the way through.</p>
+        <p class="body">Some ground is defended, and it is defended properly. <b>Two hits will end
+        you</b> on a hull nobody has worked on. Old security machines still telegraph: a line locks on
+        and a ring closes first. It is fast now, so read it early rather than reacting to it.</p>
+        <p class="body"><b>Terrain is the answer.</b> A machine cannot shoot what it cannot see, and a
+        turret cannot shoot something sitting on top of it. Every mission keeps one pad no machine can
+        reach, so there is always somewhere safe to put the lander down. <b>Getting there is not
+        safe</b>, and that is the whole game: fly the low ground, break the lock, and take what you can
+        carry. Destroying them pays, but it is never required.</p>
         <div class="btns">${btn('back', 'BACK', true, 'SPACE')}</div>
       </div>`;
 
@@ -116,7 +119,7 @@ export function screenHTML(s) {
       return `<div class="screen wide">
         <h2>MISSIONS</h2>
         <div class="grid">${tiles}</div>
-        <div class="btns">${btn('endless', 'ENDLESS RUN')}${btn('back', 'BACK', true)}</div>
+        <div class="btns">${btn('back', 'BACK', true)}</div>
       </div>`;
     }
 
@@ -283,6 +286,22 @@ export function screenHTML(s) {
               <span class="opt-blurb">${ACTIONS.map((a) => keyLabel(input.bindings[a][0])).join(' · ')}</span>
             </button>
           </div>
+        </div>
+        <div class="setting">
+          <div class="setting-name">PLAYTEST LOG</div>
+          <p class="body">An ordered trace of this sitting: every mission started, every landing and its
+          numbers, every hit taken, every run lost. It is kept in memory only and never reaches the
+          simulation. ${Log.count()} event${Log.count() === 1 ? '' : 's'} recorded.</p>
+          <div class="btns">
+            ${btn('log-copy', 'COPY TO CLIPBOARD')}${btn('log-export', 'EXPORT .TXT')}${btn('log-export-json', 'EXPORT .JSON')}${btn('log-clear', 'CLEAR')}
+          </div>
+        </div>
+        <div class="setting">
+          <div class="setting-name">NEW GAME</div>
+          <p class="body">Erases every hangar upgrade, skill, blueprint, resource and record, and
+          abandons any expedition in progress. Your settings and key bindings are kept.
+          ${g.confirmWipe ? '<b style="color:#ff3b5c">Press again to erase everything.</b>' : ''}</p>
+          <div class="btns">${btn('newgame', g.confirmWipe ? 'YES, ERASE EVERYTHING' : 'NEW GAME')}</div>
         </div>
         <div class="btns">${btn('back', 'DONE', true, 'SPACE')}</div>
       </div>`;
@@ -455,15 +474,21 @@ export function screenHTML(s) {
     case 'checkpoint': {
       const run = g.run;
       const checkpoint = g.state === 'checkpoint';
+      // M24: the route is not a choice any more. A roguelike run goes where
+      // the run sends it - the seed and the sector decide, deterministically,
+      // and the card is a briefing rather than a menu. `routeOffers` still
+      // does the eligibility work; the first offer is simply taken. Keeping
+      // the generator means the tiers, the withheld hazard and the
+      // distinctness rule all still apply to what you are told.
       const offers = routeOffers(
         [...meta.clearedChapters, ...(run.visited || [])],
         run.seed, run.sector,
-      );
+      ).slice(0, 1);
       g.routeOffers = offers;
       const cards = offers.map((c, i) => {
         const accent = WORLDS[PLANETS[c.planet].world].accent;
         return `
-        <button class="tile route" data-action="route:${i}">
+        <button class="tile route" data-action="noop">
           <span class="planet-mark" style="color:${accent}">${planetIcon(c.planet, accent, 62)}</span>
           <span class="world" style="color:${accent}">${c.name}</span>
           <span class="name">${'▮'.repeat(c.difficulty)}${'▯'.repeat(5 - c.difficulty)} · ${c.atmosphere === 'none' ? 'no air' : `${c.atmosphere} air`}</span>
@@ -476,8 +501,10 @@ export function screenHTML(s) {
       const h = run.haul;
       return `<div class="screen wide">
         <div class="eyebrow" style="color:#4dff9f">SECTOR ${run.sector} OF ${SECTORS}${checkpoint ? ' · CHECKPOINT' : ''}</div>
-        <h2>${checkpoint ? 'CARGO BANKED. SHUTTLES BACK.' : 'WHERE NEXT?'}</h2>
-        ${checkpoint ? '<p class="body">Supply stop. Change your loadout here if you want to, then pick the next world.</p>' : ''}
+        <h2>${checkpoint ? 'CARGO BANKED. SHUTTLES BACK.' : 'NEXT LEG'}</h2>
+        ${checkpoint
+          ? '<p class="body">Supply stop. This is the only place the hangar takes work and the loadout opens, so spend here or carry it. The next world is already set.</p>'
+          : '<p class="body">The expedition goes where it goes. This is what is waiting.</p>'}
         <table class="score">
           <tr><td>Transmitted salvage</td><td>${formatScore(h.salvageSafe)}</td></tr>
           <tr><td>Physical cargo ${checkpoint ? '(banking now)' : '(at risk until the next checkpoint)'}</td><td>${formatScore(h.salvageCargo)}</td></tr>
@@ -485,7 +512,7 @@ export function screenHTML(s) {
           <tr class="tot"><td>SHUTTLES</td><td>${g.lives} / ${run.maxShuttles}</td></tr>
         </table>
         <div class="grid routes">${cards}</div>
-        <div class="btns">${checkpoint ? btn('outfit', 'CHANGE LOADOUT') : ''}${btn('abandon-run', 'END EXPEDITION')}</div>
+        <div class="btns">${btn('route:0', 'FLY IT', true, 'SPACE')}${checkpoint ? btn('outfit', 'CHANGE LOADOUT') : ''}${checkpoint ? btn('hangar', 'HANGAR') : ''}${btn('abandon-run', 'END EXPEDITION')}</div>
       </div>`;
     }
 

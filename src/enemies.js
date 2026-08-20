@@ -79,10 +79,18 @@ export const ENEMY_TYPES = {
     minRange: 130,         // it cannot depress the barrel closer than this
     turnRate: 1.15,        // rad/s: slow enough to be out-turned
     aimTolerance: 0.16,
-    telegraph: 1.25,       // aim locks and is drawn for this long before firing
+    // M24: was 1.25. Tom asked for 80% less aiming time, so the lock is now
+    // something you read early rather than something you react to. The shot
+    // still telegraphs - what is gone is the comfort. Total reaction window at
+    // this gun's own range is 0.25 + 560/600 = 1.18 s, and `enemies-tests.js`
+    // asserts that window rather than either constant, because the window is
+    // the property and the constants are just this milestone's answer to it.
+    telegraph: 0.25,       // aim locks and is drawn for this long before firing
     cooldown: 3.0,
     leadFactor: 0.75,      // deliberately imperfect prediction
-    shot: { speed: 200, damage: 10, radius: 5, life: 5.5, drift: 0.5 },
+    // 50 damage on a 100 hull is Tom's "two shots with no upgrades"; a hull
+    // upgrade buys a third, which is what keeps that track worth its salvage.
+    shot: { speed: 600, damage: 50, radius: 5, life: 5.5, drift: 0.5 },
     reward: 26,
     counterplay: 'Put terrain between you, or fly inside its arc.',
   },
@@ -100,11 +108,15 @@ export const ENEMY_TYPES = {
     standoff: 195,
     turnRate: 2.2,
     aimTolerance: 0.22,
+    // Deliberately NOT cut to 0.25: Tom's 80% was asked for the turret by name.
+    // It also reads well - a turret is a snap gun you must not be seen by, and
+    // a drone is a thing that follows you and lines up. Worth revisiting if the
+    // contrast plays as inconsistent rather than as two different machines.
     telegraph: 1.0,
     cooldown: 2.6,
     leadFactor: 0.6,
-    ram: { range: 44, damage: 16 },
-    shot: { speed: 255, damage: 8, radius: 4, life: 4, drift: 0.35 },
+    ram: { range: 44, damage: 50 },
+    shot: { speed: 765, damage: 50, radius: 4, life: 4, drift: 0.35 },
     reward: 34,
     counterplay: 'Outrun it, or break the lock behind a ridge.',
   },

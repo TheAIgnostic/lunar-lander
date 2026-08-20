@@ -1428,3 +1428,129 @@ entire pass.**
 
 Both fixtures, byte-for-byte — which is the entire claim. Physics, terrain, enemies, economy,
 missions: untouched. Every number in the M20–M22 sections still stands.
+
+---
+
+## M24 — a harder game, and one game (2026-08-20)
+
+Eleven asks from Tom, given as one list. Four of them are combat and visibility numbers, five are
+the shape of a run, two are tooling. The combat numbers turned out to interact with a guarantee the
+project had held since M12, which is the only part of this milestone that needed a decision rather
+than an implementation.
+
+### What a machine costs you now
+
+| | before | after |
+| --- | ---: | ---: |
+| turret shot | 10 damage, 200 px/s | **50 damage, 600 px/s** |
+| drone shot | 8 damage, 255 px/s | **50 damage, 765 px/s** |
+| drone ram | 16 damage | **50 damage** |
+| turret telegraph | 1.25 s | **0.25 s** |
+
+Two hits end an unupgraded lander, which is what was asked for, and three end an upgraded one —
+that second number matters, because it is what stops "two shots" from making the Hull track
+pointless. Both are asserted now.
+
+### The guarantee this broke, measured before it was decided
+
+The M12 promise was enforced as: an unarmed autopilot survives the safe route on every seed of every
+armed mission. It did, 240/240. Under the new numbers:
+
+| | before | after |
+| --- | ---: | ---: |
+| armed missions whose safe route survives 20/20 | **12 / 12** | **5 / 12** |
+| unarmed crossings survived, campaign-wide | 240/240 | **167/240 (70%)** |
+| the deep route, all armed missions | ~117/240 | **17/240** |
+| europa-2 THE CREVASSE, safe route | 20/20 | 2/20 |
+| mars-5 STORM EYE, safe route | 20/20 | 7/20 |
+
+The *sanctuary* never moved: 20/20 on every mission, every seed. The pad and the 420 px column above
+it are still outside every machine's engagement disc, because placement did not change — only
+lethality did. What broke was the **crossing**, which the rule never covered and which used to cost
+hull instead of the lander. `europa-4` had been arriving with 3 hull of 100; at 50 a hit the same
+one-and-a-half hits kill.
+
+**Tom took option 1: accept it.** The promise is narrower now and stated exactly — *the sanctuary pad
+is unreachable, the crossing to it is not* — and `validate-missions.js` was rewritten around that:
+the geometry stays a hard gate, surviving the crossing became a printed measurement with a
+campaign-wide headline. It was not deleted, because a number nobody watches rots.
+
+**Read that 70% knowing what produced it.** The instrument is an autopilot with no weapon, no shield
+and no evasive logic whatsoever — it does not dodge, and it does not use cover on purpose. It
+measures the floor, not what a person meets. This is the same instrument weakness recorded since
+M13, and it is more load-bearing here than it has ever been.
+
+### Visibility, and why the obvious formula was wrong
+
+"300% more challenging" was first implemented as tripling the *obscured* fraction, `1 - (1-v)*3`.
+That saturates: anything already below 0.67 clamps to the floor, and **four of five Mars missions
+came out at the same near-blind number**. BURIED ARRAY and STORM EYE were authored two stops apart
+and measured identical, which throws the content away.
+
+It is `v ** 3` instead — monotonic, so the authored ordering survives, and it is also the physically
+right answer, since transmission through a medium falls exponentially with its depth. Three times the
+dust in the air *is* v³.
+
+| worst visibility | before | linear ×3 | shipped (v³) |
+| --- | ---: | ---: | ---: |
+| mars-1 | 0.55 | 0.08 | **0.166** |
+| mars-2 THE CANYON | 0.85 | 0.55 | **0.614** |
+| mars-3 BURIED ARRAY | 0.32 | 0.08 | **0.050** |
+| mars-4 | 0.50 | 0.08 | **0.125** |
+| mars-5 STORM EYE | 0.22 | 0.08 | **0.050** |
+| every Moon and Europa mission | 1.00 | 1.00 | **1.00** |
+
+Airless bodies stay at exactly 1.0, which is the check that the formula is weather and not a filter.
+
+Worth recording as a finding in its own right: **`dust` overwrites visibility rather than combining
+with the planet's**, so on a body with weather the planet's own figure never applies and the air goes
+fully clear between fronts. Longstanding, left alone, and now visible because `worstVisibility()`
+had to account for it to log an honest number.
+
+### What a run is now
+
+One game mode. The classic campaign and the endless run are gone from the menu — the twelve legacy
+missions stay in `levels.js` because they are the M0 physics baseline and both fixtures regress
+against them, so deleting the content would delete the only proof the flight model has not drifted.
+No route choice: the seed and the sector decide. Losing the last shuttle takes the skills, every
+banked resource and the opened map, and keeps the hangar, the blueprints and the equipped modules.
+
+That split is the economy: salvage spent on a permanent upgrade is the only thing that survives a
+run, and it can only be spent at a sector checkpoint — the same moment, and the only moment, the
+loadout opens. So a permanent upgrade always costs the loadout you would otherwise have carried.
+
+### What the greed loop costs now
+
+| | M23 | M24 |
+| --- | ---: | ---: |
+| collecting every deposit, landings | 61/300 | **33/300** |
+| deposits taken | 1.5 of 3.9 | **0.8 of 3.9** |
+| material carried home, deep route | 5 | **3** |
+| deep-route flight time | 38 s (1.45×) | 26 s (1.10×) |
+| deep route engaged | 93% | 93% |
+| machines engaging at once | 0:62% 1:26.5% 2:10.2% 3:1.2% 4:0.1% | **unchanged** |
+
+The at-once distribution is untouched because placement is untouched. The flight-time ratio
+collapsed for an unhappy reason: the deep flights now end early because they end.
+
+### What did not move
+
+**Both fixtures, byte-identical.** Physics and flight both unchanged, which is the containment proof
+that none of the above reached the flight model. Visibility is presentation-only — the autopilot
+flies on state, not on what is drawn — so no automated test in this project can measure item 2 at
+all. That one is entirely on the human playtest.
+
+### Faults found on the way
+
+- **`validate-missions.js` reported combat failures as structural ones.** `hardFail` was incremented
+  by the combat block, so the summary announced "7 mission families STRUCTURALLY INVALID" when no
+  structural check had failed. It sent this milestone looking for terrain damage that did not exist.
+  Counted separately now.
+- **A phantom import, exactly the M23 class.** `obscure()` was called in `main.js`, which does not
+  import `forces.js`. The bundle built clean through it — one shared scope hides missing imports by
+  construction — and the browser caught it on the first load. The M23 lesson held: only the module
+  loader proves the imports.
+- **Three enemy assertions encoded the old design**, not a property: `telegraph >= 0.8` and
+  `shot.speed < 400`. They were rewritten around what those constants were protecting — a reaction
+  window of at least a second between the lock and the hit, measured at the machine's own range —
+  rather than deleted. Turret 1.18 s, drone 1.68 s.
