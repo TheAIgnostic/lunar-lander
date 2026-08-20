@@ -105,6 +105,13 @@ export function missionToLevel(mission) {
     hazards: mission.hazards || planet.hazards,
     rareMaterial: planet.rareMaterial,
     cave: !!mission.cave, clearance: mission.clearance || 0,
+    // Where the roof opens and where it has closed, as a fraction of the
+    // crossing. M19b made the mouth per-mission; a mission that wants to be
+    // flown *into* rather than begun indoors sets them.
+    caveMouth: mission.caveMouth, caveShut: mission.caveShut,
+    // What the ground is made of. A mission may override its body, but almost
+    // never should: this is what makes an icy world icy everywhere.
+    surface: mission.surface || planet.terrainStyle,
     fuelCells: mission.fuelCells || 0,
 
     terrain: {
@@ -185,7 +192,7 @@ export const MARS_LEVELS = MARS_MISSIONS.map(missionToLevel);
 export const EUROPA_MISSIONS = [
   {
     id: 'europa-1', planet: 'EUROPA', index: 1, name: 'GLASS',
-    brief: 'Smooth ice, and almost nothing to hold you. Touching down is only half the landing here. You will keep moving after the legs are down, so arrive slow and arrive straight.',
+    brief: 'Smooth ice between the ridges, and almost nothing to hold you. Touching down is only half the landing here. You will keep moving after the legs are down, so arrive slow and arrive straight.',
     width: 2900, relief: 200, detail: 0.8, rough: 150, fuel: 122,
     terrain: { archetype: 'basin' },
     pads: [{ mult: 3, width: 130 }, { mult: 2, width: 200 }],
@@ -194,10 +201,15 @@ export const EUROPA_MISSIONS = [
   },
   {
     id: 'europa-2', planet: 'EUROPA', index: 2, name: 'THE CREVASSE',
-    brief: 'The pad is a bridge of ice over a crack you cannot see the bottom of. Come in gently. There is nothing under it if you do not.',
+    brief: 'A crack in the shell, open at the mouth and closing over as it runs deeper. The pad is a bridge of ice far down it. Fly in while you can still see sky.',
     width: 3000, relief: 300, detail: 1.2, rough: 190, fuel: 118,
-    terrain: { archetype: 'canyon' },
-    pads: [{ mult: 5, width: 120, fragile: 16 }],
+    // A crevasse is a cave entered from above, so the roof closes later and
+    // further in than UNDER THE ICE: open sky at the mouth, and about 70% shut
+    // by the time the bridge is under you. Closing it any earlier is what the
+    // test pilot cannot fly - 0.20/0.52 takes the way home from 20/20 seeds to
+    // 16/20, and the wall is the ceiling guard rather than the geometry.
+    terrain: { archetype: 'canyon' }, cave: true, clearance: 300, caveMouth: 0.26, caveShut: 0.58,
+    pads: [{ mult: 5, width: 120 }],
     optionalObjective: { id: 'core-ice', text: 'Recover an ice core from the crevasse floor', reward: { data: 40 } },
     enemyBudget: 1,
   },
@@ -226,12 +238,12 @@ export const EUROPA_MISSIONS = [
     brief: 'Separated plates of ice, one of them worth landing on, and Jupiter overhead. Everything Europa has taught you, on ground that will not hold a mistake.',
     width: 3300, relief: 300, detail: 1.5, rough: 230, fuel: 124,
     terrain: { archetype: 'caldera' },
-    pads: [{ mult: 5, width: 96, fragile: 14 }, { mult: 2, width: 180 }],
+    pads: [{ mult: 5, width: 96 }, { mult: 2, width: 180 }],
     hazards: [{ type: 'radiation', period: 13, duty: 0.5, rate: 14 }],
-    optionalObjective: { id: 'perfect', text: 'Set down on the plate without cracking it', reward: { cores: 2 } },
-    // Two, not the three the ramp allows: Europa's drones ram, the plate is
-    // fragile, and at three an unarmed flight to the prize fell from 20/20 to
-    // 5/20. The ramp is a shape, not a quota.
+    optionalObjective: { id: 'perfect', text: 'Set down on the plate at PERFECT', reward: { cores: 2 } },
+    // Two, not the three the ramp allows: Europa's drones ram and the plate
+    // is the smallest in the chapter, and at three an unarmed flight to the
+    // prize fell from 20/20 to 5/20. The ramp is a shape, not a quota.
     enemyBudget: 2, enemySets: ['seeker-drone'], fuelCells: 3,
   },
 ];

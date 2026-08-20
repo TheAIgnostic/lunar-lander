@@ -488,14 +488,6 @@ export class Ship {
 
     if (result.grade === 'CRASH') return 'crash';
 
-    if (pad && pad.fragile && td.vy > pad.fragile) {
-      this.landingResult.grade = 'CRASH';
-      this.landingResult.brokePad = true;
-      this.landingResult.blocker =
-        `The ice took ${(td.vy / 6).toFixed(1)} m/s and split — it holds ${(pad.fragile / 6).toFixed(1)}.`;
-      return 'crash';
-    }
-
     if (!onPad) {
       const slope = Math.abs(terrain.slopeAt(this.x));
       if (result.grade === 'HARD' || slope > LANDING.offPadMaxSlope) {

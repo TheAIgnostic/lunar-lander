@@ -25,6 +25,11 @@ const P = (o) => ({
   visibility: 1,
   hazards: [],
   eligibleEnemySets: [],
+  // What the ground is made of, which the generator reads: 'rock' is the
+  // heightmap the game has always made, 'ice' fractures it into stepped plates
+  // and stands seracs between them (see ICE in terrain.js). A body opts in
+  // here, so an icy world is data rather than a special case in the generator.
+  terrainStyle: 'rock',
   ...o,
 });
 
@@ -78,6 +83,7 @@ export const PLANETS = {
   EUROPA: P({
     id: 'EUROPA', displayName: 'EUROPA', realGravity: 1.31, world: 'EUROPA',
     feelOffset: 0.98, surfaceFriction: 0.07, hazards: ['ice', 'radiation'],
+    terrainStyle: 'ice',
     rareMaterial: 'Conductive ice salts',
     terrainPalette: ['basin', 'canyon', 'mesa'],
     eligibleEnemySets: ['seeker-drone'],

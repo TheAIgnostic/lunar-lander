@@ -34,7 +34,7 @@ const SEEDS = [1000, 1137, 1274, 1411, 1548, 1685];
 /** A plain flight report, the shape the game hands the judge. */
 const report = (over = {}) => ({
   grade: 'PERFECT', onPad: true, centreFrac: 0.1, fuelFrac: 0.4, hullLost: 0,
-  abilityUses: 0, radiation: 0, brokePad: false, cargoTaken: false, ...over,
+  abilityUses: 0, radiation: 0, cargoTaken: false, ...over,
 });
 
 // --- the conditions actually discriminate
@@ -53,7 +53,7 @@ const report = (over = {}) => ({
   const noab = { optionalObjective: { id: 'no-ability', text: 'x', reward: { cores: 1 } } };
   check('using the module fails the no-module objective', !evaluateObjective(noab, report({ abilityUses: 1 })).met);
   const perfect = { optionalObjective: { id: 'perfect', text: 'x', reward: { cores: 1 } } };
-  check('cracking the ice fails a perfect objective', !evaluateObjective(perfect, report({ brokePad: true })).met);
+  check('anything short of PERFECT fails a perfect objective', !evaluateObjective(perfect, report({ grade: 'GOOD' })).met);
   check('no objective, no result', evaluateObjective({}, report()) === null);
 }
 

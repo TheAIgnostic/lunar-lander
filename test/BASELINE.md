@@ -978,3 +978,166 @@ Terrain this different is a good way to find tests that were relying on scenery.
 - **The way-home gate samples 6 seeds**, which at these margins is ±4 points of noise — it read
   79–84 out of 90 across settings that all measure 94–95% at 20 seeds. Worth remembering before
   tuning against it again.
+
+---
+
+## M20 — Europa, properly icy (2026-08-20)
+
+Tom's note was that Europa still has smooth basins, and that the fragile pads should go. The first
+half of that had a number behind it: after M19 roughened the whole game, **Europa was the smoothest
+chapter in it**.
+
+| chapter | mean surface slope | steeper than 30° |
+| --- | ---: | ---: |
+| **EUROPA** | **0.618** | **29.6%** |
+| LUNA | 0.717 | 38.5% |
+| MARS | 0.742 | 40.0% |
+
+`europa-1 GLASS` was 0.308 and 13.7%, the smoothest map anywhere in the game.
+
+### Fragile pads are gone
+
+Removed at all seven sites: the two pads (`europa-2`, `europa-5`), the `fragile` field in
+`terrain.js`, the fracture branch in `ship.finishTouchdown`, the `ICE · max N m/s` label in
+`render.drawTerrain`, and `brokePad` — which had no producer left — from the flight report and the
+`perfect` objective. THE FLOES' objective read "Set down on the plate without cracking it" and reads
+"Set down on the plate at PERFECT" now.
+
+Verified in the running game rather than only in node. On THE FLOES' prize pad:
+
+| touchdown | before | now |
+| --- | --- | --- |
+| 15 px/s (2.5 m/s) | ice splits — CRASH | **HARD, survived** |
+| 17 px/s (2.8 m/s) | ice splits — CRASH | CRASH, "descent rate 8.2 m/s, past the 7.3 the gear can absorb" |
+
+That is the whole point of the decision: what kills you is the envelope every other body is judged
+by, not a hidden per-pad cap that fails a landing the player would call clean.
+
+### Ice is geometry now, not a palette
+
+Two passes, both **raised into the heightmap** so collision, line of sight, the fuel road and the
+ore clearances see the real surface for nothing — the rule M19's boulders established.
+
+- **seams.** The shell fractures into plates that *step* against each other. A seam shifts every
+  sample beyond it, so the joint is a hard cliff rather than a steep piece of noise, and the running
+  offset is bounded and reversed rather than accumulated, so the plates step without walking the far
+  end of the map off the bottom of the world. 5 per mission, throws of 9–30 px.
+- **seracs.** Leaning blades, 1.5–3.2× as tall as they are wide, at a profile exponent of 1.3 so
+  they come to a point instead of swelling out of the ground. 12 per mission at 24–52 px radius.
+  The heightmap samples every ~12 px, and that is what sets the minimum radius: anything narrower
+  than two samples cannot exist in the ground, only in a drawing of it.
+
+A body opts in through `PlanetDefinition.terrainStyle`, so an icy world is data. Only EUROPA is set;
+Enceladus, Pluto and Ganymede are still rock, and stay that way until their chapters are authored.
+
+### Which knob costs what
+
+Measured over 20 seeds, the whole chapter, with the crevasse already a cave so the two changes do
+not contaminate each other:
+
+| | way home | prize via the road | mean slope | steeper than 30° |
+| --- | ---: | ---: | ---: | ---: |
+| no ice | 99/100 | 78/100 | 0.593 | 27.4% |
+| seams only | 100/100 | **79/100** | 0.612 | 28.4% |
+| seracs only | 99/100 | 69/100 | 0.949 | 39.6% |
+| **both (shipped)** | **100/100** | **68/100** | **0.964** | **40.1%** |
+
+**Seams are free** and seracs are the entire cost — the same shape M19 found, where macro structure
+away from the pads costs nothing and anything landing on a pad approach costs landings. Both are
+kept off the landing zones by construction (170 px for a seam, 110 px plus the blade's own radius
+for a serac), which is why the way home does not move.
+
+### Where it landed
+
+| | before | after |
+| --- | ---: | ---: |
+| mean surface slope | 0.618 | **0.964** (1.56×) |
+| share steeper than 30° | 29.6% | **40.1%** |
+| relief span | 554 px | 595 px |
+| way home | 100/100 | **100/100** |
+| prize via the road | 82/100 | 68/100 |
+
+Europa was the smoothest chapter and is now level with the other two — 40.1% steep against Luna's
+38.5% and Mars' 40.0% — rather than the roughest. An earlier blade profile (exponent 0.8) measured
+1.079 and 45.5%, which made Europa the roughest body in the game for the same cost in landings; the
+sharper, narrower blade is both more like ice and cheaper.
+
+Luna and Mars re-measured **bit-identical** to their pre-M20 numbers, which is the check that the
+ice pass runs on its own seed streams and reaches nothing else.
+
+### THE CREVASSE is a cave you fly into
+
+M19b made the cave mouth per-mission, and a crevasse is the obvious second candidate: open sky at
+the mouth, the roof coming down across the crossing, and the bridge of ice at the end of it. It also
+needed a fiction that was not the fragile pad, which had just been removed.
+
+Where the wall is, over 20 seeds and the validator's own three approaches:
+
+| mouth / shut | way home | of 60 runs |
+| --- | ---: | ---: |
+| 0.32 / 0.66 | 20/20 | 44 |
+| **0.26 / 0.58 (shipped)** | **20/20** | **40** |
+| 0.20 / 0.52 | 16/20 | 28 |
+| 0.14 / 0.40 | 12/20 | 17 |
+
+At 0.26/0.58 the roof is about 70% shut by the time the pad is under you. Closing it earlier breaks
+the way-home guarantee, and **`clearance` changes nothing** — 300, 380, 460 and 540 all measure the
+same, because the corridor over a pad at the bottom of a canyon is 1,200+ px whatever the clamp
+asks for. The wall is the pilot's ceiling guard on the crossing, not headroom at the pad.
+
+What each half of the mission's change costs, separated:
+
+| europa-2 | way home | prize via the road |
+| --- | ---: | ---: |
+| neither | 20/20 | 20/20 |
+| cave only | 19/20 | 16/20 |
+| ice only | 20/20 | 19/20 |
+| **both (shipped)** | **20/20** | **15/20** |
+
+### What it cost across the MVP
+
+| | before | after |
+| --- | ---: | ---: |
+| way home | 521/540 (96%) | **521/540 (96%)** |
+| the prize | 212/300 (71%) | 199/300 (66%) |
+
+The way home is **identical**, which is the guarantee. Every one of the thirteen lost prize flights
+is on Europa: `europa-2` 20→13 (mostly the cave), `europa-3` 10→5, `europa-5` 5→4, with `europa-1`
+and `europa-4` unmoved.
+
+`europa-3 RADIATION PASS` is the biggest single drop, and **it is not fuel** — mean fuel left went
+*up*, from 79.9 to 97.0, because the flights end early. The pilot is flying into blades. It has no
+terrain lookahead, which M19 recorded as the measuring instrument's weakness, and 5/20 on a deep
+route sits inside the band the game already ships (`mars-5` 5/20, classic DEEP SHAFT 4/20).
+
+The flight fixture moved on **exactly the five Europa missions and nothing else**, which is the
+cleanest available proof that the change is contained. Re-recorded with that reason.
+
+### Two render faults, one of them older than this milestone
+
+- **Boulders drew a closing skirt that hangs in the air.** A raised shape was filled by tracing the
+  heightmap and closing the path across it at a fixed height — which meets the surface only on level
+  ground. On a slope the closing edge floats, and the fill and stroke draw a visible box beside the
+  rock. It has been there since M19 and was invisible until ice made the ground steep enough to
+  show it. Both boulders and seracs close *below* the ground now and stroke only the silhouette.
+- **A recorded crest could be invalidated by a later pass.** Each raising pass records the crest it
+  produced, and a boulder standing where a serac already stood left the blade's recorded crest 40 px
+  underground — which the renderer reads to place its gradient. Every crest is re-derived once, in
+  the constructor, after all raising is done. Any future raising pass goes *before* that line.
+
+The new terrain tests found the second one. The ice section is 65 assertions covering determinism,
+the seed-stream isolation, that a seam is a real bounded step on a sample boundary, that a serac
+actually stands above the ground beside it, that a pad still sits on the plate it moved with, and
+that nothing icy comes near a landing zone or closes a cave corridor.
+
+### For M21
+
+On a **single-pad mission the sanctuary is the prize**, so "the safe route is never fired on" cannot
+hold there: `europa-2` and `europa-4` are shot at on 20/20 seeds. `sanctuaryClear` still passes,
+correctly — it measures the pad and the column above it, not the crossing — and every flight
+survives. But it means two of fifteen missions have no unwatched way in, and M21 is the milestone
+that places machines.
+
+The encounter audit's greed measure fell 108/300 → 85/300, all of it Europa, with `europa-2` going
+15/20 → 0/20. That is the cave plus the known-stale fuel budgets, which are already recorded as
+the finding they are.

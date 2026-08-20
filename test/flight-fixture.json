@@ -110,28 +110,28 @@
     "crash/CRASH/51.6/20.8"
   ],
   "europa-1": [
-    "crash/CRASH/99.5/18.4",
-    "land/PERFECT/29.8/41.6",
-    "land/PERFECT/59.8/38.7"
+    "crash/CRASH/99.9/18.1",
+    "crash/CRASH/77.1/19.6",
+    "crash/CRASH/94.5/20.4"
   ],
   "europa-2": [
-    "land/PERFECT/60.6/24.6",
-    "land/PERFECT/54.9/27.9",
-    "land/PERFECT/56.4/27"
+    "land/PERFECT/52/32.5",
+    "land/PERFECT/29.5/41.5",
+    "land/PERFECT/17.6/48.7"
   ],
   "europa-3": [
-    "crash/CRASH/99.8/13.3",
-    "crash/CRASH/101.7/12.3",
-    "land/PERFECT/37.1/54.4"
+    "crash/CRASH/102.3/12.8",
+    "crash/CRASH/101.2/12.3",
+    "crash/CRASH/88.2/9.6"
   ],
   "europa-4": [
     "land/PERFECT/64.9/30.2",
     "land/PERFECT/63.9/30.7",
-    "land/PERFECT/39.2/40.8"
+    "land/PERFECT/37.3/42"
   ],
   "europa-5": [
-    "crash/CRASH/89.3/14.5",
-    "crash/CRASH/103.2/17.2",
-    "land/PERFECT/23.3/44.6"
+    "crash/CRASH/89.6/14.4",
+    "crash/CRASH/106/16.5",
+    "land/PERFECT/28.8/44"
   ]
 }

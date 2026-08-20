@@ -99,5 +99,82 @@ for (const name of ARCHETYPE_NAMES) {
   }
 }
 
+// --- ice: the shell fractures into stepped plates, and blades stand between them
+{
+  const icy = (over = {}) => cfg({
+    terrain: { archetype: 'basin', relief: 260, detail: 1.2 }, surface: 'ice', ...over,
+  });
+  const rocky = cfg({ terrain: { archetype: 'basin', relief: 260, detail: 1.2 } });
+
+  const t = new Terrain(icy(), 55);
+  const r = new Terrain(rocky, 55);
+  check('ice reports its surface', t.surface === 'ice');
+  check('rock is the default', r.surface === 'rock' && r.seams.length === 0 && r.seracs.length === 0);
+  check('an icy world fractures', t.seams.length > 0, `${t.seams.length} seams`);
+  check('an icy world grows seracs', t.seracs.length > 0, `${t.seracs.length} seracs`);
+  check('the ice pass actually reshapes the ground',
+    Array.from(t.h).some((v, i) => v !== r.h[i]));
+
+  // Same seed, same ice - and the streams are its own, so an ice pass on one
+  // body can never shuffle the pads or the road on another.
+  const t2 = new Terrain(icy(), 55);
+  check('ice is deterministic',
+    Array.from(t.h).every((v, i) => v === t2.h[i]) &&
+    JSON.stringify(t.seracs) === JSON.stringify(t2.seracs) &&
+    JSON.stringify(t.seams) === JSON.stringify(t2.seams));
+  check('ice varies with the seed',
+    JSON.stringify(new Terrain(icy(), 56).seracs) !== JSON.stringify(t.seracs));
+
+  // The plates step against each other without walking: every throw is a real
+  // one, it lands on a sample boundary, and the running total stays bounded, so
+  // the far end of the map is never dragged off the bottom of the world.
+  check('every seam has a real throw',
+    t.seams.every((s) => Math.abs(s.drop) >= 9 - 0.001 && Math.abs(s.drop) <= 30 + 0.001),
+    t.seams.map((s) => s.drop.toFixed(1)).join(' '));
+  check('a seam lands on a sample boundary',
+    t.seams.every((s) => Math.abs(s.x / t.step - Math.round(s.x / t.step)) < 1e-6));
+  {
+    let run = 0, worst = 0;
+    for (const s of t.seams) { run += s.drop; worst = Math.max(worst, Math.abs(run)); }
+    check('the plates step rather than walk', worst <= 34 + 0.001, worst.toFixed(1));
+  }
+
+  // A serac is in the heightmap, not drawn on top of it - which is the whole
+  // reason collision comes free.
+  for (const s of t.seracs) {
+    check('a serac stands above the ground beside it',
+      t.heightAt(s.x + s.lean * s.r) < Math.min(t.heightAt(s.x - s.r * 1.4), t.heightAt(s.x + s.r * 1.4)),
+      `${Math.round(s.x)}`);
+    check('a serac records the crest it actually has',
+      Math.abs(s.top - t.heightAt(s.x + s.lean * s.r)) < 1.5);
+  }
+
+  // Nothing icy may touch a landing zone or the air above it.
+  for (const t3 of [new Terrain(icy(), 3), new Terrain(icy(), 4), new Terrain(icy(), 5)]) {
+    for (const p of t3.pads) {
+      check('no serac near a pad',
+        t3.seracs.every((s) => s.x + s.r < p.x1 - 60 || s.x - s.r > p.x2 + 60));
+      check('no seam near a pad',
+        t3.seams.every((s) => s.x < p.x1 - 100 || s.x > p.x2 + 100));
+      // A plate carries its pad with it: the recorded pad height has to be the
+      // ground the lander will actually touch, after every shear.
+      check('a pad still sits on its own plate',
+        Math.abs(p.y - t3.heightAt((p.x1 + p.x2) / 2)) < 2.5,
+        `${p.y.toFixed(1)} vs ${t3.heightAt((p.x1 + p.x2) / 2).toFixed(1)}`);
+      check('a pad is still flat', Math.abs(p.y1 - p.y2) < 12);
+    }
+    check('the fractured world stays inside its bounds',
+      Array.from(t3.h).every((v) => v > t3.height * 0.2 && v < t3.height - 20));
+  }
+
+  // A roofed ice level is the tightest air in the game: it gets less of both.
+  const cave = new Terrain(icy({ cave: true, clearance: 260 }), 55);
+  let minGap = Infinity;
+  for (let i = 0; i < cave.n; i++) minGap = Math.min(minGap, cave.h[i] - cave.ceiling[i]);
+  check('ice never closes a cave corridor', minGap >= 200, minGap.toFixed(0));
+  check('a cave gets smaller blades',
+    Math.max(...cave.seracs.map((s) => s.r)) < Math.max(...t.seracs.map((s) => s.r)));
+}
+
 console.log(`\n  ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

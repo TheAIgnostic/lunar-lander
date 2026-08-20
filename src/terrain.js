@@ -41,6 +41,30 @@ export const TERRAIN = { relief: 1.8, rough: 1.25, bite: 0.25 };
  */
 export const BOULDER = { density: 1.6, min: 16, max: 74, padGuard: 130, caveScale: 0.5 };
 
+/**
+ * Ice is not rock, and until M20 it was drawn in a different colour and
+ * generated identically. Measured before the change, Europa was the *smoothest*
+ * chapter in the game - mean surface slope 0.618 against Luna's 0.717 and Mars'
+ * 0.742, and GLASS was 0.308, the smoothest map anywhere.
+ *
+ * Two mechanisms, both raised into the heightmap so collision, line of sight,
+ * the fuel road and the ore clearances all see the real surface for free - the
+ * same rule M19's boulders established:
+ *
+ *   seam   the shell fractures into plates that *step* against each other. A
+ *          seam shifts everything beyond it by `throw` px, so the joint is a
+ *          hard cliff rather than a slope, and `bound` keeps the plates
+ *          stepping rather than walking the whole map downhill.
+ *   serac  blades of ice standing where the plates sheared: narrow, leaning,
+ *          and 1.5-3.2x as tall as they are wide. The heightmap samples every
+ *          ~12 px, which is what sets `min` - anything narrower than two
+ *          samples cannot exist in the ground, only in a drawing of it.
+ */
+export const ICE = {
+  seam: { spacing: [190, 360], throw: [9, 30], bound: 34, padGuard: 170, caveScale: 0.5 },
+  serac: { density: 1.5, min: 24, max: 52, rise: [1.5, 3.2], padGuard: 110, caveScale: 0.55 },
+};
+
 export class Terrain {
   constructor(cfg, seed) {
     const rng = makeRng(seed);
@@ -119,6 +143,14 @@ export class Terrain {
     this.ceiling = null;
     if (cfg.cave) this._makeCeiling(cfg, rng);
 
+    // An icy body fractures. Both passes run on their own seed streams, after
+    // the pads and the roof and before everything that is placed against the
+    // surface, so a rock world is byte-identical to what it was and an ice
+    // world's road, ore and cargo see the ice they are actually sitting on.
+    this.surface = cfg.surface === 'ice' && this.shape ? 'ice' : 'rock';
+    this.seams = this.surface === 'ice' ? this._fractureIce(cfg, seed) : [];
+    this.seracs = this.surface === 'ice' ? this._raiseSeracs(cfg, seed) : [];
+
     // Big rocks are *terrain*, not decoration.
     //
     // Rocks were 3-9 px and drawn on top of the heightmap with no collision at
@@ -129,6 +161,13 @@ export class Terrain {
     // against the ground - and everything placed afterwards, the fuel road
     // included, sees the real surface.
     this.boulders = this._raiseBoulders(cfg, seed);
+    // Every pass that raises ground records the crest it produced, and the last
+    // one to run wins. Re-derive them here, once, after all of them: a boulder
+    // standing where a serac already stood left the blade's recorded crest 40 px
+    // underground, which the renderer reads to place its gradient.
+    for (const s of this.seracs) s.top = this.heightAt(s.x + s.lean * s.r);
+    for (const b of this.boulders) b.top = this.heightAt(b.x);
+
     this.fuelCells = this._placeFuel(cfg, rng);
     this.cargo = this._placeCargo(cfg, rng);
     this.rocks = this._scatterRocks(cfg, rng);
@@ -217,6 +256,107 @@ export class Terrain {
     }
     // Record the crest after every boulder is in, so overlapping ones agree.
     for (const b of out) b.top = this.heightAt(b.x);
+    return out;
+  }
+
+  /**
+   * The shell fractures into plates.
+   *
+   * A seam shifts every sample beyond it, so the joint is a genuine step in the
+   * ground and not a steep piece of noise - which is what makes ice read as
+   * *broken* rather than merely rough. The running offset is bounded and
+   * reversed rather than accumulated, so the plates step against each other
+   * without the far end of the map walking off the bottom of the world.
+   *
+   * Seams keep clear of the landing zones, which means a pad always lies wholly
+   * on one plate: it moves with its plate, stays flat, and `pad.y` stays the
+   * ground the lander will actually touch.
+   */
+  _fractureIce(cfg, seed) {
+    const rng = makeRng(((((seed | 0) ^ 0x1ce9b10c) >>> 0) + 11) >>> 0);
+    const scale = this.ceiling ? ICE.seam.caveScale : 1;
+    const bound = ICE.seam.bound * scale;
+    let hMin = Infinity, hMax = -Infinity;
+    for (let i = 0; i < this.n; i++) {
+      if (this.h[i] < hMin) hMin = this.h[i];
+      if (this.h[i] > hMax) hMax = this.h[i];
+    }
+    const floor = this.height * 0.22 + 6;
+    const roof = this.height - 46;
+    // An offset the world has no room for is not applied: clamping the
+    // heightmap afterwards would leave a pad hanging above ground it no longer
+    // touches.
+    const fits = (v) => hMax + Math.max(0, v) <= roof && hMin + Math.min(0, v) >= floor;
+
+    const seams = [];
+    let off = 0;
+    let x = rng.range(ICE.seam.spacing[0], ICE.seam.spacing[1]);
+    for (; x < this.width - 140; x += rng.range(ICE.seam.spacing[0], ICE.seam.spacing[1])) {
+      if (this.pads.some((p) => x > p.x1 - ICE.seam.padGuard && x < p.x2 + ICE.seam.padGuard)) continue;
+      let d = rng.range(ICE.seam.throw[0], ICE.seam.throw[1]) * scale * (rng() < 0.5 ? -1 : 1);
+      if (Math.abs(off + d) > bound || !fits(off + d)) d = -d;
+      if (Math.abs(off + d) > bound || !fits(off + d)) continue;
+      off += d;
+      const i = clamp(Math.round(x / this.step), 0, this.n - 1);
+      for (let k = i; k < this.n; k++) this.h[k] += d;
+      for (const p of this.pads) {
+        if (p.i1 >= i) { p.y += d; p.y1 += d; p.y2 += d; }
+      }
+      seams.push({ x: i * this.step, drop: d });
+    }
+    return seams;
+  }
+
+  /**
+   * Seracs: blades of ice raised into the heightmap.
+   *
+   * Where a boulder is a wide dome you fly around, a serac is a narrow spike
+   * you fly *between*, so it is placed denser and kept off the pads by the same
+   * rule. Leaning, because a field of upright triangles reads as a sawtooth.
+   */
+  _raiseSeracs(cfg, seed) {
+    const spec = cfg.terrain || {};
+    const density = spec.detail != null ? spec.detail : 1;
+    if (density <= 0) return [];
+    const rng = makeRng(((((seed | 0) ^ 0x5e7ac0de) >>> 0) + 13) >>> 0);
+    // A roofed level has the tightest air in the game; M19 already found that
+    // full-sized obstacles in a cave cost a lander on the safe route.
+    const roofed = !!this.ceiling;
+    const scale = roofed ? ICE.serac.caveScale : 1;
+    const count = Math.round((this.width / 420) * density * ICE.serac.density * (roofed ? 0.6 : 1));
+    const out = [];
+    for (let i = 0; i < count; i++) {
+      for (let tries = 0; tries < 20; tries++) {
+        const r = rng.range(ICE.serac.min, ICE.serac.max) * scale;
+        const x = rng.range(r + 50, this.width - r - 50);
+        if (this.pads.some((p) => x > p.x1 - ICE.serac.padGuard - r && x < p.x2 + ICE.serac.padGuard + r)) continue;
+        if (out.some((s) => Math.abs(s.x - x) < (s.r + r) * 1.25)) continue;
+        const rise = r * rng.range(ICE.serac.rise[0], ICE.serac.rise[1]);
+        if (this.ceiling && this.heightAt(x) - this.ceilingAt(x) - rise < 210) continue;
+        const lean = rng.range(-0.42, 0.42);
+        const wob = rng.range(0, 6.28);
+        const i1 = Math.max(0, Math.floor((x - r) / this.step));
+        const i2 = Math.min(this.n - 1, Math.ceil((x + r) / this.step));
+        for (let k = i1; k <= i2; k++) {
+          const d = (k * this.step - x) / r;
+          if (Math.abs(d) > 1) continue;
+          // A leaning tent: 0 at both feet, 1 at the peak, and convex enough
+          // near the tip that the blade comes to a point.
+          const t = d < lean ? (d + 1) / (lean + 1) : (1 - d) / (1 - lean);
+          // The exponent is what makes it a blade rather than a hill: above 1
+          // the profile stays low until close to the peak, so the thing comes
+          // to a point instead of swelling out of the ground.
+          const blade = Math.max(0, t) ** 1.3 * (1 + 0.1 * Math.sin(d * 9 + wob));
+          this.h[k] -= rise * blade;
+        }
+        out.push({ x, r, rise, lean, top: 0 });
+        break;
+      }
+    }
+    // The crest after every blade is in, so overlapping ones agree - the same
+    // rule the boulders use, and for the same reason: the drawing traces the
+    // heightmap rather than guessing at it.
+    for (const s of out) s.top = this.heightAt(s.x + s.lean * s.r);
     return out;
   }
 
@@ -375,7 +515,6 @@ export class Terrain {
         x1: i1 * this.step, x2: i2 * this.step,
         y, y1: this.h[i1], y2: this.h[i2], slope,
         mult: specPad.mult, kind: anchor ? anchor.kind : 'flat', used: false, i1, i2,
-        fragile: specPad.fragile || 0,
         // 0 = near and safe, 1 = a real crossing, 2 = the far end of the map.
         tier: band.tier,
         reach: Math.round(Math.abs((i1 + i2) / 2 * this.step - this.entry.x)),

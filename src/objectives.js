@@ -28,7 +28,7 @@ export const OBJECTIVES = {
   },
   perfect: {
     kind: 'condition', short: 'PERFECT',
-    test: (r) => r.grade === 'PERFECT' && !r.brokePad,
+    test: (r) => r.grade === 'PERFECT',
     progress: (r) => `${r.grade || 'no landing'}`,
   },
   'no-ability': {

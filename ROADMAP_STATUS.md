@@ -440,6 +440,39 @@ scheduled until the MVP is stable — the spec says the same.
     measured a shot one frame after birth; and the way-home gate samples six seeds, which is ±4
     points of noise at these margins
 
+- [x] **M20 — Europa, properly icy** (this commit)
+  - Europa measured as the **smoothest chapter in the game** after M19 roughened everything else:
+    mean surface slope 0.618 against Luna's 0.717 and Mars' 0.742, and GLASS at 0.308 was the
+    smoothest map anywhere. That is the number Tom's "it still has smooth basins" was about
+  - **fragile pads are gone**, per Tom's decision. Removed at all seven sites, including `brokePad`,
+    which had no producer left. A 15 px/s touchdown on THE FLOES' plate that used to split the ice
+    now lands HARD and survives; 17 px/s crashes on the ordinary envelope. What kills you on Europa
+    is the envelope every other body is judged by, not a hidden per-pad cap
+  - **ice is geometry**: the shell fractures into plates that step against each other, and leaning
+    blades stand between them. Both raised into the heightmap, so collision, line of sight, the fuel
+    road and the ore clearances come free — M19's rule. A body opts in via
+    `PlanetDefinition.terrainStyle`, so an icy world is data
+  - measured per knob: **seams are free** (prize 78→79 of 100) and seracs are the entire cost
+    (78→69), the same shape M19 found. Both are kept off the landing zones by construction, which is
+    why the way home does not move at all
+  - **Europa is now level with the other two** rather than the roughest: 40.1% of the surface steeper
+    than 30°, against Luna's 38.5% and Mars' 40.0%. An earlier, blunter blade measured 45.5% for the
+    same cost in landings — the sharper profile is both more like ice and cheaper
+  - **THE CREVASSE is a cave you fly into**, using M19b's per-mission mouth: open sky at the mouth,
+    ~70% shut by the time the bridge is under you. Closing it earlier is where the wall is — 0.20/0.52
+    takes the way home from 20/20 seeds to 16/20 — and `clearance` changes nothing, because the
+    corridor over a pad at the bottom of a canyon is 1,200+ px whatever the clamp asks for
+  - across the MVP the way home is **identical**, 521/540 both sides. The prize costs 212→199 of 300,
+    and all thirteen are Europa. The flight fixture moved on **exactly the five Europa missions**
+  - `europa-3`'s deep route fell 10/20 → 5/20 and **it is not fuel** — mean fuel left went *up*,
+    79.9 → 97.0, because the flights end early. The pilot is flying into blades, having no terrain
+    lookahead, which is the same instrument weakness M19 recorded
+  - two render faults, one older than this milestone: a raised shape closed its fill across the
+    surface at a fixed height, which floats on a slope and drew a visible box beside every boulder
+    on a hillside (there since M19, invisible until the ground got steep); and a recorded crest could
+    be left underground by a later raising pass. Every crest is re-derived once, after all of them
+  - 65 new terrain assertions, which is what found the second fault
+
 ## Decisions (Tom, 2026-08-16)
 
 1. **Gravity** — compressed mapping is the *baseline*, then a per-body hand-tuned offset so each
@@ -457,21 +490,10 @@ None.
 
 ## Next task
 
-Three content milestones remain from Tom's playtest, then a cleanup that is now overdue enough to
-be scheduled rather than mentioned. **M20, M21 and M22 are unblocked** — M19 rebuilt the ground they
-all stand on. M23 is a refactor with no behaviour change, which makes it the safest thing on this
-list to hand to a cold session.
-
-### M20 — Europa, properly icy
-
-- spiky, fractured ice instead of the smooth basins it still has
-- **fragile pads removed** (Tom's decision, 2026-08-20): Europa's difficulty comes from the surface
-  and the slide, not a hidden speed cap that punishes a landing the player would call clean.
-  Touches `europa-2 THE CREVASSE` and `europa-5 THE FLOES`, plus the `fragile` field in
-  `terrain.js`, the fracture branch in `ship.finishTouchdown`, and the ICE approach text in
-  `render.drawTerrain`
-- M19b's cave mouth is per-mission (`caveMouth` / `caveShut`), so a second Europa mission could
-  become a cave now without it feeling like a lid. THE CREVASSE is the obvious candidate
+Two content milestones remain from Tom's playtest, then a cleanup that is now overdue enough to be
+scheduled rather than mentioned. **M21 and M22 are unblocked** — M19 rebuilt the ground they stand
+on and M20 has now proved the pattern twice. M23 is a refactor with no behaviour change, which makes
+it the safest thing on this list to hand to a cold session.
 
 ### M21 — structures, and guards that belong somewhere
 
@@ -481,8 +503,14 @@ list to hand to a cold session.
   player meets one to three at a time on a route rather than four at once in a fight. The sanctuary
   rule is not up for negotiation without Tom saying so
 - **abandoned buildings and towers** where the mission fiction supports them, especially around the
-  turrets. Note that M19 gives a free precedent: a boulder is raised into the heightmap and collides
-  for nothing, and a tower can be built the same way
+  turrets. Note that M19 and M20 give a free precedent twice over: a boulder and a serac are both
+  raised into the heightmap and collide for nothing, and a tower can be built the same way. Put any
+  new raising pass *before* the crest re-sync in the terrain constructor, not after it
+- **a single-pad mission has no unwatched way in.** M20's audit found `europa-2` and `europa-4` shot
+  at on 20/20 seeds on the safe route, because with one pad the sanctuary *is* the prize.
+  `sanctuaryClear` passes correctly — it measures the pad and the column above it, not the crossing
+  — and every flight survives, but two of fifteen missions cannot keep the promise the other
+  thirteen do. This is the milestone that places machines, so it belongs here
 - re-run the encounter audit either side
 
 ### M22 — ore you can read
@@ -532,14 +560,19 @@ that needs none of the conversation that produced this plan.
 
 **The first prompt for a new session:**
 
-> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then the M18 and M19 sections of
-> `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything. Then implement M20.
+> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then the M19 and M20 sections of
+> `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything. Then implement M21.
 
 That shape matters more than the wording: read the state, then *measure* the state, then build. Every
 milestone in this project that went well started from a number, and both of the ones that went badly
-started from an assumption. Swap M20 for whichever milestone is next.
+started from an assumption. Swap M21 for whichever milestone is next.
 
-This session ran M15 through M19 plus the import fix. The reading order, in full:
+M20 is the cleanest example so far. The complaint was "Europa still has smooth basins", and the
+first thing done about it was to measure every chapter's surface — Europa came out the *smoothest*
+in the game, which turned a matter of taste into a target. Everything after that was arithmetic.
+
+This session ran M20. The one before it ran M15 through M19 plus the import fix. The reading order,
+in full:
 
 1. **this file** — what is done, what is next, and the decisions behind both
 2. **`docs/ARCHITECTURE.md`** — what each module owns, which way the imports point, and the
@@ -559,8 +592,9 @@ command tells you both that the game still works and what a player currently mee
 - **The way-home gate samples six seeds**, which is ±4 points of noise at current margins. It read
   79–84 out of 90 across settings that all measure 94–95% at twenty seeds. Do not tune against it;
   measure at twenty and use it only as a gate.
-- **Three tests were passing for the wrong reason** and M19 found all three. If a test survives a
-  large change untouched, that is worth a second look rather than relief.
+- **Three tests were passing for the wrong reason** and M19 found all three; M20's new tests found a
+  live bug in the code they were written against on their first run. If a test survives a large
+  change untouched, that is worth a second look rather than relief.
 - **The macOS self-test is the only thing that catches bundling faults.** Run `./macos/build.sh`
   before calling any milestone done. It has now caught four, most recently a module-level read of an
   imported config object that throws in the single-file build and nowhere else.
@@ -572,6 +606,14 @@ command tells you both that the game still works and what a player currently mee
   he still wants more weather, that is a human playtest decision, not a bigger number.
 - He asked for terrain three times bumpier and got 2.2×, with the reason recorded: raising `relief`
   was cancelled by the fit clamp, and the real lever was the world's vertical budget.
+- **Europa is icy now, and it stopped where the other bodies are** rather than becoming the roughest.
+  40.1% of its surface is steeper than 30°, against Luna's 38.5% and Mars' 40.0%. A blunter blade
+  reached 45.5% for the same cost in landings, so the sharper one was kept — but if he wants Europa
+  to be the *hardest* ground rather than the most distinctive, that is one number in `ICE`.
+- **`europa-3 RADIATION PASS` deep route is 5/20** since the ice went in, and the cause is measured:
+  the test pilot flies into blades because it has no terrain lookahead. A human reads a 100 px spike
+  from 700 px away. How much better a person does is the same open question the landing bands wait
+  on, and it is worth a playtest before anything is tuned down.
 - The clicking noise he reported is **not confirmed fixed**. Instrumentation found no repeated audio
   triggers while a key was held; the change made was to stop `audio.engines` writing 240 automation
   events a second, which is the likeliest cause rather than a diagnosis.

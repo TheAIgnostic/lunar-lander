@@ -534,7 +534,6 @@ function onLand() {
     hullLost: ship.hullMax > 0 ? (ship.hullMax - ship.hull) / ship.hullMax : 0,
     abilityUses: g.abilities ? g.abilities.used : 0,
     radiation: ship.statusLevels ? ship.statusLevels.radiation : 0,
-    brokePad: !!(ship.landingResult && ship.landingResult.brokePad),
     cargoTaken: g.terrain.cargoTaken,
   });
   g.lastObjective = objective;

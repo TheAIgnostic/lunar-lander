@@ -126,6 +126,11 @@ function shade(hex, amt) {
   return `rgb(${r},${g},${b})`;
 }
 
+/** The same, with an alpha - so a raised shape can fade into the ground body. */
+function shadeA(hex, amt, a) {
+  return shade(hex, amt).replace('rgb(', 'rgba(').replace(')', `,${a})`);
+}
+
 export function drawTerrain(ctx, cam, W, H, terrain, level, time, opts = {}) {
   const w = WORLDS[level.world];
   const half = W / 2 / cam.scale;
@@ -198,19 +203,32 @@ export function drawTerrain(ctx, cam, W, H, terrain, level, time, opts = {}) {
       if (b.x + b.r < x0 - 40 || b.x - b.r > x1 + 40) continue;
       const j1 = Math.max(0, Math.floor((b.x - b.r) / terrain.step));
       const j2 = Math.min(terrain.n - 1, Math.ceil((b.x + b.r) / terrain.step));
-      const skirt = b.top + b.rise * 0.55;      // where the rock meets the ground
+      // Closed *below* the ground, not across the rock at a fixed skirt height.
+      // A skirt only meets the surface on level ground: on a slope the closing
+      // edge hangs in the air, and M20's ice - which is far steeper than
+      // anything M19 measured this on - drew it as a visible box beside every
+      // boulder on a hillside.
+      const skirt = Math.max(terrain.h[j1], terrain.h[j2]) + 40;
       ctx.beginPath();
-      ctx.moveTo(j1 * terrain.step, skirt);
+      ctx.moveTo(j1 * terrain.step, terrain.h[j1]);
       for (let j = j1; j <= j2; j++) ctx.lineTo(j * terrain.step, terrain.h[j]);
       ctx.lineTo(j2 * terrain.step, skirt);
+      ctx.lineTo(j1 * terrain.step, skirt);
       ctx.closePath();
-      const bg = ctx.createLinearGradient(0, b.top, 0, skirt);
+      const bg = ctx.createLinearGradient(0, b.top, 0, b.top + b.rise);
       bg.addColorStop(0, shade(w.hill, 0.5));
-      bg.addColorStop(1, shade(w.hill, 0.16));
+      bg.addColorStop(0.75, shadeA(w.hill, 0.16, 0.95));
+      bg.addColorStop(1, shadeA(w.hill, 0.16, 0));
       ctx.fillStyle = bg;
       ctx.fill();
       ctx.strokeStyle = shade(w.hill, 0.85);
       ctx.lineWidth = 1.3 / cam.scale + 0.35;
+      ctx.beginPath();
+      for (let j = j1; j <= j2; j++) {
+        const x = j * terrain.step;
+        if (j === j1) ctx.moveTo(x, terrain.h[j]);
+        else ctx.lineTo(x, terrain.h[j]);
+      }
       ctx.stroke();
       // A crack or two, so the bigger ones have some texture at range.
       if (b.r > 34) {
@@ -222,6 +240,73 @@ export function drawTerrain(ctx, cam, W, H, terrain, level, time, opts = {}) {
         ctx.stroke();
         ctx.globalAlpha = 1;
       }
+    }
+    ctx.restore();
+  }
+
+  // Ice, when the body has any.
+  //
+  // Both of these are *in* the heightmap, so what is drawn traces `terrain.h`
+  // rather than approximating it: the spike you fly around on screen is the one
+  // the hull points test against. Seams first, since a serac may stand on one.
+  if (terrain.surface === 'ice') {
+    ctx.save();
+    for (const s of terrain.seams || []) {
+      if (s.x < x0 - 40 || s.x > x1 + 40) continue;
+      const i = clamp(Math.round(s.x / terrain.step), 1, terrain.n - 1);
+      const a = terrain.h[i - 1];
+      const b = terrain.h[i];
+      const top = Math.min(a, b);
+      const bottom = Math.max(a, b);
+      // The crack running on down into the shell, fading out rather than
+      // ending, because nobody has seen the bottom of one.
+      const depth = 30 + Math.abs(s.drop) * 1.8;
+      const cg = ctx.createLinearGradient(0, bottom, 0, bottom + depth);
+      cg.addColorStop(0, 'rgba(5,14,22,0.95)');
+      cg.addColorStop(1, 'rgba(5,14,22,0)');
+      ctx.fillStyle = cg;
+      ctx.fillRect(s.x - 2.5, bottom, 5, depth);
+      // The lit face of the upper plate.
+      ctx.strokeStyle = 'rgba(190,242,255,0.7)';
+      ctx.lineWidth = 1.6 / cam.scale + 0.4;
+      ctx.beginPath();
+      ctx.moveTo(s.x, top);
+      ctx.lineTo(s.x, bottom);
+      ctx.stroke();
+    }
+    for (const s of terrain.seracs || []) {
+      if (s.x + s.r < x0 - 40 || s.x - s.r > x1 + 40) continue;
+      const j1 = Math.max(0, Math.floor((s.x - s.r) / terrain.step));
+      const j2 = Math.min(terrain.n - 1, Math.ceil((s.x + s.r) / terrain.step));
+      // Close the fill *below* the ground rather than across the blade: the
+      // profile already returns to the surrounding surface at both feet, so a
+      // skirt drawn at any other height hangs in the air.
+      const foot = Math.max(terrain.h[j1], terrain.h[j2]) + 40;
+      ctx.beginPath();
+      ctx.moveTo(j1 * terrain.step, terrain.h[j1]);
+      for (let j = j1; j <= j2; j++) ctx.lineTo(j * terrain.step, terrain.h[j]);
+      ctx.lineTo(j2 * terrain.step, foot);
+      ctx.lineTo(j1 * terrain.step, foot);
+      ctx.closePath();
+      // Fading to nothing at the foot is what makes a blade grow *out of* the
+      // ground: an opaque fill leaves the closing rectangle visible against the
+      // ground body, which is darker down there than any shade of the surface.
+      const sg = ctx.createLinearGradient(0, s.top, 0, s.top + s.rise);
+      sg.addColorStop(0, 'rgba(186,236,255,0.85)');
+      sg.addColorStop(0.35, shadeA(w.hill, 0.55, 0.95));
+      sg.addColorStop(1, shadeA(w.hill, 0.1, 0));
+      ctx.fillStyle = sg;
+      ctx.fill();
+      // Only the silhouette is stroked - the closing edge is underground.
+      ctx.strokeStyle = 'rgba(206,248,255,0.75)';
+      ctx.lineWidth = 1.2 / cam.scale + 0.3;
+      ctx.beginPath();
+      for (let j = j1; j <= j2; j++) {
+        const x = j * terrain.step;
+        if (j === j1) ctx.moveTo(x, terrain.h[j]);
+        else ctx.lineTo(x, terrain.h[j]);
+      }
+      ctx.stroke();
     }
     ctx.restore();
   }
@@ -297,10 +382,6 @@ export function drawTerrain(ctx, cam, W, H, terrain, level, time, opts = {}) {
     ctx.font = `700 ${18}px ${FONT}`;
     ctx.textAlign = 'center';
     ctx.fillText(p.used ? 'SECURED' : `x${p.mult}`, (p.x1 + p.x2) / 2, p.y - 44);
-    if (p.fragile && !p.used) {
-      ctx.font = `600 11px ${FONT}`;
-      ctx.fillText(`ICE · max ${(p.fragile / 6).toFixed(1)} m/s`, (p.x1 + p.x2) / 2, p.y - 28);
-    }
     ctx.restore();
   }
 

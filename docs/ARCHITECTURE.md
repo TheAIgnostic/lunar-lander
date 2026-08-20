@@ -12,11 +12,11 @@ Everything under `src/` is a plain ES module, loaded directly in the browser and
 | `src/main.js` | state machine, camera, run loop, every overlay screen, persistence glue | — |
 | `src/ship.js` | integration, collision, the touchdown settling window, hull, per-run spec | — |
 | `src/landing.js` | severity score, band thresholds, gear tier, every landing constant | M1 |
-| `src/terrain.js` | heightmap, the entry, distance-banded pads, the fuel road, cargo, deposits, the cave mouth, boulders raised into the ground | —/M14/M15/M19 |
+| `src/terrain.js` | heightmap, the entry, distance-banded pads, the fuel road, cargo, deposits, the cave mouth, boulders and ice raised into the ground | —/M14/M15/M19/M20 |
 | `src/archetypes.js` | 7 macro silhouettes and their landing-zone anchors | M2 |
 | `src/spawn.js` | the starting position and momentum rule (the terrain owns the entry since M14) | M3/M14 |
 | `src/validate.js` | structural mission checks: spawn clearance, approach corridors, delta-v bound | M3 |
-| `src/planets.js` | 10 PlanetDefinitions and the gravity mapping | M4/M5 |
+| `src/planets.js` | 10 PlanetDefinitions, the gravity mapping, and what the ground is made of | M4/M5/M20 |
 | `src/planeticons.js` | one icon per body, for the route screen | M17 |
 | `src/missions.js` | authored Moon/Mars/Europa chapters, survey-chapter generator, `chapterFor` | M4-M9 |
 | `src/forces.js` | force/status interface: atmosphere, dust, wind channels, thermal, cryo, plumes, radiation | M5-M7 |
@@ -45,6 +45,16 @@ swapping two entries in a mission's `pads` array moves them across the map. Rewa
 (`padTier` into `missionReward`), the fuel road is a line of cells from the entry to the deep zone,
 and enemies are placed around the prize rather than scattered. The near zone is always reachable on
 the starting tank; the deep one is deliberately not.
+
+**What is raised into the ground, and the one ordering rule it has.** A boulder (M19) and Europa's
+ice (M20) are not drawn on top of the heightmap, they are *in* it: the same three hull points and
+two feet already test against the ground, so collision is exact and free, and everything placed
+afterwards — the fuel road, the cargo, the ore clearances, line of sight, the corridor validator —
+sees the real surface. Each pass runs on its own seed stream derived from the seed rather than
+drawn from the shared `rng`, so adding one cannot shuffle the pads or the road. The rule: a raising
+pass records the crest it produced, and **a later pass can invalidate it**, so every crest is
+re-derived once in the constructor after all of them. Any new raising pass goes before that line.
+`PlanetDefinition.terrainStyle` is how a body asks for ice — content, not a branch in the generator.
 
 **The rule that holds accessibility honest:** every accessibility setting changes *presentation*
 only — shake, flashing, instrument size, contrast and key bindings never reach the simulation.
@@ -77,7 +87,9 @@ enough to a fuel cell to be swept up with it. `validate.js` enforces all four, w
 and the 420 px column above it — outside every machine's engagement range. `placeEnemies` and
 `validateEnemies` measure against the same points (`sanctuaryGates`), so the rule cannot drift
 between what is generated and what is checked. That is what makes "a weapon is never required" a
-statement about geometry rather than about skill.
+statement about geometry rather than about skill. Note what it does *not* cover: the crossing. On a
+mission with a single pad the sanctuary is also the prize, so the route in is watched even though
+the pad is not — `europa-2` and `europa-4` are fired on across every seed, and survive every time.
 
 **The rule that holds the upgrade system together:** components, skills and the equipped passive are
 *derived* into a per-run ship spec at mission start (`deriveFull` then `ship.applyLoadout`). The
@@ -149,6 +161,10 @@ game or the pilot changes. Improving the pilot should move the second and leave 
   restarting on a new port every time.
 - **Screenshots misreport at emulated viewport sizes.** If one looks half-painted, re-issue
   `resize_window` (nudge the height by 1 px) and shoot again.
+- **A raised shape must close its fill below the ground, not across itself.** Closing the path at a
+  fixed height meets the surface only on level ground; on a slope the closing edge floats and draws
+  a visible box. This shipped in M19 and stayed invisible until M20's ice made the ground steep
+  enough to expose it. Trace the heightmap, close underneath it, and stroke only the silhouette.
 - **The macOS self-test is the bundling canary.** It has caught a duplicate `const` across modules, a
   module missing from the bundler list, a namespace import that vanished from the bundle, and (M15)
   a module-level `const X = SOME_IMPORT.field` that throws "cannot access before initialization"
@@ -164,6 +180,7 @@ game or the pilot changes. Improving the pilot should move the second and leave 
 1. `ROADMAP_STATUS.md` — what is done, what is next, and the decisions behind both.
 2. This file — what each module owns and the rules that hold the design together.
 3. `test/BASELINE.md` — the measurements, milestone by milestone, ending with the encounter audit.
+   The M19 and M20 sections are the two that record *where the wall is* for terrain.
 
 Then **measure before editing**: `./test/run-all.sh 20` for the suites, and the encounter audit
 described at the end of `test/BASELINE.md` for what a player actually meets in the world. Every
@@ -186,6 +203,9 @@ The MVP is complete and measured (`test/BASELINE.md`, M13 section). What the nex
   recorded data is an autopilot, which is not a proxy for a person.
 - **Moving landing platforms** are still deferred (Europa 5, Io 5): `padAt` and the landing check
   would have to become time-aware.
+- **Three ice bodies still fly rock.** Enceladus, Pluto and Ganymede have no `terrainStyle` set, so
+  they generate the same ground Luna does. That is one line each when their chapters are authored;
+  it was left alone in M20 because those bodies still fly generated surveys.
 - **Mission fuel budgets have not been re-authored** since the map grew, and M15 gave the gap a
   number: taking the deposits that lie on the fuel road is comfortable (236/300 landings, 27–55%
   left), but sweeping every deposit lands 156/300 and 0/20 on `mars-2` and `europa-4`. Written for a
