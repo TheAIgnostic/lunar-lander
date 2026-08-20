@@ -12,21 +12,37 @@ const path = require('path');
 const root = __dirname;
 const dist = path.join(root, 'dist');
 
-// Dependency order: every module must appear after everything it imports.
-const MODULES = [
-  'util.js', 'audio.js', 'input.js', 'levels.js',
-  'archetypes.js', 'planets.js', 'planeticons.js', 'forces.js', 'objectives.js', 'missions.js', 'terrain.js', 'spawn.js', 'enemies.js', 'validate.js', 'save.js', 'economy.js', 'route.js', 'components.js', 'skills.js', 'modules.js', 'abilities.js', 'particles.js', 'landing.js', 'ship.js', 'debug.js', 'render.js', 'main.js',
-];
-
-// A module added to src/ but not listed above would simply vanish from the
-// bundle, so refuse to build instead.
+// Dependency order, derived from the import graph rather than hand-written.
+//
+// The hand-kept list caught real faults (M8's vanished namespace import, M15's
+// load-order crash) but was itself a trip hazard: M17 hit it, and a module
+// added to src/ but left off the list simply vanished from the bundle. Every
+// file on disk is bundled now, sorted so each appears after everything it
+// imports, and a cycle - which module concatenation cannot express and the
+// architecture forbids anyway - fails the build loudly.
 const onDisk = fs.readdirSync(path.join(root, 'src')).filter((f) => f.endsWith('.js')).sort();
-const missing = onDisk.filter((f) => !MODULES.includes(f));
-if (missing.length) {
-  console.error(`\nBUILD FAILED: src/${missing.join(', src/')} not listed in MODULES.\n` +
-    `Add it in dependency order (after everything it imports).\n`);
-  process.exit(1);
+const IMPORT_FROM_RE = /^import[\s\S]*?from\s+['"]\.\/([\w-]+\.js)['"]/gm;
+const deps = {};
+for (const name of onDisk) {
+  const src = fs.readFileSync(path.join(root, 'src', name), 'utf8');
+  deps[name] = [...src.matchAll(IMPORT_FROM_RE)].map((m) => m[1])
+    .filter((f) => onDisk.includes(f));
 }
+const MODULES = [];
+const state = {};                         // undefined -> visiting -> done
+function visit(name, chain) {
+  if (state[name] === 'done') return;
+  if (state[name] === 'visiting') {
+    console.error(`\nBUILD FAILED: import cycle ${[...chain, name].join(' -> ')}\n` +
+      `Module concatenation cannot express a cycle, and the dependency graph is meant to be a DAG.\n`);
+    process.exit(1);
+  }
+  state[name] = 'visiting';
+  for (const d of deps[name]) visit(d, [...chain, name]);
+  state[name] = 'done';
+  MODULES.push(name);
+}
+for (const name of onDisk) visit(name, []);
 
 // `import * as X from './y.js'` has no meaning once every module shares one
 // scope, so each namespace object is rebuilt from that module's exports. This

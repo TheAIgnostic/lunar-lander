@@ -1334,3 +1334,90 @@ collecting as much as the glide-line rule did**. Seam crates are unchanged at a 
 The flight fixture did not move at all, which is the right answer: the pilot only detours for ore
 when it is told to, so a change to where the ore hangs cannot move a flight that was never going
 there.
+
+---
+
+## M23 — the cleanup (2026-08-20)
+
+A refactor with no behaviour change, executed in the order the M23 plan prescribed and proved the
+way it prescribed: **both fixtures byte-identical**, the full suite green, and a scripted playtest
+of the running game at every seam.
+
+### What moved
+
+Two files carried 39% of the codebase. `main.js` was loop glue plus a 492-line `screenHTML` over
+42 screens plus a 220-line `act()`; `render.js` was every draw call in the game in one file.
+
+| | before | after |
+| --- | ---: | ---: |
+| `main.js` | 1,866 | **942** — the loop, the outcomes, the wiring |
+| `render.js` | 1,892 | **992** — the world: backdrop, terrain, ship, beacons |
+| `state.js` | — | 96 — `g`, `meta`, `store`, `settings`, the device singletons |
+| `screens.js` | — | 656 — every overlay screen, as HTML |
+| `actions.js` | — | 244 — the dispatch: what every button does |
+| `drawkit.js` | — | 80 — palette, type, `throb`, tint helpers, HUD panels |
+| `enemydraw.js` | — | 327 — machines, telegraphs, wrecks, shots, laser, shield |
+| `hud.js` | — | 524 — the instruments |
+
+33 modules, **26 importing three things or fewer**, and the graph is still a DAG — enforced now
+rather than promised, because the bundler fails on a cycle.
+
+### The state moved first, and that is why the rest was cheap
+
+`screenHTML` closed over 26 module-scope bindings. Moving the screens without moving the state
+would have meant threading a 26-field context object through everything — the plan called this the
+expensive part, and it was: the extraction itself is `state.js`, 96 lines, and after it the screens
+and the dispatch simply followed their bindings out.
+
+`meta` is the one binding that is *reassigned* (banking a run replaces it), and an ES import cannot
+assign to what it imports — so writers go through `setMeta` and readers get the live binding. The
+playtest verified the live binding across modules: equipping a module through `act()` in
+`actions.js` was read back changed from `state.js`.
+
+### The dispatch is a leaf, not a hub
+
+`act()` needs eight verbs that belong to the loop — `startLevel`, `launch`, `beginExpedition`,
+`resumeExpedition`, `persistRun`, `setState`, `toast`, `renderOverlay` — and importing them back
+from main would put a cycle in the graph. Main injects them once at startup (`wireFlow`), so main
+knows about actions and actions never knows about main.
+
+### The render split pays before the roster grows
+
+`drawkit.js` exists because the bundle is one scope: a colour token can only be *declared* once, so
+the shared vocabulary had to live somewhere all three drawing modules could import it from.
+`enemydraw.js` is the seam that matters for what comes next — six enemy designs are still owed, and
+each is now an `ENEMY_TYPES` entry plus a draw function in a 327-line file rather than in a
+1,900-line one.
+
+### The bundler derives its order now
+
+The hand-kept `MODULES` list caught real faults (M8, M15) but was itself a trip hazard (M17), and a
+file missing from it silently vanished from the bundle. The order is a topological sort of the
+import graph now: every file on disk is bundled, each after everything it imports, and a cycle
+fails the build loudly. The duplicate-declaration guard and the self-test both stay. This step ran
+*first*, out of the plan's order, so the five new modules never needed hand-listing.
+
+### What the surgery cost, honestly
+
+The line-based extraction broke braces in three places — a `throb` cut one line short, an orphan
+`}` carried into `drawkit`, `drawHangarShip` left unclosed — and produced three phantom imports
+from prose ("Terrain is cover", "final approach") plus two real missing ones (`ENVELOPE`, `WORLDS`
+in `hud.js`). **The bundle build caught none of them** — one shared scope hides missing imports by
+construction. Real ES module loading caught every one: node import for syntax, the browser for
+bindings. The lesson stands for the next refactor: the bundle canary proves load order and name
+collisions, only the module loader proves the imports.
+
+### The playtest
+
+Scripted against the running game, all through the new boundaries: the single-file bundle boots on
+the derived order; every menu screen renders with content; the classic twelve flown to VICTORY
+through the real loop; the LUNA and EUROPA chapters flown as expeditions with hauls banked;
+equip/skills/hangar exercised through `act()`; `uiScale` and `highContrast` reach the DOM through
+`saveSettings`; pause via the real P-key path and resume; the keys screen; a combat mission drawing
+machines, telegraphs, HUD, crates, seracs and a hab in one frame. **Zero console errors across the
+entire pass.**
+
+### What did not move
+
+Both fixtures, byte-for-byte — which is the entire claim. Physics, terrain, enemies, economy,
+missions: untouched. Every number in the M20–M22 sections still stands.

@@ -526,6 +526,32 @@ scheduled until the MVP is stable — the spec says the same.
   - the flight fixture did not move at all, which is the right answer: the pilot only detours for ore
     when told to, so where the ore hangs cannot move a flight that was never going there
 
+- [x] **M23 — the cleanup** (this commit)
+  - executed in the plan's own order, and the plan's own warning held: **the state was the expensive
+    part**. `screenHTML` closed over 26 module-scope bindings; `state.js` (96 lines) moved them
+    once, and the screens and the dispatch simply followed their bindings out
+  - `main.js` 1,866 → **942** (the loop, the outcomes, the wiring); `render.js` 1,892 → **992**
+    (the world). New: `state.js`, `screens.js` (656), `actions.js` (244), `drawkit.js` (80),
+    `enemydraw.js` (327), `hud.js` (524). 33 modules, 26 importing three things or fewer
+  - `meta` is reassigned when a run banks, and an ES import cannot assign to what it imports:
+    writers go through `setMeta`, readers get the live binding — verified live across modules in
+    the playtest
+  - `act()` needs eight loop verbs, and importing them back from main would be a cycle: main
+    injects them once at startup (`wireFlow`), so the dispatch stays a leaf
+  - `drawkit.js` exists because the bundle is one scope — a colour token can only be declared once.
+    `enemydraw.js` is the seam that pays next: six enemy designs are still owed, each now a draw
+    function in a 327-line file rather than a 1,900-line one
+  - **the bundler derives its module order** from the import graph (topological sort, loud failure
+    on a cycle); the hand-kept list had caught real faults but was itself the M17 trip hazard. Run
+    first, out of plan order, so the five new modules never needed hand-listing
+  - the surgery broke three braces and invented three imports from prose, and **the bundle build
+    caught none of it** — one shared scope hides missing imports by construction. Real ES module
+    loading caught every one. Recorded in the baseline as a rule for the next refactor
+  - proved as prescribed: **both fixtures byte-identical**, full suite green, and a scripted
+    playtest through every new boundary — classic campaign to VICTORY, two expedition chapters
+    banked, hangar/skills/equip, settings to the DOM, pause and rebind, combat drawn — zero
+    console errors
+
 ## Decisions (Tom, 2026-08-16)
 
 1. **Gravity** — compressed mapping is the *baseline*, then a per-body hand-tuned offset so each
@@ -543,9 +569,18 @@ None.
 
 ## Next task
 
-**Tom's playtest list is done.** M20, M21 and M22 covered every item on it. What remains is the
-cleanup, which is now overdue enough to be scheduled rather than mentioned — and being a refactor
-with no behaviour change, it is the safest thing on this list to hand to a cold session.
+**Tom's playtest list is done** (M20–M22), **and so is the cleanup** (M23). Nothing is currently
+scheduled. The natural next milestones, in the spec's own production order (section 16, Phase 7):
+
+- **Titan and Enceladus chapters** — five authored missions each, replacing their generated survey
+  chapters; atmosphere and plume contrast. `src/missions.js` is where authored content goes.
+- **The remaining six enemy designs** — each is an `ENEMY_TYPES` entry plus a draw function in
+  `enemydraw.js` (327 lines, split in M23 for exactly this), plus a line in
+  `PlanetDefinition.eligibleEnemySets`.
+- **Moving landing platforms** (Europa 5, Io 5) — a structural change: `padAt` and the landing
+  check become time-aware.
+- **Landing-band tuning and the fuel budgets** — both wait on human playtest data, recorded as
+  such since M13 and M15.
 
 ### M21 — structures, and guards that belong somewhere
 
@@ -565,9 +600,9 @@ with no behaviour change, it is the safest thing on this list to hand to a cold 
   thirteen do. This is the milestone that places machines, so it belongs here
 - re-run the encounter audit either side
 
-### M23 — the cleanup
+### M23 — the cleanup (done, this commit; plan kept for the record)
 
-Not urgent, and deliberately scheduled rather than done piecemeal. Measured 2026-08-20:
+Measured 2026-08-20, before the work:
 
 **The architecture is holding.** 9,187 lines over 26 modules, the dependency graph is a clean DAG,
 and **24 of 26 modules import three things or fewer**. The data-driven layers keep proving
@@ -606,12 +641,13 @@ that needs none of the conversation that produced this plan.
 
 **The first prompt for a new session:**
 
-> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then the M21 and M22 sections of
-> `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything. Then implement M23.
+> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then the M21–M23 sections of
+> `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything. Then build the next
+> milestone Tom picks — the candidates are listed under "Next task".
 
 That shape matters more than the wording: read the state, then *measure* the state, then build. Every
 milestone in this project that went well started from a number, and both of the ones that went badly
-started from an assumption. Swap M23 for whichever milestone is next.
+started from an assumption.
 
 M20 is the cleanest example so far. The complaint was "Europa still has smooth basins", and the
 first thing done about it was to measure every chapter's surface — Europa came out the *smoothest*

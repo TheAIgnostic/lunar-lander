@@ -9,7 +9,10 @@ Everything under `src/` is a plain ES module, loaded directly in the browser and
 
 | File | Owns | Added |
 | --- | --- | --- |
-| `src/main.js` | state machine, camera, run loop, every overlay screen, persistence glue | — |
+| `src/main.js` | the loop: state machine, camera, simulation stepping, outcomes, wiring | —/M23 |
+| `src/state.js` | the shared mutable state: `g`, `meta` (+`setMeta`), `store`, `settings`, the device singletons | M23 |
+| `src/screens.js` | every overlay screen, as HTML; presentation only | M23 |
+| `src/actions.js` | the dispatch: what every button and key command does | M23 |
 | `src/ship.js` | integration, collision, the touchdown settling window, hull, per-run spec | — |
 | `src/landing.js` | severity score, band thresholds, gear tier, every landing constant | M1 |
 | `src/terrain.js` | heightmap, the entry, distance-banded pads, the fuel road, cargo, deposits, the cave mouth, boulders and ice raised into the ground | —/M14/M15/M19/M20 |
@@ -29,7 +32,10 @@ Everything under `src/` is a plain ES module, loaded directly in the browser and
 | `src/enemies.js` | enemy roster, placement around the prize, telegraphs, projectiles, damage, rewards | M12/M14 |
 | `src/objectives.js` | the optional objectives: conditions judged at touchdown, and six cargo recoveries | M14/M15 |
 | `src/abilities.js` | the active-module runtime: charges, duration, cooldown, effects | M12 |
-| `src/render.js` | background, world, ship, dust, pad and material beacons, enemies, hangar ship, HUD | —/M12/M15 |
+| `src/render.js` | the world: background, terrain, ship, dust, beacons, trajectory, hangar ship | —/M12/M15/M23 |
+| `src/drawkit.js` | the shared drawing vocabulary: palette, type, `throb`, tint helpers, HUD panels | M23 |
+| `src/enemydraw.js` | machines, telegraphs, wrecks, shots, the laser and the shield | M23 |
+| `src/hud.js` | the instruments: HUD, pointers, panels, gauges | M23 |
 | `src/debug.js` | F3 telemetry overlay, F4 landing-envelope bars, F5 enemy ranges | M0/M12 |
 | `src/particles.js` | pooled particles, debris, rings, floating text | — |
 | `src/audio.js` | synthesized engines, impacts, chimes | — |
@@ -67,11 +73,19 @@ only — shake, flashing, instrument size, contrast and key bindings never reach
 `test/settings-tests.js` flies the same mission with all of them changed and asserts the result is
 byte-identical, so a player who needs the motion turned off is flying the same game as everyone else.
 
-**Which way the imports point.** The graph is a DAG and it is meant to stay one: `util` at the
-bottom, then leaves (`planets`, `skills`, `modules`, `objectives`, `forces`, `input`, `levels`,
-`planeticons`), then `landing` / `spawn` / `economy` / `archetypes` / `save` / `audio`, then `ship`,
-`terrain` and `enemies`, then `render`, then `main`. **24 of 26 modules import three things or
-fewer.**
+**Which way the imports point.** The graph is a DAG and since M23 that is *enforced*: the bundler
+derives its emit order from a topological sort of the import graph and fails loudly on a cycle.
+`util` at the bottom, then the leaves, then `ship` / `terrain` / `enemies`, then the drawing layer
+(`drawkit` under `render` / `enemydraw` / `hud`), then `state`, then `screens` and `actions`, then
+`main`. **26 of 33 modules import three things or fewer.**
+
+Two M23 rules worth knowing before touching the UI layer:
+
+- **`meta` is reassigned** when a run banks, and an ES import cannot assign to what it imports —
+  so `state.js` exports `setMeta` and every reader gets the live binding.
+- **`actions.js` is a leaf.** `act()` needs eight verbs that belong to the loop (`startLevel`,
+  `launch`, `setState`, …), and importing them from main would be a cycle: main injects them once
+  at startup through `wireFlow`. Add a new flow verb there, not as an import.
 
 The rule that keeps it that way: **a generator may not import a concept.** `terrain.js` used to
 import `economy.js` and `objectives.js` so it could stamp a price and an objective onto the geometry
@@ -180,6 +194,11 @@ game or the pilot changes. Improving the pilot should move the second and leave 
   fixed height meets the surface only on level ground; on a slope the closing edge floats and draws
   a visible box. This shipped in M19 and stayed invisible until M20's ice made the ground steep
   enough to expose it. Trace the heightmap, close underneath it, and stroke only the silhouette.
+- **The bundle cannot catch a missing import.** It concatenates every module into one scope, so a
+  name that was never imported still resolves. M23's surgery produced two genuinely missing imports
+  and three phantom ones, and the bundle built clean through all five; real ES module loading (node
+  `import()` for syntax, the browser for bindings) caught every one. The bundle canary proves load
+  order and name collisions — only the module loader proves the imports.
 - **The macOS self-test is the bundling canary.** It has caught a duplicate `const` across modules, a
   module missing from the bundler list, a namespace import that vanished from the bundle, and (M15)
   a module-level `const X = SOME_IMPORT.field` that throws "cannot access before initialization"
