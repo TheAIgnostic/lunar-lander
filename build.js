@@ -62,7 +62,12 @@ for (const name of MODULES) {
   const src = fs.readFileSync(path.join(root, 'src', name), 'utf8');
   for (const m of src.matchAll(NAMESPACE_RE)) {
     const file = `${m[2]}.js`;
-    (namespaces[file] ||= []).push(m[1]);
+    // Deduplicate: two modules importing `* as Save` is one namespace object,
+    // not two `const Save` declarations in the bundle's single shared scope.
+    // The macOS self-test caught this the day a second module imported Save -
+    // its fifth bundling fault, and the second in the duplicate-const family.
+    (namespaces[file] ||= []);
+    if (!namespaces[file].includes(m[1])) namespaces[file].push(m[1]);
   }
 }
 

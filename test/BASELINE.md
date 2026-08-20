@@ -1407,6 +1407,13 @@ construction. Real ES module loading caught every one: node import for syntax, t
 bindings. The lesson stands for the next refactor: the bundle canary proves load order and name
 collisions, only the module loader proves the imports.
 
+And the canary then caught its **fifth** fault, right on cue: the bundler rebuilt each `import * as
+Save` namespace as a `const Save = {...}` once per *importing module*, which was fine for the three
+milestones in which exactly one module imported Save — and a duplicate-const crash the day
+`actions.js` became the second. Aliases are deduplicated per module now. Every check in
+`node build.js` passed over this, because the duplicate lived in *generated* code, past the
+declaration guard: only booting the bundle finds this class.
+
 ### The playtest
 
 Scripted against the running game, all through the new boundaries: the single-file bundle boots on

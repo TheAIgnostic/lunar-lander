@@ -200,9 +200,10 @@ game or the pilot changes. Improving the pilot should move the second and leave 
   `import()` for syntax, the browser for bindings) caught every one. The bundle canary proves load
   order and name collisions — only the module loader proves the imports.
 - **The macOS self-test is the bundling canary.** It has caught a duplicate `const` across modules, a
-  module missing from the bundler list, a namespace import that vanished from the bundle, and (M15)
+  module missing from the bundler list, a namespace import that vanished from the bundle, (M15)
   a module-level `const X = SOME_IMPORT.field` that throws "cannot access before initialization"
-  because the bundler emits that module first. Read imported config **inside** functions, not at
+  because the bundler emits that module first, and (M23) the same namespace rebuilt once per
+  importing module - a duplicate `const Save` the moment a second module imported it. Read imported config **inside** functions, not at
   module load. Run the self-test before calling any milestone done.
 - **...but run it *after* committing, not before.** `macos/build.sh` ad-hoc-signs and launches a
   fresh `.app`, and doing that revokes the agent's macOS TCC grant for `~/Desktop` — every read
