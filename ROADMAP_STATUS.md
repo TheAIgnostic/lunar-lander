@@ -528,6 +528,45 @@ Two files carry **39% of the codebase**, and that is the whole finding:
 `test/physics-fixture.js` and `test/flight-fixture.js` untouched, which is a complete verification
 that needs none of the conversation that produced this plan.
 
+### Handover
+
+This session ran M15 through M19 plus the import fix. Start a new one by reading, in order:
+
+1. **this file** — what is done, what is next, and the decisions behind both
+2. **`docs/ARCHITECTURE.md`** — what each module owns, which way the imports point, and the
+   environment gotchas that have each cost real time at least once
+3. **`test/BASELINE.md`**, the M18 and M19 sections — the hazard tuning and the terrain sweep, both
+   of which record *where the wall is* and not just where the setting landed
+
+Then **measure before editing**: `./test/run-all.sh 20`. It ends with the encounter audit, so one
+command tells you both that the game still works and what a player currently meets in it.
+
+**Four things worth knowing before touching anything:**
+
+- **The autopilot is the measuring instrument, and it is the weakest link in every difficulty
+  decision.** It has no terrain lookahead and it is a poor crosswind pilot. In M18 the number that
+  broke under stronger wind was the test pilot, not the mission, and M19 hit the same wall. When a
+  landing rate falls, establish which one moved before tuning anything.
+- **The way-home gate samples six seeds**, which is ±4 points of noise at current margins. It read
+  79–84 out of 90 across settings that all measure 94–95% at twenty seeds. Do not tune against it;
+  measure at twenty and use it only as a gate.
+- **Three tests were passing for the wrong reason** and M19 found all three. If a test survives a
+  large change untouched, that is worth a second look rather than relief.
+- **The macOS self-test is the only thing that catches bundling faults.** Run `./macos/build.sh`
+  before calling any milestone done. It has now caught four, most recently a module-level read of an
+  imported config object that throws in the single-file build and nowhere else.
+
+**Open with Tom:**
+
+- He asked for wind he can feel and got a modest increase, because more broke the way-home
+  guarantee *as the autopilot measures it*. The numbers and the wall are in `test/BASELINE.md`. If
+  he still wants more weather, that is a human playtest decision, not a bigger number.
+- He asked for terrain three times bumpier and got 2.2×, with the reason recorded: raising `relief`
+  was cancelled by the fit clamp, and the real lever was the world's vertical budget.
+- The clicking noise he reported is **not confirmed fixed**. Instrumentation found no repeated audio
+  triggers while a key was held; the change made was to stop `audio.engines` writing 240 automation
+  events a second, which is the likeliest cause rather than a diagnosis.
+
 ### Superseded
 
 **The MVP was complete at M13.** M0-M13 delivers everything section 18 asks for: Moon, Mars and Europa at 15
