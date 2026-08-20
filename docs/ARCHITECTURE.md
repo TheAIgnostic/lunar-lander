@@ -170,6 +170,14 @@ game or the pilot changes. Improving the pilot should move the second and leave 
   a module-level `const X = SOME_IMPORT.field` that throws "cannot access before initialization"
   because the bundler emits that module first. Read imported config **inside** functions, not at
   module load. Run the self-test before calling any milestone done.
+- **...but run it *after* committing, not before.** `macos/build.sh` ad-hoc-signs and launches a
+  fresh `.app`, and doing that revokes the agent's macOS TCC grant for `~/Desktop` — every read
+  under it returns `EPERM`, while `~/Documents` and the rest of the home directory keep working, so
+  it does not look like a permissions problem at first. Observed twice in M20, both times
+  immediately after that script, with hours of heavy file I/O working fine in between. Re-granting
+  in System Settings does not take effect until the app is **relaunched**, which is why the ordering
+  matters: the canary is the last gate before a milestone is done, and that is exactly the worst
+  moment to lose write access to the repo.
 - **Ratio-based performance checks measure the JIT.** The MVP regression compared the combat loop
   against a physics-only loop that runs after the whole mission sweep has warmed it; the denominator
   tracked warm-up history rather than cost. Measure the property you mean — for combat, cost *per

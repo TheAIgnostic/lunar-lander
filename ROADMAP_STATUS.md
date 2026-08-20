@@ -11,7 +11,9 @@ Working document for the roguelite expansion.
 - **Run everything:** `./test/run-all.sh 20`
 
 **Rule for every milestone:** ends with a playable build, a passing test pass, a commit, and this
-file updated. `main` stays untouched and playable throughout.
+file updated. `main` stays untouched and playable throughout. **Commit before running
+`macos/build.sh`** — it revokes the agent's Desktop access on this machine, and the fix needs an app
+relaunch; see the environment notes in `docs/ARCHITECTURE.md`.
 
 ---
 
