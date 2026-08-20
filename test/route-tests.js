@@ -1,111 +1,173 @@
 // Route eligibility and economy rules:  node test/route-tests.js
-import { eligibleBodies, routeOffers, routeChoices, isCheckpoint, isExpeditionComplete, MIN_OFFERS, nextPlanet, PLANET_ORDER, SECTORS, TIERS } from '../src/route.js';
+import { routeChoices, ladderTrail, planetCard, isCheckpoint, isExpeditionComplete, nextPlanet, PLANET_ORDER } from '../src/route.js';
+import { makeRng } from '../src/util.js';
 import { missionReward, addReward, settleHaul, bankHaul, freshHaul, CORE_PITY, DEBRIEF } from '../src/economy.js';
-import { PLANET_IDS } from '../src/planets.js';
+import { PLANET_IDS, PLANETS } from '../src/planets.js';
+import { chapterFor } from '../src/missions.js';
 
 let pass = 0, fail = 0;
 const check = (n, c, e = '') => { if (c) pass++; else { fail++; console.log(`  FAIL  ${n}  ${e}`); } };
 
 console.log('route and economy');
 
-// --- discovery tiers
-check('tier A only, at the start', eligibleBodies([]).every((b) => TIERS.A.includes(b)));
-check('tier B stays shut after one non-Moon chapter',
-  !eligibleBodies(['LUNA', 'MARS']).some((b) => TIERS.B.includes(b)));
-check('tier B opens after two non-Moon chapters',
-  eligibleBodies(['LUNA', 'MARS', 'EUROPA']).some((b) => TIERS.B.includes(b)));
-check('tier C stays shut before five chapters',
-  !eligibleBodies(['LUNA', 'MARS', 'EUROPA', 'TITAN']).some((b) => TIERS.C.includes(b)));
-check('tier C opens after five',
-  eligibleBodies(['LUNA', 'MARS', 'EUROPA', 'TITAN', 'ENCELADUS']).some((b) => TIERS.C.includes(b)));
-// A cleared body steps aside for anything unexplored, but comes back rather
-// than letting the route screen shrink below four cards.
-{
-  const thin = eligibleBodies(['LUNA', 'MARS']);
-  check('unexplored bodies come first', thin.slice(0, 3).every((b) => b !== 'MARS'), thin.join());
-  // A cleared body only comes back when the unexplored pool cannot fill the
-  // card slots. With two cards that needs the pool worn right down to one.
-  const worn = eligibleBodies(PLANET_IDS.filter((p) => p !== 'GANYMEDE'));
-  check('a cleared body returns only to fill the card slots',
-    worn[0] === 'GANYMEDE' && worn.length > 1, worn.join());
-  const wide = eligibleBodies(['LUNA', 'MARS', 'EUROPA']);
-  check('with enough unexplored bodies, cleared ones stay out',
-    !wide.includes('MARS') && !wide.includes('EUROPA'), wide.join());
-}
-check('the pool is never empty', eligibleBodies(PLANET_IDS).length > 0);
-
-// --- offers
-{
-  const offers = routeOffers(['LUNA'], 4242, 1);
-  check('two offers are made', offers.length === MIN_OFFERS, String(offers.length));
-  check('offers never repeat a body', new Set(offers.map((o) => o.planet)).size === offers.length);
-  check('offers carry what a decision needs',
-    offers.every((o) => o.gravity > 0 && o.rareMaterial && o.recommended.length && o.difficulty >= 1));
-  check('offers are deterministic from the seed',
-    JSON.stringify(routeOffers(['LUNA'], 4242, 1)) === JSON.stringify(offers));
-  check('a different seed offers differently',
-    JSON.stringify(routeOffers(['LUNA'], 99, 1)) !== JSON.stringify(offers));
-  check('offers are ordered easiest first',
-    offers.every((o, i) => i === 0 || offers[i - 1].difficulty <= o.difficulty));
-  check('some forecasts are incomplete, as designed',
-    [1, 7, 8, 42, 99, 1234, 5150].flatMap((sd) => routeOffers(['LUNA'], sd, 1)).some((o) => o.incomplete));
-  check('and some are complete, so incompleteness means something',
-    [1, 7, 8, 42, 99, 1234, 5150].flatMap((sd) => routeOffers(['LUNA'], sd, 1)).some((o) => !o.incomplete));
-}
-{
-  // near the end of the campaign there are fewer bodies than card slots
-  const nearlyDone = PLANET_IDS.filter((p) => p !== 'GANYMEDE');
-  const offers = routeOffers(nearlyDone, 1, 5);
-  check('offers never exceed the pool', offers.length >= 1 && offers.length <= MIN_OFFERS, String(offers.length));
-  check('offers still make a valid card', offers.every((o) => !!o.name));
-}
-
-// --- the ladder (M25)
+// --- discovery tiers: deleted with the machinery.
 //
-// These replace the old sector tests. An expedition used to run five sectors
-// with a checkpoint every second body; it is a linear three-body ladder now,
-// with a supply stop after every one. The property being protected is the same
-// - there is a place to spend, and there is an end - but both moved.
-check('the ladder is Moon, Mars, Europa in that order',
-  PLANET_ORDER.join(',') === 'LUNA,MARS,EUROPA');
-check('a fresh run starts at the Moon', nextPlanet([]) === 'LUNA');
-check('clearing the Moon points at Mars', nextPlanet(['LUNA']) === 'MARS');
-check('clearing Moon and Mars points at Europa', nextPlanet(['LUNA', 'MARS']) === 'EUROPA');
-check('the ladder ends after Europa', nextPlanet(['LUNA', 'MARS', 'EUROPA']) === null);
-check('an expedition is not complete part-way',
-  !isExpeditionComplete([]) && !isExpeditionComplete(['LUNA']) && !isExpeditionComplete(['LUNA', 'MARS']));
-check('and is complete once every body is cleared',
-  isExpeditionComplete(['LUNA', 'MARS', 'EUROPA']));
-check('order does not matter to completion', isExpeditionComplete(['EUROPA', 'LUNA', 'MARS']));
+// `TIERS`, `eligibleBodies`, `routeOffers`, `MIN_OFFERS` and `SECTORS` were
+// M9's forecast machinery, unwired since M25 and kept only because it was still
+// an open question whether the seven survey bodies would rejoin the route as a
+// tiered choice. M27 answered it - they join `PLANET_ORDER` - so the code and
+// the twenty-odd checks that covered it went with the answer. What replaces
+// them is the ladder section below.
 
-// The bug this milestone was reported for: salvage reaches `meta.banked` only
-// when a checkpoint banks the haul, so a checkpoint that does not fire after
-// the first body means a whole chapter's pay is unspendable.
-check('every body is a supply stop', isCheckpoint(1) && isCheckpoint(2) && isCheckpoint(3));
+// --- the ladder (M27)
+//
+// Ten bodies in one fixed order, Moon first and Venus last, and it never varies
+// between runs. These replace the M25 three-body checks: the property is the
+// same - there is an order, a place to spend, and an end - but all three moved.
+check('the ladder is ten bodies', PLANET_ORDER.length === 10, String(PLANET_ORDER.length));
+check('it starts at the Moon and ends at Venus',
+  PLANET_ORDER[0] === 'LUNA' && PLANET_ORDER[9] === 'VENUS', PLANET_ORDER.join(','));
+check('it is the difficulty-sorted order Tom set',
+  PLANET_ORDER.join(',') === 'LUNA,EUROPA,TITAN,MARS,ENCELADUS,GANYMEDE,IO,MERCURY,PLUTO,VENUS',
+  PLANET_ORDER.join(','));
+check('every body in the game is on it', new Set(PLANET_ORDER).size === PLANET_IDS.length
+  && PLANET_IDS.every((id) => PLANET_ORDER.includes(id)));
+
+// The blocker this milestone exists to clear: a hangar level costs salvage plus
+// a material only one body produces, and the three-body ladder put seven of the
+// ten out of reach. This is the check that the fix is structural rather than a
+// re-pointing of the costs - every material has a body on the route that makes
+// it.
+check('every rare material in the game is on the ladder',
+  PLANET_IDS.every((id) => PLANET_ORDER.some((b) => PLANETS[b].rareMaterial === PLANETS[id].rareMaterial)));
+
+check('a fresh run starts at the Moon', nextPlanet([]) === 'LUNA');
+check('clearing the Moon points at Europa', nextPlanet(['LUNA']) === 'EUROPA');
+check('the ladder walks in order, whatever order it is told about',
+  PLANET_ORDER.every((id, i) => nextPlanet(PLANET_ORDER.slice(0, i).reverse()) === id));
+check('the ladder ends after Venus', nextPlanet(PLANET_ORDER) === null);
+check('an expedition is not complete part-way',
+  PLANET_ORDER.slice(0, 9).every((_, i) => !isExpeditionComplete(PLANET_ORDER.slice(0, i + 1))));
+check('and is complete once every body is cleared', isExpeditionComplete(PLANET_ORDER));
+check('order does not matter to completion', isExpeditionComplete([...PLANET_ORDER].reverse()));
+
+// The bug M25 was reported for: salvage reaches `meta.banked` only when a
+// checkpoint banks the haul, so a checkpoint that does not fire after the first
+// body means a whole chapter's pay is unspendable.
+check('every body is a supply stop', PLANET_ORDER.every((_, i) => isCheckpoint(i + 1)));
 check('but not before one is cleared', !isCheckpoint(0));
 
-// --- what the route window offers
+// --- no replay (M27, Tom's decision 3)
+//
+// The route window offers the next body and nothing else. This is enforced by
+// what `routeChoices` returns rather than by the screen, because `route:N`
+// indexes that array: if a cleared body is never in it, there is no index that
+// reaches one.
 {
-  const first = routeChoices([], 1, 4242);
-  check('before anything is cleared it offers one card', first.length === 1);
-  check('...and that card is the Moon, marked as next',
-    first[0].planet === 'LUNA' && first[0].isNext && !first[0].cleared);
+  let ok = true, off = '';
+  for (let n = 0; n < PLANET_ORDER.length; n++) {
+    const cleared = PLANET_ORDER.slice(0, n);
+    const offers = routeChoices(cleared, n + 1, 4242);
+    if (offers.length !== 1 || !offers[0].isNext || offers[0].planet !== PLANET_ORDER[n]
+        || offers[0].cleared || cleared.includes(offers[0].planet)) {
+      ok = false; off = `${n} cleared -> ${offers.map((o) => o.planet).join()}`;
+    }
+  }
+  check('the route window offers exactly one body, and it is the next one', ok, off);
+  check('a cleared body is never offered again',
+    routeChoices(['LUNA'], 2, 4242).every((c) => c.planet !== 'LUNA'));
+  check('with the ladder finished nothing is offered',
+    routeChoices(PLANET_ORDER, 11, 4242).length === 0);
+  check('the card carries what a supply stop needs to decide',
+    routeChoices([], 1, 4242).every((c) => c.gravity > 0 && c.rareMaterial && c.recommended.length
+      && c.difficulty >= 1 && Array.isArray(c.hazards)));
+  check('the offer is deterministic from the seed',
+    JSON.stringify(routeChoices(['LUNA'], 2, 4242)) === JSON.stringify(routeChoices(['LUNA'], 2, 4242)));
+}
 
-  const second = routeChoices(['LUNA'], 2, 4242);
-  check('after the Moon it offers two', second.length === 2);
-  check('...the Moon, replayable to farm', second[0].planet === 'LUNA' && second[0].cleared && !second[0].isNext);
-  check('...and Mars as the next body', second[1].planet === 'MARS' && second[1].isNext);
+// --- the progress trail
+//
+// What replaced the cleared-body cards: the whole ladder, drawn, with no way to
+// click any of it.
+{
+  const trail = ladderTrail(['LUNA', 'EUROPA']);
+  check('the trail is the whole ladder, always', trail.length === PLANET_ORDER.length);
+  check('it is in ladder order', trail.every((r, i) => r.planet === PLANET_ORDER[i] && r.position === i + 1));
+  check('cleared bodies are marked cleared', trail[0].cleared && trail[1].cleared);
+  check('exactly one rung is next', trail.filter((r) => r.isNext).length === 1);
+  check('...and it is the body after the last cleared one', trail[2].isNext && trail[2].planet === 'TITAN');
+  check('the rest are marked ahead', trail.slice(3).every((r) => r.ahead && !r.cleared && !r.isNext));
+  check('every rung has a name to draw', trail.every((r) => !!r.name));
+  check('a finished ladder marks nothing next', ladderTrail(PLANET_ORDER).every((r) => r.cleared && !r.isNext));
+  check('a fresh ladder marks only the Moon next',
+    ladderTrail([]).filter((r) => r.isNext).length === 1 && ladderTrail([])[0].isNext);
+}
 
-  const third = routeChoices(['LUNA', 'MARS'], 3, 4242);
-  check('after Mars it offers all three', third.length === 3);
-  check('exactly one card is ever the next body',
-    [first, second, third].every((set) => set.filter((c) => c.isNext).length === 1));
+// --- the forecast still carries information at body 10
+//
+// It did not. `difficulty` and `enemyIntensity` were both bumped by the sector,
+// which ran to 3 under M25 and runs to 10 now: measured across the ladder, six
+// of the ten cards printed an identical forecast (difficulty 5, "heavy"). That
+// is the M24 saturation fault - a formula that destroys the ordering the
+// content was authored with - and these are the checks that it stays fixed.
+{
+  const cards = PLANET_ORDER.map((id, i) => planetCard(id, i + 1, makeRng(7)));
+  const diffs = new Set(cards.map((c) => c.difficulty));
+  check('difficulty still spreads across the whole ladder', diffs.size >= 4, [...diffs].join());
+  check('difficulty rises down the ladder and never falls',
+    cards.every((c, i) => i === 0 || cards[i - 1].difficulty <= c.difficulty),
+    cards.map((c) => c.difficulty).join());
+  check('the Moon is the easiest and Venus the hardest',
+    cards[0].difficulty === 1 && cards[9].difficulty === 5);
+  check('resistance is read off the chapter, not guessed',
+    cards.every((c) => typeof c.machines === 'number'
+      && (c.machines === 0) === (c.enemyIntensity === 'none')));
+  check('the same machine count always reads the same way',
+    cards.every((c) => cards.filter((o) => o.machines === c.machines)
+      .every((o) => o.enemyIntensity === c.enemyIntensity)));
 
-  const done = routeChoices(['LUNA', 'MARS', 'EUROPA'], 4, 4242);
-  check('with the ladder finished nothing is marked next',
-    done.length === 3 && done.every((c) => !c.isNext && c.cleared));
-  check('every card carries a readable forecast',
-    [...first, ...second, ...third].every((c) => !!c.name && !!c.rareMaterial && Array.isArray(c.hazards)));
+  // **Printed, not asserted.** Reading resistance off the chapter fixed the
+  // saturation and immediately exposed something the saturated "heavy" had been
+  // hiding: the machine count barely moves down the ladder, and where it moves
+  // it moves the wrong way. The authored bodies field 4 and 5; every survey
+  // body caps at 3, because `generateChapter`'s budget is `min(3, ...)`. And
+  // Enceladus, at position 5, has no `eligibleEnemySets` at all - a body with
+  // nothing hostile on it, halfway down.
+  //
+  // That is an M28 balance finding and an M29 content one, not a formula bug,
+  // so it is measured here rather than gated. A number nobody watches rots.
+  console.log('  ..  machines down the ladder: '
+    + cards.map((c) => `${c.planet.slice(0, 3).toLowerCase()} ${c.machines}`).join(' · '));
+}
+
+// --- the M26 shuffle, re-checked at ten bodies
+//
+// M26 exists because M25 made the campaign a fixed ladder: you re-fly the same
+// maps every run, so one permanent silhouette per mission became unbearable.
+// M27 makes that argument stronger, not weaker - ten bodies, still fixed, still
+// every run - so the shuffle is re-measured across the whole ladder rather than
+// the three bodies it was built against.
+//
+// The two failure modes it protects against are both real and both were found
+// by measuring: a chapter that deals the same shapes on every seed (Europa did,
+// on mulberry32's correlated first output), and a chapter that deals so few
+// distinct shapes that the variety is nominal.
+{
+  const seeds = Array.from({ length: 40 }, (_, i) => 1000 + i * 137);
+  const counts = PLANET_ORDER.map((id, i) => {
+    const layouts = new Set();
+    for (const seed of seeds) {
+      layouts.add(chapterFor(id, seed, i + 1).levels
+        .map((l) => (l.terrain && l.terrain.archetype) || '?').join('/'));
+    }
+    return { id, n: layouts.size };
+  });
+  const worst = counts.reduce((a, b) => (a.n <= b.n ? a : b));
+  check('every body on the ladder deals more than one chapter layout',
+    counts.every((c) => c.n > 1), `${worst.id} ${worst.n}`);
+  check('and enough of them that re-flying a body is not re-flying a map',
+    counts.every((c) => c.n >= 10), counts.map((c) => `${c.id} ${c.n}`).join(', '));
+  console.log(`  ..  chapter layouts over 40 seeds: ${counts.map((c) => `${c.id.slice(0, 3).toLowerCase()} ${c.n}`).join(' · ')}`);
 }
 
 // --- rewards
@@ -169,31 +231,6 @@ check('but not before one is cleared', !isCheckpoint(0));
   check('a short drought does not', early.cores === 0);
   const earned = missionReward({ grade: 'PERFECT', padMultiplier: 5, fuelLeft: 10, maxFuel: 100, firstClear: false, coreDrought: 0 });
   check('an earned core is still an earned core', earned.cores === 1 && !earned.pityCore);
-}
-
-// --- the route always offers a real choice.
-//
-// The rule survived the change from four cards to two: whatever has been
-// cleared and whatever sector the run is in, the screen must show a full set of
-// distinct bodies. Two identical-looking options is the failure this catches
-// now, where three-instead-of-four was the failure it caught before.
-{
-  const shapes = [[], ['LUNA'], ['LUNA', 'MARS'], ['LUNA', 'MARS', 'EUROPA', 'TITAN', 'ENCELADUS'],
-    ['LUNA', 'MARS', 'EUROPA', 'TITAN', 'ENCELADUS', 'MERCURY', 'VENUS', 'IO', 'PLUTO', 'GANYMEDE']];
-  let ok = true;
-  for (const cleared of shapes) {
-    for (let sector = 1; sector <= 5; sector++) {
-      for (const seed of [1, 99, 12345, 777777]) {
-        const offers = routeOffers(cleared, seed, sector);
-        const ids = offers.map((o) => o.planet);
-        if (offers.length < MIN_OFFERS || new Set(ids).size !== ids.length) {
-          ok = false;
-          console.log(`  ...  cleared ${cleared.length}, sector ${sector}, seed ${seed}: ${ids.join()}`);
-        }
-      }
-    }
-  }
-  check('every route screen offers two distinct bodies, at every stage', ok);
 }
 
 console.log(`\n  ${pass} passed, ${fail} failed`);

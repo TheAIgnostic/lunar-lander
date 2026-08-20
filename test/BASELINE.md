@@ -1743,3 +1743,212 @@ fixtures and every sweep still measure exactly what they measured before.
 
 `LUNA.terrainPalette` gained `basin` — a lunar mare *is* an impact basin, and without it the Moon had
 only three unpinned shapes to deal from, capping it at 6 layouts instead of 24.
+
+---
+
+## M27 — the ten-body ladder (2026-08-20)
+
+The blocker `docs/PROGRESSION.md` was written for: M25 cut the campaign to Moon/Mars/Europa, every
+hangar level costs salvage **plus a material only one body produces**, and seven of those ten bodies
+stopped being reachable. This puts them back — as a fixed, difficulty-sorted ladder rather than a
+choice, per Tom's four decisions.
+
+### The ladder
+
+| # | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| body | Moon | Europa | Titan | Mars | Enceladus | Ganymede | Io | Mercury | Pluto | Venus |
+| gravity m/s² | 4.67 | 4.11 | 4.47 | 7.06 | 1.40 | 4.38 | 4.92 | 7.19 | 3.12 | 10.48 |
+
+The order never varies between runs, every run starts at the Moon, and a cleared body cannot be
+re-flown. **The inverted ramp is fixed for free**: Europa was the finale with the weakest gravity in
+the game and is now the body that teaches ice at position 2, and Venus — heaviest, dense drag — is
+the wall to end on.
+
+Worth recording: the `DIFFICULTY` table in `route.js` predates the ladder and **agrees with it**.
+Read in `PLANET_ORDER` it is non-decreasing, 1 at the Moon and 5 at Venus, which is a good sign that
+the order Tom chose and the difficulty recorded in M9 were measuring the same thing.
+
+### The hangar, before and after
+
+This is the headline. Same costs, same materials, same "go there to build this" gate — the tracks
+open because the bodies are on the route, not because anything was repointed.
+
+| track | M25 ceiling | M27 ceiling |
+| --- | --- | --- |
+| Landing gear | L4 | L4 |
+| Engine & tanks | L3 — blocked by Mercury | **L4** |
+| Attitude thrusters | L2 — blocked by Titan | **L4** |
+| Hull | L2 — blocked by Venus | **L4** |
+| Sensors | **L1 — unbuyable at all** | **L4** |
+
+The refusals now name a body the player is going to visit. Measured live at the first supply stop:
+*"Needs 40 more Conductive ice salts"* (Europa, body 2), *"Needs 45 more Iron-oxide ceramic"* (Mars,
+body 4), *"Needs 35 more Silica nanograins"* (Enceladus, body 5).
+
+### ...and the ordering problem M28 inherits, now as numbers
+
+Reachable is not well-ordered. The body each level's material first becomes available on:
+
+| track | L2 | L3 | L4 |
+| --- | ---: | ---: | ---: |
+| Landing gear | body 1 | body 2 | body 4 |
+| Engine & tanks | body 1 | body 4 | body 8 |
+| Attitude thrusters | body 1 | body 3 | body 6 |
+| **Hull** | **body 4** | **body 10** | **body 10** |
+| **Sensors** | **body 5** | body 6 | body 9 |
+
+Against M28's rule (L2 from bodies 1–3, L3 from 3–6, L4 from 6–10, Hull's L2 earlier than Mars):
+three tracks already comply, **Hull and Sensors do not**. Hull is the one that matters, because it
+is the track that answers M24's two-shot machines and both its upper levels sit on the last body of
+the run.
+
+### Shuttles attrit
+
+`+1` per body cleared, capped at 3 — not a restore to full. The `+1` was already there; one line
+later at the checkpoint `g.lives = g.run.maxShuttles` overwrote it, which made the `+1` dead code
+and every supply stop a full restore. Over three bodies that barely showed. Over ten it is thirty
+lives.
+
+Proved live, losing two landers on the Moon on purpose and then clearing it:
+
+```
+run begins with 3 shuttles
+  deliberate crash: lives=2
+  deliberate crash: lives=1
+  moon-1..moon-4 landed, lives=1
+  moon-5 landed -> state=checkpoint lives=2
+AT THE SUPPLY STOP: 2/3   (a full restore would read 3)
+```
+
+### The route window: one card, and a trail
+
+`routeChoices` returns **only the next body**, which is what enforces "no replay" — `route:N` indexes
+that array, so there is no index a cleared body can be reached through. `actions.js` refuses a
+non-`isNext` card as well, against a stale `g.routeOffers` left on a previous screen.
+
+Ten route cards would have been a wall of which nine were unclickable, which is a menu that lies. The
+ladder behind the player is a **non-interactive trail** instead: ten rungs, cleared / next / ahead,
+which fits on one row at 800 px and wraps rather than scrolls, because the end of the ladder is the
+point. Verified live at nine cleared:
+
+```
+d:THE MOON d:EUROPA d:TITAN d:MARS d:ENCELADUS d:GANYMEDE d:IO d:MERCURY d:PLUTO n:VENUS
+offers = ["VENUS(next)"]
+```
+
+...and clearing Venus fired `expedition-complete`, released the run and set `gameCompleted`.
+
+### The forecast saturated, exactly the way M24's visibility did
+
+`difficulty` and `enemyIntensity` were both bumped by the sector. The sector ran to 3 under M25 and
+runs to **10** now, so both pinned:
+
+| | M25 range (3 bodies) | at 10 bodies, before | after |
+| --- | --- | --- | --- |
+| difficulty | 1–3 | **5 for bodies 5–10** | 1–5, non-decreasing |
+| resistance | light–heavy | **"heavy" for bodies 4–10** | measured per body |
+
+Six of ten cards printed an identical forecast. That is the M24 lesson repeating — a formula that
+saturates destroys the ordering the content was authored with — and the fix is the same shape.
+Difficulty drops the sector term, because on a fixed ladder **the sector is the position and the
+position is already sorted by difficulty**, so adding both counts one axis twice. Resistance is read
+off the chapter the player will actually fly (`peakMachines`), which is the honest number.
+
+**And reading it honestly immediately exposed what the saturated "heavy" was hiding:**
+
+```
+machines down the ladder: lun 4 · eur 3 · tit 3 · mar 5 · enc 0 · gan 3 · io 3 · mer 3 · plu 3 · ven 3
+```
+
+The machine count barely moves, and where it moves it moves the wrong way. Every survey body caps at
+3 because `generateChapter`'s budget is `min(3, ...)`, while the authored introductory Moon fields 4
+and Mars fields 5. **Enceladus, at position 5, has no `eligibleEnemySets` at all** — a body with
+nothing hostile on it, halfway down the ladder. Printed as a measurement in `route-tests.js` rather
+than asserted: it is an M28 balance finding and an M29 content one, not a formula bug.
+
+### Two faults the validator found once it flew where the ladder goes
+
+The sweep used to fly generated chapters at sectors 1 and 3, six seeds. On the ladder the sector
+*is* the position, so it flies each body at the sector it actually occupies, over the full 20.
+
+- **The generator was producing missions its own validator rejects.** The prize pad narrows with the
+  mission and again with the sector's depth: at depth 2 — sector 5 and beyond — mission 5 asked for
+  a 50 px pad against a 56 px stance. M25's three-body ladder never reached sector 5 and this sweep
+  never looked there, so **the last five bodies of the ladder each generated one impossible mission
+  and nothing said so**. Floored at `VALIDATION.minPadWidth + 8`, read from the validator so the two
+  cannot drift, and read *inside* the function per the M15 rule. The margin is a terrain cell: a pad
+  is carved to whole cells (~7 px), so a request of exactly the minimum quantises down through it —
+  measured, 60 requested carves to 54.7, 62 carves to 61.5.
+- **The survey block gated on flight, against the file's own doctrine.** `assess()` says it plainly:
+  structural problems fail the sweep, flight problems are reported but never treated as proof a
+  mission is impossible. The survey block, written in M9, hard-failed when the pilot never reached a
+  pad. At 20 seeds Venus — the heaviest body in the game, flown by a pilot with a known weakness for
+  weight and drag — failed on 2 seeds of 20 with geometry sound at 100/100 and every failure a crash
+  short of the pad. It warns now, in the same words and the same summary as everywhere else.
+
+After both: **every body structural 100/100 at both sectors.** The flight warnings that remain:
+
+| | never reached | home |
+| --- | ---: | ---: |
+| Mars s4 (body 4) | 1/100 | 99/100 |
+| Mercury s8 (body 8) | 1/100 | 96/100 |
+| **Venus s1** | 5/100 | 86/100 |
+| **Venus s10 (body 10)** | 6/100 | 87/100 |
+
+Venus is the outlier by a factor of five, and the prize route on it lands 36/100. That is the wall
+body behaving like a wall, measured by an instrument that does not dodge — an M28 input, not a
+defect.
+
+### The M26 shuffle, re-checked at ten bodies
+
+M26 exists because a fixed ladder means re-flying the same maps every run. Ten bodies makes that
+argument stronger, not weaker, so it is measured across the whole ladder now (40 seeds):
+
+```
+chapter layouts: lun 20 · eur 18 · tit 36 · mar 20 · enc 37 · gan 36 · io 33 · mer 38 · plu 36 · ven 36
+```
+
+The authored bodies sit lower because their pinned missions — named for their shape, or caves — do
+not move; that is M26's design, and 18–20 distinct layouts over 40 seeds is consistent with the
+~24-layout ceiling it recorded. The survey bodies deal 33–38. `generateChapter` draws a fresh
+`rng.int` per mission and did **not** need M26's warm-up, which was checked rather than assumed.
+
+### The supply stop was printing zeroes at a player holding thousands
+
+Found while verifying the new screen, and it is the M25b fault a third time. M25b moved banking to
+the way *in* to the checkpoint so the hangar opens on money that is actually there — but the table on
+that screen still read `run.haul`, which banking has just emptied. Measured at the first checkpoint
+of a run: haul `0/0/0`, `meta.banked` **2,329 salvage**. The one screen where spending is decided
+told the player they had nothing.
+
+The stop reports what it banked and what is on hand now; the route screen, which opens before any
+banking, still reports the haul it is carrying and what is at risk. Verified: 661 banked at the stop,
+2,990 on hand, and a hangar purchase at that window took 3,651 → 3,351 with engine 1 → 2.
+
+### The instrument lied, and it was the hook this time
+
+`__settleNow` did not run the pending settle — it reimplemented the decision, and the copy had gone
+stale:
+
+```js
+setState(!g.endless && g.levelIndex === LEVELS.length - 1 ? 'victory' : 'result')
+```
+
+`LEVELS` is the twelve **classic** missions. On an expedition that sent every landing to the result
+screen and silently skipped banking, the blueprint grants and the entire chapter-clear branch. A
+scripted five-mission Moon run landed all five and reported `cleared=[]`, `chaptersCleared=0` — which
+reads exactly like a broken ladder and was not one. It cost about an hour.
+
+Same class as M23's drifted autopilot copy and M24's assertions that encoded constants rather than
+the property behind them: **a second implementation of a rule, quietly falling behind the first.**
+Both settle timers go through `settleAfter(ms, work)` now, which holds the pending work, and the hook
+runs it early instead of imitating it. Re-verified with the exact script that was misled: it reaches
+the checkpoint, and the crash path still walks 3 → 2 → 1 → `expedition-over`.
+
+### What did not move
+
+**Both fixtures byte-identical.** Nothing in this milestone touches the simulation — it is the run's
+shape, the screens, a generated pad floor and a debug hook. The crossing measurement is unchanged at
+167/240 (70%), the sanctuary holds 20/20 everywhere, and the encounter audit reports the same
+distribution it did at M24.

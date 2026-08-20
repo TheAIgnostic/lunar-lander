@@ -1,35 +1,44 @@
-// Route selection (roadmap section 2). After a chapter the player picks the
-// next body, drawn from discovery tiers so difficulty and the counters a body
-// demands arrive in a fair order.
+// The ladder (roadmap M27). The campaign is ten bodies in one fixed order, and
+// that order never varies between runs.
 //
-// Two offers, not four. Four cards of dense forecast is a spreadsheet at the
-// exact moment the run wants a decision, and Tom asked for the simpler shape.
-// Two still makes it a choice; the tier rules still decide what may appear.
+// It was a two-card forecast once (M9), then a three-body ladder with cleared
+// bodies re-flyable to farm salvage (M25). Both are gone, on Tom's call
+// (2026-08-20, recorded in docs/PROGRESSION.md under "Decided"): a roguelike
+// run wants a known ladder and an attrition curve, not a forecast to read and
+// not a grind to fall back on.
+//
+// The discovery-tier machinery that served the old forecast - `TIERS`,
+// `eligibleBodies`, `routeOffers`, `MIN_OFFERS`, `SECTORS` - was left in place
+// through M25 and M26 with a note saying "delete it or wire it", because the
+// open question was whether the seven survey bodies would join `PLANET_ORDER`
+// or come back as a tiered choice after it. **M27 answers that question**: they
+// join the ladder. So it is deleted rather than kept.
 
 import { PLANETS, gravityFor } from './planets.js';
+import { peakMachines } from './missions.js';
 import { makeRng } from './util.js';
 
-/** The route screen always shows this many cards when the pool can fill them. */
-export const MIN_OFFERS = 2;
-
-/** How many sectors an expedition runs before it is complete. */
-export const SECTORS = 5;
-
 /**
- * The campaign, in order (M25). Tom's call: the progression is linear - Moon,
- * then Mars, then Europa - and losing a run puts you back at the Moon. There is
- * no "choose your next body" any more, because a roguelite run wants a known
- * ladder rather than a forecast to read.
+ * The campaign, in order. All ten bodies, sorted by measured difficulty, Moon
+ * first and Venus last (Tom's decision 1).
  *
- * What survives of the choice is *farming*: once a body is cleared it stays on
- * the route screen and can be re-flown for salvage, so the decision at each
- * window is "go on, or go back and pay for the hangar first". That is a real
- * decision about risk and money, which the old four-card forecast never was.
+ * Sorting by difficulty fixes the inverted ramp M25 shipped for free. Europa
+ * had been the finale despite having the weakest gravity in the game and the
+ * fewest machines; at position 2 it is the body that *teaches* ice, while Venus
+ * - gravity 10.48 and dense drag - is a genuine wall to end on.
  *
- * These are the three bodies with authored chapters. The other seven still fly
- * generated surveys and are not on the ladder until they are written.
+ * This is also what unblocks the hangar. Every component level costs salvage
+ * plus a material only one body produces, and the three-body ladder made seven
+ * of those ten materials unreachable: Sensors could not be bought at all and
+ * Hull capped at L2, which is the track that answers M24's two-shot machines.
+ * Putting the bodies back on the route makes the materials reachable *by being
+ * flown to*, so the "this material comes from that world" texture survives
+ * intact rather than being repointed at whatever is nearby.
  */
-export const PLANET_ORDER = ['LUNA', 'MARS', 'EUROPA'];
+export const PLANET_ORDER = [
+  'LUNA', 'EUROPA', 'TITAN', 'MARS', 'ENCELADUS',
+  'GANYMEDE', 'IO', 'MERCURY', 'PLUTO', 'VENUS',
+];
 
 /** The next body on the ladder, or null when the ladder is finished. */
 export function nextPlanet(cleared = []) {
@@ -38,67 +47,48 @@ export function nextPlanet(cleared = []) {
 }
 
 /**
- * What the route window offers: every body already cleared, in ladder order,
- * plus the next one. Each card says which it is, so "replay to farm" and "go
- * on" are visibly different choices rather than two identical buttons.
+ * What the route window offers: **the next body, and nothing else** (Tom's
+ * decision 3). A cleared body cannot be re-flown. M25 kept every cleared body
+ * on the screen as a card you could go back to and farm for salvage, and that
+ * is the half of M25 this reverses - the supply stop is a supply stop, not a
+ * choice.
+ *
+ * Returning only the actionable card is what *enforces* it: `route:N` indexes
+ * this array, so there is no index a cleared body can be reached through. The
+ * ladder behind the player is a display concern, and it is `ladderTrail`.
  */
 export function routeChoices(cleared = [], sector = 1, seed = 0) {
-  const rng = makeRng((seed ^ (sector * 2654435761)) >>> 0);
-  const done = PLANET_ORDER.filter((id) => cleared.includes(id));
   const next = nextPlanet(cleared);
-  const ids = [...done, ...(next ? [next] : [])];
-  return ids.map((id) => ({
-    ...planetCard(id, sector, rng),
-    cleared: done.includes(id),
+  if (!next) return [];
+  const rng = makeRng((seed ^ (sector * 2654435761)) >>> 0);
+  return [{ ...planetCard(next, sector, rng), cleared: false, isNext: true }];
+}
+
+/**
+ * The ladder as a progress trail: all ten bodies in order, each marked cleared,
+ * next, or still ahead. Non-interactive - it is how far this run got, drawn so
+ * the player can see it, which is the thing the M25 route screen did carry and
+ * is worth keeping now that the cards themselves are gone.
+ */
+export function ladderTrail(cleared = []) {
+  const done = new Set(cleared);
+  const next = nextPlanet(cleared);
+  return PLANET_ORDER.map((id, i) => ({
+    planet: id,
+    name: PLANETS[id].displayName,
+    position: i + 1,
+    cleared: done.has(id),
     isNext: id === next,
+    ahead: !done.has(id) && id !== next,
   }));
 }
 
-// -------------------------------------------------------------------------
-// NOT WIRED TO THE GAME since M25. `TIERS`, `eligibleBodies`, `routeOffers`,
-// `MIN_OFFERS` and `SECTORS` are M9's discovery-tier machinery: they decided
-// which bodies could be *offered* when the route was a choice between two
-// forecasts. The ladder replaced that, and nothing outside this file calls them
-// any more.
-//
-// They are kept rather than deleted because the question they answer is still
-// open: seven bodies still fly generated surveys, and when those chapters are
-// authored they either join `PLANET_ORDER` or come back as a tiered choice
-// after the ladder. That is Tom's call, not a refactor - but until it is made,
-// this is dead code with passing tests, which is the state the M11 note warns
-// about ("a system only ever read by a screen has not been shown to work").
-// Delete it or wire it; do not leave it here indefinitely.
-// -------------------------------------------------------------------------
-
-export const TIERS = {
-  opening: ['LUNA'],
-  A: ['MARS', 'TITAN', 'EUROPA', 'ENCELADUS'],
-  B: ['MERCURY', 'VENUS', 'IO'],
-  C: ['PLUTO', 'GANYMEDE'],
-};
-
 /**
- * Which bodies may be offered, given what has been cleared.
- * Tier B opens after two non-Moon chapters, tier C after five chapters.
+ * How hard a body is, on its own terms. This table predates the ladder and
+ * turns out to agree with it: read in `PLANET_ORDER` it is non-decreasing, 1 at
+ * the Moon and 5 at Venus, which is a good sign the ordering Tom chose and the
+ * difficulty recorded here were measuring the same thing.
  */
-export function eligibleBodies(clearedChapters = []) {
-  const cleared = new Set(clearedChapters.map((id) => String(id).split('-')[0].toUpperCase()));
-  const nonMoon = [...cleared].filter((c) => c !== 'LUNA' && c !== 'MOON').length;
-  const total = cleared.size;
-
-  const pool = [...TIERS.A];
-  if (nonMoon >= 2) pool.push(...TIERS.B);
-  if (total >= 5) pool.push(...TIERS.C);
-
-  const unfinished = pool.filter((id) => !cleared.has(id));
-  if (unfinished.length >= MIN_OFFERS) return unfinished;
-  // "Never remove all four useful planet choices through randomization": when
-  // the unexplored pool runs thin - clearing Mars early leaves only three tier-A
-  // bodies - already-visited bodies come back to fill the card slots. A repeat
-  // leg is a real choice in a roguelite; three cards instead of four is not.
-  return [...unfinished, ...pool.filter((id) => cleared.has(id))];
-}
-
 const DIFFICULTY = {
   LUNA: 1, EUROPA: 2, TITAN: 2, ENCELADUS: 3, MARS: 2,
   GANYMEDE: 3, IO: 4, MERCURY: 4, PLUTO: 4, VENUS: 5,
@@ -117,14 +107,36 @@ const RECOMMENDED = {
   GANYMEDE: ['Hardened Radar', 'Ray Shield'],
 };
 
+/** What "N machines on the worst mission of this body" reads as on a card. */
+function intensityOf(machines) {
+  if (machines <= 0) return 'none';
+  if (machines <= 2) return 'light';
+  if (machines <= 4) return 'moderate';
+  return 'heavy';
+}
+
 /**
  * A route card. The forecast is helpful but deliberately incomplete - one
  * hazard is withheld, which the Navigation Forecast skill will later reveal.
+ *
+ * **Two figures on this card used to be bumped by the sector**, and M27 broke
+ * both by making the sector run to 10 instead of 3. Measured across the ladder,
+ * `min(5, DIFFICULTY + floor((sector - 1) / 2))` read 5 for bodies 5 through 10
+ * and `enemyIntensity` read "heavy" from body 4 on: six of ten cards printed the
+ * same forecast. That is the M24 saturation fault again - a formula that
+ * destroys the ordering the content was authored with.
+ *
+ * The fix is the same shape as M24's. Difficulty drops the sector term, because
+ * on a fixed ladder the sector *is* the position and the position is already
+ * sorted by difficulty, so adding both counts one axis twice. Intensity is read
+ * off the chapter the player will actually fly rather than inferred, which is
+ * the honest number and spreads because it is measured.
  */
 export function planetCard(planetId, sector, rng) {
   const p = PLANETS[planetId];
   const hazards = [...p.hazards];
   const hidden = hazards.length > 1 && rng() < 0.5 ? hazards.pop() : null;
+  const machines = peakMachines(planetId, sector);
   return {
     planet: planetId,
     name: p.displayName,
@@ -133,43 +145,14 @@ export function planetCard(planetId, sector, rng) {
     atmosphere: p.atmosphere,
     hazards,
     hiddenHazard: hidden,
-    enemyIntensity: ['none', 'light', 'moderate', 'heavy'][Math.min(3, Math.floor((DIFFICULTY[planetId] + sector) / 2))],
+    machines,
+    enemyIntensity: intensityOf(machines),
     rareMaterial: p.rareMaterial,
     recommended: RECOMMENDED[planetId] || [],
-    difficulty: Math.min(5, DIFFICULTY[planetId] + Math.floor((sector - 1) / 2)),
+    difficulty: DIFFICULTY[planetId] || 1,
     summary: p.summary,
     incomplete: !!hidden,
   };
-}
-
-/**
- * The offers, deterministic from the run seed and how far in the player is.
- * Never fewer than the eligible pool allows, and never a duplicate.
- *
- * Two bodies that differ is worth more than two that do not, so when the pool
- * allows it the pair is spread across the difficulty range rather than taken at
- * random - otherwise "choose your next leg" can offer two of the same thing.
- */
-export function routeOffers(clearedChapters, seed, sector = 1, count = MIN_OFFERS) {
-  const rng = makeRng((seed ^ (sector * 2654435761)) >>> 0);
-  const pool = eligibleBodies(clearedChapters);
-  const picks = [];
-  const bag = [...pool];
-  while (picks.length < Math.min(count, pool.length) && bag.length) {
-    const i = rng.int(0, bag.length - 1);
-    picks.push(bag.splice(i, 1)[0]);
-  }
-  // With only two cards, a pair that reads the same is a choice in name only.
-  // Swap the second for the most different body still available.
-  if (picks.length === 2 && bag.length && DIFFICULTY[picks[0]] === DIFFICULTY[picks[1]]) {
-    const spread = bag.reduce((best, id) => (
-      Math.abs(DIFFICULTY[id] - DIFFICULTY[picks[0]]) > Math.abs(DIFFICULTY[best] - DIFFICULTY[picks[0]]) ? id : best
-    ), bag[0]);
-    if (DIFFICULTY[spread] !== DIFFICULTY[picks[0]]) picks[1] = spread;
-  }
-  // Keep the spread readable: easiest first.
-  picks.sort((a, b) => DIFFICULTY[a] - DIFFICULTY[b]);
-  return picks.map((id) => planetCard(id, sector, rng));
 }
 
 /**
@@ -188,7 +171,7 @@ export function isCheckpoint(chaptersCleared) {
   return chaptersCleared > 0;
 }
 
-/** Every body on the ladder cleared. */
+/** Every body on the ladder cleared. Ten of ten, ending on Venus. */
 export function isExpeditionComplete(cleared = []) {
   return PLANET_ORDER.every((id) => cleared.includes(id));
 }

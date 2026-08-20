@@ -3,24 +3,27 @@
 A neon-vector lunar lander. Space is the booster, `A`/`D` are the attitude burners, the tank is
 finite, and the small pads pay the most.
 
-Three ways to play, side by side:
+One game: the **EXPEDITION**, a roguelite run down a ten-body ladder.
 
-- **EXPEDITION** — a roguelite run. Three shuttles, five missions a body, then choose your next leg
-  from four route cards. Bank salvage, spend it in the hangar, spend research in the skill trees.
-- **CLASSIC** — the original twelve missions across four worlds, unchanged.
-- **ENDLESS** — procedurally escalating sectors.
+Moon, Europa, Titan, Mars, Enceladus, Ganymede, Io, Mercury, Pluto, Venus — the same order every run,
+five missions a body. Clearing one is a supply stop: bank the salvage, spend it in the hangar, spend
+research in the skill trees, then take the next body. **There is no going back** — a cleared body
+cannot be re-flown — and a cleared body returns one lander, never a full rack, so losses accumulate
+all the way down. Lose the last one and you start again at the Moon with whatever the hangar has
+bolted on, which is the only thing that survives a run.
 
-Fifteen authored missions across the Moon, Mars and Europa, plus generated survey chapters for every
-other body, so no route card leads nowhere.
+Fifteen authored missions across the Moon, Mars and Europa, plus generated survey chapters for the
+other seven bodies, every one of them validated to be flyable before it ships.
 
 Every map is a gradient. The near landing zone is always reachable on the tank you start with, and
 it always gets you home. The good material is at the far end, past a line of fuel cells you have to
 fly low and slow to collect — and that low road is the ground the guns can see. Going deep is a
 decision you make on the way out, not a whim at the end.
 
-Some of that ground is defended. Abandoned security machines track you, telegraph every shot, and
-cost you hull — but never a landing: every mission keeps one pad that nothing can reach, so a weapon
-is a choice and never a requirement.
+Some of that ground is defended. Abandoned security machines track you, telegraph every shot, and hit
+hard enough that two of them end an unupgraded lander. Every mission still keeps one pad that nothing
+can reach, so a weapon is never the price of finishing — but the crossing to it is not free, and that
+is deliberate.
 
 No dependencies, no build step, no image or audio assets — one canvas, ES modules, WebAudio.
 

@@ -32,6 +32,7 @@
 
 import { PLANETS, gravityFor } from './planets.js';
 import { cargoFor } from './objectives.js';
+import { VALIDATION } from './validate.js';
 import { makeRng } from './util.js';
 
 export const MOON_MISSIONS = [
@@ -303,6 +304,22 @@ export function generateChapter(planetId, seed = 1, sector = 1) {
   const rng = makeRng(((seed ^ 0x5bf03635) + planetId.length * 7919) >>> 0);
   const gravity = gravityFor(planetId);
   const palette = planet.terrainPalette;
+  // **The floor under the deep pad**, and the reason it is read from the
+  // validator rather than written here: the two must agree or the generator
+  // produces missions its own checker rejects, which is exactly what happened.
+  //
+  // The prize pad narrows with the mission and again with the sector's depth,
+  // and at depth 2 - sector 5 and beyond - mission 5 asked for 50 px against a
+  // 56 px stance. M25's three-body ladder never reached sector 5, and this
+  // sweep only ever ran sectors 1 and 3, so the last five bodies of the M27
+  // ladder each generated one impossible mission and nothing said so.
+  //
+  // The margin is a terrain cell: a pad is carved to whole cells (~7 px), so a
+  // request of exactly the minimum quantises *down* through it. Measured: 60
+  // requested carves to 54.7, 62 carves to 61.5. Read inside the function, not
+  // at module load - a module-level read of an imported config is the M15 trip
+  // hazard that throws "cannot access before initialization" in the bundle.
+  const minDeepPad = VALIDATION.minPadWidth + 8;
 
   const missions = SURVEY_NAMES.map(([name, brief], i) => {
     const step = i / 4;                       // 0 at mission 1, 1 at mission 5
@@ -331,9 +348,13 @@ export function generateChapter(planetId, seed = 1, sector = 1) {
       // Pads are authored prize-first: index 0 is the deep one - narrower,
       // richer, and past the fuel road - and the last is the wide near zone
       // that always gets you home.
+      // The deep pad tightens with the mission and the sector, but never below
+      // what the lander can stand on. Past that floor the difficulty has to
+      // come from somewhere else - the same lesson as the enemy budgets, where
+      // a number past the map's capacity is fiction rather than difficulty.
       pads: i >= 3
-        ? [{ mult: mult + 1, width: Math.round(padWidth * 0.8) }, { mult: 2, width: padWidth + 70 }]
-        : [{ mult: mult + 1, width: Math.round(padWidth * 0.7) }, { mult, width: padWidth + 40 }],
+        ? [{ mult: mult + 1, width: Math.max(minDeepPad, Math.round(padWidth * 0.8)) }, { mult: 2, width: padWidth + 70 }]
+        : [{ mult: mult + 1, width: Math.max(minDeepPad, Math.round(padWidth * 0.7)) }, { mult, width: padWidth + 40 }],
       hazards: planet.hazards.length ? undefined : [],   // undefined = inherit the planet's
       fuelCells: i >= 2 ? 2 : 0,
       // The same ramp the authored chapters use (M15): the first mission of a
@@ -460,6 +481,19 @@ export function chapterFor(planetId, seed = 1, sector = 1) {
   }
   if (!PLANETS[id]) throw new Error(`chapterFor: no such planet ${id}`);
   return generateChapter(id, seed, sector);
+}
+
+/**
+ * The most machines any one mission of this body's chapter fields, at this
+ * sector. It is what the route card's "resistance" line reads, and it is
+ * measured off the chapter rather than inferred from a difficulty table -
+ * because inferring it is what made six of the ten M27 cards print the same
+ * forecast. Enemy budgets are authored (or, for a survey chapter, derived from
+ * the sector), so this is seed-independent and cheap enough to call per render.
+ */
+export function peakMachines(planetId, sector = 1) {
+  const ch = chapterFor(planetId, 1, sector);
+  return (ch.levels || []).reduce((m, l) => Math.max(m, l.enemyBudget || 0), 0);
 }
 
 /** Display name for a body, whichever id form is to hand. */

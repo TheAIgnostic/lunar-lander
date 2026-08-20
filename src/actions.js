@@ -164,11 +164,18 @@ export function act(action) {
   if (action.startsWith('route:')) {
     const card = (g.routeOffers || [])[+action.slice(6)];
     if (!card || !g.run) return;
+    // No replay (M27, Tom's decision 3). `routeChoices` returns only the next
+    // body, so there should be no index that reaches a cleared one - this is
+    // the belt to that braces, and it keeps a stale `g.routeOffers` left over
+    // from a previous screen from putting the run back onto ground it has
+    // already flown.
+    if (!card.isNext) return;
     const run = g.run;
     if (g.state === 'checkpoint') {
-      // The haul was banked and the shuttles restored on the way *in* to the
-      // supply stop (main.js), so that the hangar and the loadout open on money
-      // that is actually there. All that is left here is advancing the leg.
+      // The haul was banked on the way *in* to the supply stop (main.js), so
+      // that the hangar and the loadout open on money that is actually there.
+      // All that is left here is advancing the leg. (Shuttles are not restored
+      // anywhere any more - M27 attrits them.)
       run.sector++;
     }
     g.loadoutWindow = false;

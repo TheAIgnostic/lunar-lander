@@ -18,7 +18,7 @@ import { ACTIVE_MODULES, PASSIVE_MODULES, moduleById, recommendedFor } from './m
 import { cargoFor } from './objectives.js';
 import { planetIcon } from './planeticons.js';
 import { PLANETS, gravityFor } from './planets.js';
-import { PLANET_ORDER, routeChoices } from './route.js';
+import { PLANET_ORDER, ladderTrail, routeChoices } from './route.js';
 import { ENVELOPE, normalizeAngle } from './ship.js';
 import { TREES, TREE_IDS, skillCheck } from './skills.js';
 import { audio, g, input, meta, saveSource, settings, ship, store } from './state.js';
@@ -42,6 +42,25 @@ export function drawHangarPreview() {
     cx.beginPath(); cx.moveTo(0, y); cx.lineTo(c.width, y); cx.stroke();
   }
   R.drawHangarShip(cx, c.width / 2, c.height / 2 + 10, 4.2, meta.componentLevels, g.hangarPick || 'gear', g.time);
+}
+
+/**
+ * The ladder, drawn as a progress trail: ten bodies in order, marked cleared,
+ * next, or still ahead. Non-interactive by construction - M27 removed replay,
+ * so a cleared body is a thing you have done rather than a thing you can click.
+ * It is the one part of the M25 route screen worth keeping: how far this run
+ * got, visible at the moment you decide whether to spend or press on.
+ */
+function ladderHTML(cleared = []) {
+  const rungs = ladderTrail(cleared).map((r) => {
+    const state = r.cleared ? 'done' : (r.isNext ? 'next' : 'ahead');
+    const accent = WORLDS[PLANETS[r.planet].world].accent;
+    return `<li class="rung ${state}"${r.cleared || r.isNext ? ` style="--rung:${accent}"` : ''}>
+      <span class="pip">${r.cleared ? '\u25cf' : (r.isNext ? '\u25c9' : '\u25cb')}</span>
+      <span class="rung-name">${r.name}</span>
+    </li>`;
+  }).join('');
+  return `<ol class="ladder">${rungs}</ol>`;
 }
 
 export function screenHTML(s) {
@@ -207,27 +226,29 @@ export function screenHTML(s) {
       </div>`;
 
     case 'chapters': {
-      // M25: the ladder, not a menu. Only the first body is startable - the
-      // rest are shown so the run has a visible shape, and are reached by
+      // M27: ten bodies, so this is a start button and a ladder rather than ten
+      // tiles. Only the first body is ever startable - a run always begins at
+      // the foot of the ladder (decision 2), and the rest are reached by
       // clearing what is in front of them.
-      const cards = PLANET_ORDER.map((id, i) => {
-        const ch = Object.values(CHAPTERS).find((c) => c.planet === id);
-        const p = PLANETS[id];
-        const acc = WORLDS[p.world].accent;
-        const first = i === 0;
-        return `<button class="tile chapter${first ? '' : ' locked'}" data-action="${first ? 'chapter:' + id : 'noop'}" ${first ? '' : 'disabled'}>
-          <span class="route-tag ${first ? 'next' : 'done'}">${first ? 'START HERE' : `BODY ${i + 1}`}</span>
-          <span class="world" style="color:${acc}">${p.displayName}</span>
-          <span class="name">${ch ? ch.levels.length : 5} MISSIONS</span>
-          <span class="best">${p.summary}</span>
-          <span class="best">gravity ${(gravityFor(id) / 6).toFixed(2)} m/s² · ${p.atmosphere} atmosphere${p.hazards.length ? ' · ' + p.hazards.join(', ') : ''}</span>
+      const start = PLANET_ORDER[0];
+      const sp = PLANETS[start];
+      const sch = Object.values(CHAPTERS).find((c) => c.planet === start);
+      const acc = WORLDS[sp.world].accent;
+      const card = `<button class="tile chapter" data-action="chapter:${start}">
+          <span class="route-tag next">START HERE</span>
+          <span class="world" style="color:${acc}">${sp.displayName}</span>
+          <span class="name">${sch ? sch.levels.length : 5} MISSIONS</span>
+          <span class="best">${sp.summary}</span>
+          <span class="best">gravity ${(gravityFor(start) / 6).toFixed(2)} m/s² · ${sp.atmosphere} atmosphere${sp.hazards.length ? ' · ' + sp.hazards.join(', ') : ''}</span>
         </button>`;
-      }).join('');
       return `<div class="screen wide">
         <h2>EXPEDITION</h2>
-        <p class="tag">Three bodies, in order, five missions each. Lose all three landers and you
-        start again at the Moon with whatever the hangar has bolted on.</p>
-        <div class="grid chapters centred">${cards}</div>
+        <p class="tag">${PLANET_ORDER.length} bodies, in one fixed order, five missions each. Every
+        run starts at the Moon and none of it can be re-flown. Clearing a body returns one lander,
+        never more, so what you lose on the way down stays lost. Lose the last one and you start
+        again at the Moon with whatever the hangar has bolted on.</p>
+        <div class="grid chapters centred">${card}</div>
+        ${ladderHTML([])}
         <div class="btns">${btn('back', 'BACK', true, 'SPACE')}</div>
       </div>`;
     }
@@ -481,42 +502,62 @@ export function screenHTML(s) {
     case 'checkpoint': {
       const run = g.run;
       const checkpoint = g.state === 'checkpoint';
-      // M25: the ladder is linear, so this is not a forecast to choose between
-      // any more. It shows every body already cleared - re-flyable, to farm
-      // salvage for the hangar - and the next one along. Going back is the
-      // safe, known, lower-paying option; going on is the other one.
+      // M27: one card. The ladder is ten bodies in a fixed order and a cleared
+      // body cannot be re-flown, so there is exactly one place to go from here
+      // and the screen says so. What is behind the player is the trail above
+      // the card - a record, not a menu.
       const cleared = run.cleared || [];
       const offers = routeChoices(cleared, run.sector, run.seed);
       g.routeOffers = offers;
       const cards = offers.map((c, i) => {
         const accent = WORLDS[PLANETS[c.planet].world].accent;
-        const tag = c.isNext
-          ? '<span class="route-tag next">NEXT</span>'
-          : '<span class="route-tag done">CLEARED · replay to farm</span>';
+        const tag = `<span class="route-tag next">BODY ${cleared.length + 1} OF ${PLANET_ORDER.length}</span>`;
         return `
-        <button class="tile route${c.isNext ? ' is-next' : ' is-done'}" data-action="route:${i}">
+        <button class="tile route is-next" data-action="route:${i}">
           ${tag}
           <span class="planet-mark" style="color:${accent}">${planetIcon(c.planet, accent, 62)}</span>
           <span class="world" style="color:${accent}">${c.name}</span>
           <span class="name">${'▮'.repeat(c.difficulty)}${'▯'.repeat(5 - c.difficulty)} · ${c.atmosphere === 'none' ? 'no air' : `${c.atmosphere} air`}</span>
-          <span class="best">gravity ${(c.gravity / 6).toFixed(2)} m/s² · ${c.enemyIntensity} resistance</span>
+          <span class="best">gravity ${(c.gravity / 6).toFixed(2)} m/s² · ${c.enemyIntensity} resistance${c.machines ? ` (up to ${c.machines})` : ''}</span>
           <span class="best">weather: ${c.hazards.join(', ') || 'nothing reported'}${c.incomplete ? ' <i>· forecast incomplete</i>' : ''}</span>
           <span class="best haul">brings home: ${c.rareMaterial}</span>
           <span class="best rec">take: ${c.recommended.join(', ')}</span>
         </button>`;
       }).join('');
+      // **What this table must show depends on which screen it is.** At a
+      // supply stop the haul has already been banked - M25b moved that to the
+      // way *in*, so the hangar opens on money that is actually there - and a
+      // table driven off `run.haul` therefore reads 0/0/0 at the exact moment
+      // the player is deciding what to spend. Measured live at the first
+      // checkpoint of a run: haul all zero, `meta.banked` 2,329 salvage. That is
+      // the M25b run-lost fault again, on the screen it matters most, and it is
+      // the third time this milestone series has printed a number that had just
+      // been moved somewhere else.
+      //
+      // So the stop reports what it banked and what the player now has; the
+      // route screen, which opens *before* any banking, still reports the haul
+      // it is carrying and what is still at risk.
       const h = run.haul;
+      const settled = g.lastSettled || null;
+      const rows = checkpoint
+        ? `<tr><td>Salvage banked at this stop</td><td>${formatScore(settled ? settled.salvage : 0)}</td></tr>
+           <tr><td>Research banked at this stop</td><td>${formatScore(settled ? settled.data : 0)}</td></tr>
+           <tr><td>Salvage on hand</td><td>${formatScore(meta.banked.salvage)}</td></tr>
+           <tr><td>Research on hand</td><td>${formatScore(meta.banked.data)}</td></tr>`
+        : `<tr><td>Transmitted salvage</td><td>${formatScore(h.salvageSafe)}</td></tr>
+           <tr><td>Physical cargo (at risk until the next checkpoint)</td><td>${formatScore(h.salvageCargo)}</td></tr>
+           <tr><td>Research data</td><td>${formatScore(h.data)}</td></tr>`;
+      const full = g.lives >= run.maxShuttles;
       return `<div class="screen wide">
         <div class="eyebrow" style="color:#4dff9f">${cleared.length} OF ${PLANET_ORDER.length} BODIES CLEARED${checkpoint ? ' · SUPPLY STOP' : ''}</div>
-        <h2>${checkpoint ? 'CARGO BANKED. SHUTTLES BACK.' : 'WHERE NEXT'}</h2>
+        <h2>${checkpoint ? 'CARGO BANKED' : 'WHERE NEXT'}</h2>
         <p class="body">This is the only place the hangar takes salvage and the loadout opens, so
-        spend it here or carry it on. Go back to ground you have already cleared to farm for an
-        upgrade, or take the next body.</p>
+        spend it here or carry it on. There is no going back: the ladder runs one way, and a body
+        you have cleared is behind you for the rest of the run.</p>
+        ${ladderHTML(cleared)}
         <table class="score">
-          <tr><td>Transmitted salvage</td><td>${formatScore(h.salvageSafe)}</td></tr>
-          <tr><td>Physical cargo ${checkpoint ? '(banking now)' : '(at risk until the next checkpoint)'}</td><td>${formatScore(h.salvageCargo)}</td></tr>
-          <tr><td>Research data</td><td>${formatScore(h.data)}</td></tr>
-          <tr class="tot"><td>SHUTTLES</td><td>${g.lives} / ${run.maxShuttles}</td></tr>
+          ${rows}
+          <tr class="tot"><td>SHUTTLES</td><td>${g.lives} / ${run.maxShuttles}${full ? '' : ' · one back per body cleared'}</td></tr>
         </table>
         <div class="grid routes centred">${cards}</div>
         <div class="btns">${btn('outfit', 'LOADOUT')}${btn('hangar', 'HANGAR')}${btn('abandon-run', 'END EXPEDITION')}</div>
@@ -528,8 +569,8 @@ export function screenHTML(s) {
       const sum = g.lastRunSummary || { missions: 0 };
       return `<div class="screen">
         <div class="verdict" style="color:#4dff9f;text-shadow:0 0 30px #4dff9f">EXPEDITION COMPLETE</div>
-        <p class="body">Five sectors, and the lander came home. Everything you carried is banked.
-        The next expedition starts wherever you want it to.</p>
+        <p class="body">All ${PLANET_ORDER.length} bodies, Moon to Venus, and the lander came home.
+        Everything you carried is banked.</p>
         <table class="score">
           <tr><td>Missions flown</td><td>${sum.missions}</td></tr>
           <tr><td>Run score</td><td>${formatScore(g.score)}</td></tr>

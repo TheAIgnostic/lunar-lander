@@ -25,7 +25,7 @@ Everything under `src/` is a plain ES module, loaded directly in the browser and
 | `src/forces.js` | force/status interface: atmosphere, dust, wind channels, thermal, cryo, plumes, radiation | M5-M7 |
 | `src/save.js` | versioned MetaSave + RunState, legacy migration, corruption recovery | M8 |
 | `src/economy.js` | rewards, the carried haul, what a deposit is worth, the transmitted/cargo split, settlement and banking | M9/M15 |
-| `src/route.js` | discovery tiers, four-card offers, checkpoint rule | M9 |
+| `src/route.js` | the ten-body ladder, the next-body card, the progress trail, checkpoint rule | M9/M27 |
 | `src/components.js` | 5 component tracks, `deriveLoadout` / `deriveFull`, purchase rules | M10/M11 |
 | `src/skills.js` | 3 skill trees, `deriveSkills`, purchase and gating rules | M11 |
 | `src/modules.js` | 5 active + 4 passive modules, blueprint guarantee list | M11/M12 |
@@ -110,7 +110,13 @@ claim and the one that kept the campaign at 21 machines. The rule is local now: 
 engagement disc may overlap at most `COMBAT.maxAtOnce - 1` others, which guarantees no point in any
 disc is covered by more — and `placeEnemies` and `validate.js` enforce it with the same constant.
 A consequence worth knowing before raising a budget: **a map holds a finite number of
-non-overlapping engagements**, and past that the budget is fiction rather than difficulty. The
+non-overlapping engagements**, and past that the budget is fiction rather than difficulty.
+
+`generateChapter` reads `VALIDATION.minPadWidth` for the same reason and to the same end. It used to
+carry its own pad arithmetic, and at depth 2 — sector 5 and beyond, which the three-body ladder never
+reached — it asked for a 50 px prize pad against a 56 px stance, so **the last five bodies of the
+M27 ladder each generated one mission its own validator rejects**. Where a generator and its checker
+both encode a limit, they share the constant. Read it *inside* the function, never at module load. The
 budgets in `missions.js` were set from a measured capacity sweep and fill to 99%.
 
 **The rule that holds combat fair, and what M24 narrowed it to.** Every mission keeps a
@@ -142,13 +148,40 @@ them. Deleting the content would delete the only proof the flight model has not 
 stay as an engine fixture that no player can reach. `act()` keeps the `campaign` and `endless` cases
 as audible refusals rather than dropping them, so a stale key binding says why (the M16 rule).
 
-The run is the roguelike unit, and since M25 it is a **linear ladder**: `PLANET_ORDER` is Moon,
-Mars, Europa, a run always starts at its foot, and losing the last shuttle puts you back there. The
-route window shows every body already cleared plus the next one, so the remaining choice is *replay
-cleared ground to farm the hangar, or press on* — known and cheap against unknown and better paid.
+The run is the roguelike unit, and since **M27** it is a ten-body linear ladder: `PLANET_ORDER` is
+Moon, Europa, Titan, Mars, Enceladus, Ganymede, Io, Mercury, Pluto, Venus — sorted by measured
+difficulty, fixed for every run. A run always starts at its foot, and losing the last shuttle puts
+you back there. Four rules hold it up, all Tom's (2026-08-20):
+
+1. **The order never varies.** Moon first, Venus last, every run.
+2. **Every run starts at the Moon**, never from the furthest body reached — that is the attrition
+   curve the model depends on.
+3. **No replay.** A cleared body cannot be re-flown. This is enforced by what `routeChoices`
+   *returns* — only the next body — because `route:N` indexes that array, so there is no index a
+   cleared body can be reached through. The ladder behind the player is `ladderTrail`, a display
+   concern with nothing clickable in it.
+4. **Shuttles attrit**: `+1` per body cleared, capped at 3, never a restore to full.
+
+Sorting by difficulty fixed the inverted ramp for free — Europa had been the finale with the weakest
+gravity in the game and now teaches ice at position 2 — and it is what unblocks the hangar. Every
+component level costs salvage plus a material only one body produces, and the three-body ladder had
+made seven of ten unreachable: Sensors could not be bought at all. The materials come back **by
+being on the route**, so the "this material comes from that world" texture survives intact rather
+than being repointed at whatever is nearby.
+
+**The sector is the ladder position.** `run.sector` increments once per body, so it runs 1–10, and
+`generateChapter` reads it as depth. Two consequences worth knowing: a survey body is generated
+harder further down the ladder, and anything that *adds* the sector to a per-body difficulty figure
+is double-counting, because the position is already sorted by difficulty. That is what saturated the
+route card's forecast in M27 until it was measured — six of ten cards printed the same thing.
+
 `isCheckpoint` fires after **every** body, which is both the design and the fix for a real bug:
 rewards accumulate in `run.haul`, purchases spend from `meta.banked`, and only a checkpoint moves one
-to the other, so a checkpoint every *second* body left a whole chapter's pay unspendable.
+to the other, so a checkpoint every *second* body left a whole chapter's pay unspendable. Since M25b
+the banking happens on the way *in*, before the screen opens — which means the checkpoint screen must
+**not** report `run.haul`, because banking has just emptied it. It reports what it settled
+(`g.lastSettled`) and what is on hand; only the route screen, which opens before banking, reports the
+haul.
 
 Losing the last shuttle calls `Save.wipeForDeath`, and what that keeps is the whole of the design:
 
@@ -157,11 +190,17 @@ Losing the last shuttle calls `Save.wipeForDeath`, and what that keeps is the wh
 | skills, every banked resource, the opened map | hangar component levels, blueprints, equipped modules |
 
 ...which is what makes the hangar a *decision*. Salvage spent on a permanent upgrade is the only
-thing that survives a run, and it is spent at the sector checkpoint — the same moment, and the only
+thing that survives a run, and it is spent at the supply stop — the same moment, and the only
 moment, that the loadout opens. So a permanent upgrade is always bought at the price of the loadout
-you would otherwise carry into the next sector. The hangar is readable at any time; what it will not
+you would otherwise carry to the next body. The hangar is readable at any time; what it will not
 do outside that window is take your salvage. Mission select exists but is earned: `meta.gameCompleted`
-is set only by carrying an expedition through all five sectors.
+is set only by carrying an expedition through all ten bodies.
+
+**And since M27 that decision has no safety net.** Removing replay removed the only way to recover
+from a bad run: income is bounded by how far the player gets, and a player stuck at body 3 cannot
+grind their way out. Every run has to leave them measurably stronger than the last or the loop
+deadlocks. M13's anti-frustration debrief is the existing hook, and verifying that floor is the
+first thing M28 does — before any number is tuned.
 
 **The playtest log is not the logbook.** `meta.stats` is the player's career record: aggregated,
 lossy, permanent. `gamelog.js` is the opposite — an ordered event trace of one sitting, in memory
@@ -228,7 +267,7 @@ game or the pilot changes. Improving the pilot should move the second and leave 
 | `__game.carried` | what the hold has picked up this mission; `__game.terrain.materialLeft()` is what is still out there |
 | `__useAbility()` | fire the equipped active module |
 | `__runChapter('MARS')` | fly a whole chapter headlessly (after `await __autopilotReady`) |
-| `__settleNow()` | resolve a pending landing or crash immediately |
+| `__settleNow()` | run the *pending* settle immediately — it does not decide anything itself |
 | `__log()` / `__logJSON()` / `__logClear()` | the playtest trace, for pasting straight out of the console |
 
 ## Environment notes that cost real time
@@ -245,6 +284,14 @@ game or the pilot changes. Improving the pilot should move the second and leave 
   fixed height meets the surface only on level ground; on a slope the closing edge floats and draws
   a visible box. This shipped in M19 and stayed invisible until M20's ice made the ground steep
   enough to expose it. Trace the heightmap, close underneath it, and stroke only the silhouette.
+- **A debug hook that reimplements a rule will drift from it.** `__settleNow` decided the
+  post-landing state itself — `g.levelIndex === LEVELS.length - 1 ? 'victory' : 'result'` — and
+  `LEVELS` is the twelve *classic* missions, so on an expedition it sent every landing to the result
+  screen and skipped banking, the blueprint grants and the whole chapter-clear branch. A scripted
+  five-mission Moon run landed all five and reported `cleared=[]`, which reads exactly like a broken
+  ladder and cost M27 an hour. Both settle timers go through `settleAfter(ms, work)` now, which holds
+  the pending work, and the hook runs *that* rather than a copy of it. Same class as M23's drifted
+  autopilot and M24's constant-encoding assertions: **one rule, one implementation.**
 - **The bundle cannot catch a missing import.** It concatenates every module into one scope, so a
   name that was never imported still resolves. M23's surgery produced two genuinely missing imports
   and three phantom ones, and the bundle built clean through all five; real ES module loading (node
@@ -275,7 +322,8 @@ game or the pilot changes. Improving the pilot should move the second and leave 
 2. This file — what each module owns and the rules that hold the design together.
 3. `docs/PROGRESSION.md` — the hangar/skills/loadout as one system, and the measured blocker in it.
 4. `test/BASELINE.md` — the measurements, milestone by milestone, ending with the encounter audit.
-   The M19 and M20 sections are the two that record *where the wall is* for terrain.
+   The M19 and M20 sections are the two that record *where the wall is* for terrain; M27 is the
+   ladder as it stands.
 
 Then **measure before editing**: `./test/run-all.sh 20` for the suites, and the encounter audit
 described at the end of `test/BASELINE.md` for what a player actually meets in the world. Every
@@ -293,7 +341,9 @@ The MVP is complete and measured (`test/BASELINE.md`, M13 section). What the nex
   that should field it.
 - **Seven bodies still fly generated survey chapters** rather than authored missions: Mercury,
   Venus, Titan, Enceladus, Io, Pluto, Ganymede. `src/missions.js` is where authored content goes,
-  and `generateChapter` is what it replaces.
+  and `generateChapter` is what it replaces. **Since M27 they are all on the ladder**, so this is
+  content a player meets on every run rather than bodies the route might offer — which is what makes
+  M29 worth doing and why the validator now flies each of them at the sector it actually occupies.
 - **Landing bands await human playtest data.** They were deliberately not retuned in M13 — the only
   recorded data is an autopilot, which is not a proxy for a person.
 - **Moving landing platforms** are still deferred (Europa 5, Io 5): `padAt` and the landing check

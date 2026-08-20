@@ -188,6 +188,11 @@ function settleAndBank() {
     salvage: settled.salvage || 0, data: settled.data || 0, cores: settled.cores || 0,
     total: meta.banked.salvage, totalData: meta.banked.data,
   });
+  // What was just settled, kept for the screen that reports it. The supply stop
+  // cannot read `run.haul` for this: banking happens on the way *in* (M25b), so
+  // by the time the checkpoint renders the haul is empty by design and a table
+  // driven off it prints zeroes at a player who is holding thousands.
+  g.lastSettled = settled;
   return settled;
 }
 
@@ -591,13 +596,15 @@ function onLand() {
   if (!g.run) Save.saveMeta(meta);
 
   g.freeze = 0.75;
-  const tok = g.token;
-  setTimeout(() => {
-    if (tok !== g.token) return;
+  settleAfter(950, () => {
     const last = g.levelIndex >= activeLevels().length - 1;
     if (!g.endless && last) {
       if (g.run) {
-        // A cleared chapter returns a shuttle, up to the expedition maximum.
+        // **Shuttles attrit** (M27, Tom's decision 4). A cleared body returns
+        // *one* shuttle, capped at the expedition maximum - it does not restore
+        // the run to full. Over three bodies that distinction barely showed;
+        // over ten it is the whole attrition curve, because a full restore at
+        // every supply stop is effectively thirty lives.
         g.lives = Math.min(g.run.maxShuttles, g.lives + 1);
         // Blueprint guarantee: finishing a first chapter hands over an active
         // module, so no route can ever demand gear the player was never offered.
@@ -639,7 +646,10 @@ function onLand() {
         // while his log header read 300. Pay first, then open the doors.
         if (isCheckpoint(g.run.chaptersCleared)) {
           settleAndBank();
-          g.lives = g.run.maxShuttles;
+          // The supply stop does *not* refill the rack. It used to set
+          // `g.lives = maxShuttles` here, one line after the +1 above, which
+          // made the +1 dead code and every stop a full restore. M27 removes
+          // it: what you carry down the ladder is what you have left.
           g.run.shuttles = g.lives;
           g.loadoutWindow = true;
           persistRun();
@@ -657,7 +667,38 @@ function onLand() {
       }
       setState('victory');
     } else setState('result');
-  }, 950);
+  });
+}
+
+/**
+ * The pending settle: what a landing or a crash resolves into once its freeze
+ * has played out. Held rather than fired-and-forgotten so that `__settleNow`
+ * can run **the real thing** instead of a copy of it.
+ *
+ * That distinction cost this session an hour. `__settleNow` used to reimplement
+ * the decision - `setState(g.levelIndex === LEVELS.length - 1 ? 'victory' :
+ * 'result')` - and it had gone stale: `LEVELS` is the twelve *classic* missions,
+ * so on an expedition it sent every landing to the result screen and silently
+ * skipped banking, the blueprint grants and the whole chapter-clear branch. A
+ * scripted five-mission Moon run landed all five and reported `cleared=[]`,
+ * which reads exactly like a broken ladder and is not one.
+ *
+ * The same class of fault as M23's autopilot copy and M24's assertions that
+ * encoded constants: a second implementation of a rule, drifting behind the
+ * first. There is one settle now, and the hook runs it early rather than
+ * imitating it.
+ */
+let pendingSettle = null;
+
+function settleAfter(ms, work) {
+  const tok = g.token;
+  const run = () => {
+    if (tok !== g.token) return;
+    pendingSettle = null;
+    work();
+  };
+  pendingSettle = run;
+  setTimeout(() => { if (pendingSettle === run) run(); }, ms);
 }
 
 /**
@@ -705,9 +746,7 @@ function onCrash() {
   recordFlight(null);
   if (g.run) persistRun(); else Save.saveMeta(meta);
   g.freeze = 0.12;
-  const tok = g.token;
-  setTimeout(() => {
-    if (tok !== g.token) return;
+  settleAfter(1400, () => {
     if (g.lives <= 0 && g.run) {
       // Expedition over: bank what was gathered, then release the run.
       const settled = settleHaul(g.run.haul, { completed: false, recovered: (g.loadout && g.loadout.cargoRecovery) || 0 });
@@ -733,7 +772,7 @@ function onCrash() {
       return;
     }
     setState(g.lives <= 0 ? 'gameover' : 'crash');
-  }, 1400);
+  });
 }
 
 // ------------------------------------------------------------------ loop
@@ -1055,8 +1094,9 @@ window.__draw = () => { syncSize(); draw(); return { w: W, h: H, state: g.state 
 
 /** Resolve a pending landing/crash immediately, for headless tests. */
 window.__settleNow = () => {
-  if (ship.landed) { setState(!g.endless && g.levelIndex === LEVELS.length - 1 ? 'victory' : 'result'); return g.state; }
-  if (!ship.alive) { setState(g.lives <= 0 ? 'gameover' : 'crash'); return g.state; }
+  // Runs the settle that is actually pending, immediately - it does not decide
+  // anything itself. See `settleAfter` for why that matters.
+  if (pendingSettle) pendingSettle();
   return g.state;
 };
 

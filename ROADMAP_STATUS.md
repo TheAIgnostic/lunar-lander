@@ -669,6 +669,50 @@ scheduled until the MVP is stable — the spec says the same.
   - **`mulberry32`'s first output correlates across nearby seeds** - a two-item pool rides on that
     value alone and Europa dealt an identical chapter on every seed until four draws were discarded
 
+- [x] **M27 — the ten-body ladder** (this commit)
+  - `PLANET_ORDER` is all ten, difficulty-sorted: Moon, Europa, Titan, Mars, Enceladus, Ganymede,
+    Io, Mercury, Pluto, Venus. The inverted ramp is fixed for free - Europa teaches ice at position
+    2 instead of being a finale with the weakest gravity in the game, and Venus is a real wall
+  - **the hangar is unblocked, and by geometry rather than by repointing**: all five tracks reach L4
+    where four were capped and Sensors could not be bought at all. Same costs, same materials, same
+    "go there to build this" gate - the bodies are simply on the route again
+  - `routeChoices` returns **only the next body**, which is what enforces no-replay: `route:N`
+    indexes that array, so no index reaches a cleared body. The ladder behind the player is a
+    non-interactive **trail** of ten rungs - ten route cards would have been nine unclickable
+    buttons, which is a menu that lies
+  - **shuttles attrit**: `+1` per body cleared, capped at 3. The `+1` already existed and one line
+    later `g.lives = maxShuttles` overwrote it, so every stop was a full restore and the `+1` was
+    dead code. Proved live: two lost on purpose, one returned, 2/3 at the stop
+  - **the forecast saturated exactly the way M24's visibility did.** Sector ran to 3 under M25 and
+    runs to 10 now, and both card figures were sector-bumped: six of ten cards printed an identical
+    forecast. Difficulty drops the sector term (on a fixed ladder the sector *is* the position, and
+    the position is already difficulty-sorted - adding both counts one axis twice) and resistance is
+    read off the chapter the player will fly
+  - reading resistance honestly immediately exposed what "heavy" was hiding: `lun 4 · eur 3 · tit 3 ·
+    mar 5 · enc 0 · gan 3 · io 3 · mer 3 · plu 3 · ven 3`. Every survey body caps at 3, the authored
+    Moon fields 4 and Mars 5, and **Enceladus has no eligible enemy sets at all**. Printed, not
+    asserted - M28 balance and M29 content, not a formula bug
+  - **the generator was producing missions its own validator rejects.** At depth 2 - sector 5 and
+    beyond - mission 5 asked for a 50 px prize pad against a 56 px stance, so the last five bodies of
+    the ladder each generated one impossible mission. Never seen because the sweep only flew sectors
+    1 and 3, six seeds. Floored at `VALIDATION.minPadWidth + 8`, read from the validator so the two
+    cannot drift
+  - **the survey block gated on flight, against the file's own doctrine** - structural fails, flight
+    warns. Venus failed the sweep on 2 seeds of 20 with geometry 100/100 and every failure a crash
+    short of the pad. It warns now. Every body is structural 100/100 at both sectors
+  - **the supply stop was printing zeroes at a player holding 2,329 salvage** - the M25b fault a
+    third time. Banking moved to the way *in*, but the table still read the haul it had just emptied
+  - **`__settleNow` did not run the settle**, it reimplemented it against `LEVELS.length` - the
+    twelve classic missions - so a scripted expedition landed five missions and reported
+    `cleared=[]`. One settle now, held by `settleAfter`, and the hook runs it early
+  - `TIERS` / `eligibleBodies` / `routeOffers` / `MIN_OFFERS` / `SECTORS` **deleted**. M25 left them
+    with a "delete it or wire it" note because it was still open whether the survey bodies would
+    rejoin as a tiered choice; M27 answers that - they join `PLANET_ORDER`
+  - **both fixtures byte-identical**, full suite green, and the whole ladder walked in the browser:
+    Moon cleared, purchase at the stop, Europa taken at sector 2, a run lost and restarted at the
+    Moon with the hangar intact, and Venus clearing to `expedition-complete`
+
+
 ## Decisions (Tom, 2026-08-16)
 
 1. **Gravity** — compressed mapping is the *baseline*, then a per-body hand-tuned offset so each
@@ -686,14 +730,16 @@ None.
 
 ## Next task
 
-**The next three milestones are progression, and they are planned below.** The audit is
-`docs/PROGRESSION.md` — read it first; every figure there carries the snippet that reproduces it.
+**M28, the material re-cut and the economy.** M27 shipped the ladder; the audit behind both is
+`docs/PROGRESSION.md` and the measurements are the M27 section of `test/BASELINE.md`.
 
-The blocker: M25's three-body ladder made seven of the ten hangar materials unreachable, so Sensors
-cannot be bought at all and Hull caps at L2 — which is the track that answers M24's two-shot
-machines. Tom has confirmed excluding the other bodies was not the intent.
+**The blocker is cleared.** All five hangar tracks reach L4 — Sensors could not be bought at all and
+three others were capped. What M27 did *not* do, and said it would not, is put those levels in a
+sensible order. That is M28, and it is now a table of numbers rather than a claim (below).
 
 ### Tom's decisions (2026-08-20) — constraints, not options
+
+Implemented in M27; kept here because they constrain everything after it too.
 
 1. **Ten bodies, one fixed order, Moon first and Venus last.** The order never varies between runs.
 2. **Every run starts at the Moon.** Never from the furthest body reached — that would remove the
@@ -708,21 +754,16 @@ the length of a run that clears all ten bodies — the rarest outcome in a perma
 playtest log had the real figure, **~3 minutes per body**, so a run that dies at body 4 is about
 twelve minutes. Measure before recommending.
 
-### M27 — the ten-body ladder
+### M27 — the ten-body ladder (done, this commit)
 
-- `PLANET_ORDER` becomes all ten, difficulty-sorted: Moon, Europa, Titan, Mars, Enceladus, Ganymede,
-  Io, Mercury, Pluto, Venus. This fixes the inverted ramp for free — Europa becomes the body that
-  *teaches* ice at position 2 instead of a finale with the weakest gravity in the game
-- **this is what unblocks the hangar**: the materials become reachable by being on the route, not by
-  being repointed, so the "this material comes from that world" texture survives intact
-- `routeChoices` returns **only the next body**. Cleared bodies stay on the screen as a
-  non-interactive progress trail — a visible ladder showing how far this run got — with the next body
-  as the single actionable card, centred. *(Assumption: Tom asked to remove the replay **option**, not
-  the display. Correct this if the trail is unwanted.)*
-- shuttle attrition per decision 4; expedition completes on Venus
-- `isExpeditionComplete` already reads a cleared-list, so it needs no change
-- validation: all ten bodies × 20 seeds through `validate-missions.js`, and the M26 shuffle re-checked
-  at ten bodies rather than three
+Shipped as planned, plus four things the plan did not anticipate: the route card's forecast
+saturated the way M24's visibility formula did, the generator was producing sub-stance pads at
+sectors the three-body ladder never reached, the supply stop printed zeroes at a player holding
+thousands, and `__settleNow` turned out to be a stale copy of the settle rather than the settle. All
+four are in the M27 section of `test/BASELINE.md`.
+
+The trail assumption was taken as written — Tom asked to remove the replay **option**, not the
+display — so the cleared bodies are still on screen, as ten non-interactive rungs rather than cards.
 
 ### M28 — the material re-cut and the economy
 
@@ -732,9 +773,22 @@ cannot grind their way out. Every run must leave the player measurably stronger 
 loop deadlocks. M13's anti-frustration debrief is the existing hook — re-tune it, do not re-invent it.
 
 - **material re-cut**: every track's L2 from bodies 1-3, L3 from bodies 3-6, L4 from bodies 6-10, and
-  Hull's L2 earlier than Mars. Today Hull L3 gates on Venus (body 10) while Hull L4 gates on Io
-  (body 7), which cannot be bought in that order. A re-authoring pass over `components.js`, not a
-  formula
+  Hull's L2 earlier than Mars. Measured against the M27 ladder — three tracks already comply and two
+  do not:
+
+  | track | L2 | L3 | L4 |
+  | --- | ---: | ---: | ---: |
+  | Landing gear | body 1 | body 2 | body 4 |
+  | Engine & tanks | body 1 | body 4 | body 8 |
+  | Attitude thrusters | body 1 | body 3 | body 6 |
+  | **Hull** | **body 4** | **body 10** | **body 10** |
+  | **Sensors** | **body 5** | body 6 | body 9 |
+
+  Note this corrects the figure `docs/PROGRESSION.md` carried: Hull L4 needs Venus *and* Io, so it
+  gates on body 10 like L3 rather than on body 7. The out-of-order pair is gone; what is left is
+  worse and simpler — **Hull's top two levels are both unbuyable until the last body of the run**,
+  on the one track that answers M24's two-shot machines. A re-authoring pass over `components.js`,
+  not a formula
 - **payout scale**: a clean body clear should buy one meaningful upgrade and a sloppy one nearly.
   Today a *perfect* Moon chapter pays 300 against a 320 cheapest upgrade, so it buys nothing
 - **a recommended tier per body**, printed at the supply stop, with pad width and machine damage tuned
@@ -838,36 +892,46 @@ that needs none of the conversation that produced this plan.
 
 ### Handover
 
-*Rewritten 2026-08-20, after the session that ran M24–M26, wrote `docs/PROGRESSION.md` and put the
-game online.*
+*Rewritten 2026-08-20, after the session that ran M27 — the ten-body ladder.*
 
 **The first prompt for a new session:**
 
-> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then `docs/PROGRESSION.md`, then the M24–M26
-> sections of `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything. Then build
-> **M27 — the ten-body ladder**, which is specified under "Next task" along with Tom's four
-> decisions, which are constraints rather than options.
+> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then `docs/PROGRESSION.md`, then the M27
+> section of `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything. Then build
+> **M28 — the material re-cut and the economy**, which is specified under "Next task". Do the income
+> floor check first, before tuning anything.
 
 That shape matters more than the wording: read the state, then *measure* the state, then build.
 Every milestone here that went well started from a number, and every one that went badly started
-from an assumption. **This session proved it twice more** — see the two entries under "the
-instrument" below.
+from an assumption. **M27 proved it three more times** — see "the instrument" below.
 
 ### Reading order
 
 1. **this file** — what is done, what is next, and the decisions behind both
 2. **`docs/ARCHITECTURE.md`** — what each module owns, which way the imports point, and the
    environment gotchas that have each cost real time at least once
-3. **`docs/PROGRESSION.md`** — the hangar, the skills and the loadout as one system, and the measured
-   blocker that four of the five hangar tracks cannot be climbed. Read it before touching economy,
-   difficulty or the route. Every figure carries the snippet that reproduces it
-4. **`test/BASELINE.md`**, the **M24–M26** sections — the lethality change and what it cost, the
-   visibility formula and why the obvious one was wrong, and the terrain shuffle
+3. **`docs/PROGRESSION.md`** — the hangar, the skills and the loadout as one system. Its headline
+   blocker (four of five tracks unclimbable) was **cleared by M27**; what remains is the ordering
+   and the payout, which is M28. Read it before touching economy, difficulty or the route. Every
+   figure carries the snippet that reproduces it
+4. **`test/BASELINE.md`**, the **M27** section for the ladder as it stands, and **M24–M26** for how
+   it got here — the lethality change and what it cost, the visibility formula and why the obvious
+   one was wrong, and the terrain shuffle
 
 Then **measure before editing**: `./test/run-all.sh 20`. It ends with the encounter audit, so one
 command tells you both that the game still works and what a player currently meets in it.
 
 ### What this session did
+
+- **M27** — the ten-body ladder. `PLANET_ORDER` is all ten, difficulty-sorted; no replay; shuttles
+  attrit; the hangar unblocked from four capped tracks (Sensors unbuyable) to **all five reaching
+  L4**. Four faults found on the way, all in the M27 baseline section: a saturating route forecast,
+  a generator producing sub-stance pads at sectors the old ladder never reached, a supply stop
+  printing zeroes at a player holding 2,329 salvage, and `__settleNow` silently bypassing the settle
+- M9's discovery-tier machinery (`TIERS`, `eligibleBodies`, `routeOffers`, `MIN_OFFERS`, `SECTORS`)
+  **deleted** — M27 answered the question that was keeping it alive
+
+*The session before this one:*
 
 - **M24** — Tom's own eleven-item list. Two-shot machines, a 0.25 s turret lock, projectiles ×3,
   visibility ×3, classic and endless gone, no route choice, death keeps the hangar and takes the
@@ -879,13 +943,20 @@ command tells you both that the game still works and what a player currently mee
 - **`docs/PROGRESSION.md`** — the audit that found the blocker
 - **published** — `main` is live on two GitHub Pages sites; see "Where it is published"
 
-### The instrument, and two ways it misled this session
+### The instrument, and three ways it has misled a session
 
 - **The autopilot has no evasive logic, no terrain lookahead, and cannot see the screen.** It is
   still the only measuring instrument. M24 cut unarmed safe-route crossings from 240/240 to 167/240,
   and that 70% is a **floor** measured by a pilot that does not dodge — not what a person meets. And
   **no automated test in this project can measure the visibility change at all**, because the pilot
   flies on state rather than on what is drawn. Both fixtures stayed byte-identical through it.
+- **A debug hook reimplemented the rule it was meant to run, and drifted.** `__settleNow` decided
+  the post-landing state itself, against `LEVELS.length` — the twelve *classic* missions — so on an
+  expedition it skipped banking, the blueprint grants and the whole chapter-clear branch. A scripted
+  five-mission Moon run landed all five and reported `cleared=[]`, which reads exactly like a broken
+  ladder. It cost M27 about an hour. Same class as M23's drifted autopilot copy: **a second
+  implementation of a rule, quietly falling behind the first.** Both settles go through
+  `settleAfter` now and the hook runs the pending one rather than imitating it.
 - **A recommendation was made from a guess while the measurement was already recorded.** The
   ten-body ladder was argued against on the grounds that a run is 50 missions ≈ 60–90 minutes. That
   is the length of a run that *clears all ten bodies*, the rarest outcome in a permadeath game.
@@ -911,8 +982,12 @@ command tells you both that the game still works and what a player currently mee
 
 ### Open with Tom
 
-- **M27–M29 are planned and not started.** Tom said "don't build it now"; the plan is under "Next
-  task" with his four decisions recorded as constraints.
+- **M27 is done; M28 and M29 are planned and not started.** The plan is under "Next task".
+- **Two things M27 measured that are Tom's calls, not the code's.** The machine count barely moves
+  down the ladder and moves the wrong way where it does — every survey body caps at 3 while the
+  authored Moon fields 4 and Mars 5 — and **Enceladus, at position 5, has no eligible enemy sets at
+  all**. And Venus, the wall, lands the prize route 36/100 with the geometry sound at 100/100.
+  Whether those are difficulty or defects is a design answer.
 - **The biggest risk in that plan** is that removing replay removed the player's only recovery
   mechanism. Income is now bounded by how far a run gets, and a player stuck at body 3 cannot grind
   out of it. M28 must verify that floor *before* tuning anything else.

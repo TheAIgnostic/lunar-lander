@@ -7,8 +7,11 @@ Written because Tom lost the overview after M24–M26 changed the run shape thre
 the audit found a blocker that no test catches: **four of the five hangar tracks cannot be climbed
 at all on the three-body ladder M25 shipped.**
 
-The run's shape has since been decided and the fix is scheduled as **M27–M29** in
-`ROADMAP_STATUS.md`. This document is the reasoning behind those milestones; the roadmap is the plan.
+> **Status, after M27 (2026-08-20): the blocker is cleared.** The ladder is ten bodies and all five
+> tracks reach L4 — Sensors could not be bought at all before. Everything below about *why* the
+> hangar was nailed shut is history now; everything about the economy, the material **ordering** and
+> the survey bodies is still live and is M28–M29. The sections that have been overtaken are marked.
+> The measured state of the ladder is the M27 section of `test/BASELINE.md`.
 
 **Re-measure before trusting any number here.** Every figure below is reproducible with the
 snippets in the last section.
@@ -60,20 +63,36 @@ unarmed. The chapter is capped by its own geometry (see `test/BASELINE.md`, M21)
 
 ## How the ladder gets harder, body to body
 
+**As M25 shipped it, the ramp was inverted:**
+
 | # | body | gravity m/s² | friction | machines | hazards |
 | ---: | --- | ---: | ---: | ---: | --- |
 | 1 | Moon | 4.67 | 1.00 | 0–4 | none |
 | 2 | Mars | **7.06** | 1.00 | **0–5** | wind, dust, channels |
 | 3 | Europa | 4.11 | **0.07** | 0–3 | ice, radiation |
 
-**The ramp is inverted.** Europa, the finale, has the weakest gravity in the game — weaker than the
-Moon — the fewest machines, and a fuel budget that goes back up. Its difficulty rests entirely on ice
-friction and radiation. Mars is the hardest body in the game and is flown second, so a player who
-survives Mars finds the finale a relief.
+Europa, the finale, had the weakest gravity in the game — weaker than the Moon — the fewest machines,
+and a fuel budget that went back up. Mars, the hardest body in the game, was flown second, so a
+player who survived Mars found the finale a relief.
+
+**M27 fixed it by sorting the ten-body ladder on measured difficulty**, which is the order in the
+next section. Europa teaches ice at position 2 and Venus — gravity 10.48, dense drag — ends it.
+
+**What did not get fixed, and is an M28 input:** the *machine* count does not ramp at all, and where
+it moves it moves the wrong way.
+
+```
+machines down the ladder: lun 4 · eur 3 · tit 3 · mar 5 · enc 0 · gan 3 · io 3 · mer 3 · plu 3 · ven 3
+```
+
+Every survey body caps at 3 because `generateChapter`'s budget is `min(3, ...)`, while the authored
+introductory Moon fields 4 and Mars fields 5. **Enceladus, at position 5, has no `eligibleEnemySets`
+at all** — a body with nothing hostile on it, halfway down. The saturated "heavy resistance" the
+route card used to print was hiding this; it is measured on the card now.
 
 ---
 
-## The blocker: the hangar is nailed shut
+## The blocker: the hangar is nailed shut *(fixed by M27 — kept for the reasoning)*
 
 Every hangar level costs salvage **plus a material only one body produces**. That gate is good
 design — "go there to build this". But M25 cut the ladder to Moon/Mars/Europa, and **seven of the ten
@@ -90,10 +109,19 @@ material sources became unreachable**.
 **Sensors cannot be bought at all** — its first level needs Enceladus. One of five tracks is
 decorative.
 
+**M27 fixed this by putting the bodies back on the route**, not by repointing a single cost. Measured
+after: landing gear, engine, thrusters, hull and sensors all reach **L4**. The gate concept — go
+there to build this — survives intact, and the refusals now name a body the player is going to
+visit ("Needs 40 more Conductive ice salts", Europa, body 2).
+
 **Hull matters most here.** M24 set machine damage at exactly half a stock hull, and
 `test/enemies-tests.js` asserts that a hull upgrade buys a third shot. Capped at L2 (+12%), 112 hull
 still dies in two — so the assertion passes against a 150-hull figure the player cannot actually
 reach. Either the materials are re-cut, or the damage wants to be ~45.
+
+That is still true after M27, in a different shape: Hull is now buyable to L4, but **both of its top
+two levels gate on Venus, the last body of the run**. See the corrected table under "the material
+map", below.
 
 ### Why it happened
 
@@ -131,8 +159,16 @@ Research is healthier — ~85 data per body against a 40–95 cheapest node, so 
 
 ## Are the other seven bodies finished?
 
-**Systems yes, content no.** They are playable today and validated (30/30 structural, 30/30 reachable
-since M9), but they are anonymous.
+**Systems yes, content no.** They are playable and validated — since M27, at the sector each one
+actually occupies on the ladder and over 20 seeds rather than 6, and every body is structural 100/100
+— but they are anonymous. And since M27 they are no longer optional: every run meets all seven.
+
+Two things that sweep found once it flew where the ladder goes, both now fixed: the generator was
+asking for a 50 px prize pad against a 56 px stance at sector 5 and beyond, so **the last five bodies
+each generated one impossible mission**; and the sweep was hard-failing on flight rather than
+geometry, against the rule the rest of the file follows. Venus remains the outlier on flight —
+86/100 home, 36/100 on the prize route, geometry sound — which is the wall body behaving like a wall,
+measured by a pilot that does not dodge.
 
 What all ten already have: a full `PlanetDefinition` (real and mapped gravity, atmosphere, drag,
 wind, friction, visibility, rare material, terrain palette, eligible enemy sets), a generated
@@ -187,16 +223,28 @@ on. Scheduled as M27.
 
 ### The material map must be re-cut against it
 
-This is not automatic, and M27 does not do it — restoring the bodies makes the materials
-reachable, but not well-ordered. Laying today's costs over the ladder above:
+This is not automatic, and M27 did not do it — restoring the bodies made the materials reachable,
+but not well-ordered. **Measured against the shipped ladder**, the body each level first becomes
+buyable on:
 
-- **Hull L3 needs Venus (body 10)** while **Hull L4 needs Io (body 7)** — L4 cannot be bought before
-  L3, so Hull caps at L2 until the last body of the run. That is the track that answers two-shot
-  machines.
-- **Sensors does not start until body 5** (Enceladus).
+| track | L2 | L3 | L4 |
+| --- | ---: | ---: | ---: |
+| Landing gear | body 1 | body 2 | body 4 |
+| Engine & tanks | body 1 | body 4 | body 8 |
+| Attitude thrusters | body 1 | body 3 | body 6 |
+| **Hull** | **body 4** | **body 10** | **body 10** |
+| **Sensors** | **body 5** | body 6 | body 9 |
 
-The rule it needs: **every track's L2 from bodies 1–3, L3 from bodies 3–6, L4 from bodies 6–10**, with
-Hull's L2 pulled earlier than Mars. A re-authoring pass over `components.js`, not a formula.
+**This corrects an error in the earlier draft of this document.** It said Hull L3 gates on Venus
+while L4 gates on Io (body 7), an impossible order. Hull L4 in fact needs Venus *and* Io, so it
+gates on body 10 like L3. The out-of-order pair does not exist; what does is worse and simpler —
+**Hull's top two levels are both unbuyable until the last body of the run**, on the one track that
+answers two-shot machines. The figure was read off the M25 three-body order, where the positions
+were different. Re-measure before trusting, including this document.
+
+The rule it needs, unchanged: **every track's L2 from bodies 1–3, L3 from bodies 3–6, L4 from bodies
+6–10**, with Hull's L2 pulled earlier than Mars. Three tracks already comply. A re-authoring pass
+over `components.js`, not a formula.
 
 ---
 
@@ -256,14 +304,14 @@ re-tuned rather than re-invented. **Verify this before anything else in M28 is t
 
 ## Suggested order of work
 
-Ranked by how much each moves toward "upgrades are the price of entry". The first two are blocking —
-nothing else matters while four of five tracks are capped.
+Ranked by how much each moves toward "upgrades are the price of entry". The first was blocking and is
+done; the economy is now the front of the queue.
 
 Now scheduled as **M27–M29** in `ROADMAP_STATUS.md`. In short:
 
-1. **Restore all ten bodies to the ladder** (M27). This is what unblocks the hangar — the materials
-   become reachable again by being on the route, rather than by being repointed. It also fixes the
-   inverted ramp, since the order is difficulty-sorted.
+1. ~~**Restore all ten bodies to the ladder** (M27).~~ **Done.** The materials became reachable by
+   being on the route rather than by being repointed, all five tracks now reach L4, and the inverted
+   ramp is fixed because the order is difficulty-sorted.
 2. **Re-cut the materials and the payout** (M28). With the bodies reachable the re-cut is about
    *ordering* rather than unblocking: every track's L2 from bodies 1–3, L3 from 3–6, L4 from 6–10,
    Hull's L2 earlier than Mars. Payout rescaled so a clean body clear buys one meaningful upgrade.

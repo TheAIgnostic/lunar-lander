@@ -463,3 +463,49 @@ table.stats-table .m-w { text-align: right; color: #7f9db0; font-size: 11px; }
 .tile.route.is-done { opacity: .82; }
 .tile.route.is-done:hover { opacity: 1; }
 .tile.chapter.locked { opacity: .5; }
+
+/* --- M27: the ladder trail ------------------------------------------------
+   Ten bodies in a fixed order, and a cleared one cannot be re-flown - so the
+   route screen shows one card and this: where the run has got to. Ten route
+   cards would be a wall, and nine of them would be unclickable, which is a menu
+   that lies. A trail is a record instead.
+
+   It wraps rather than scrolls, because a horizontal scroller hides the end of
+   the ladder, and the end of the ladder is the point. */
+.ladder {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 4px 10px;
+  margin: 12px 0 4px;
+  padding: 0;
+  list-style: none;
+}
+.ladder .rung {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  letter-spacing: .14em;
+  color: #7f9db0;
+  white-space: nowrap;
+}
+/* The separator is drawn between rungs rather than inside them, so the last
+   body never trails a dangling arrow. */
+.ladder .rung + .rung::before {
+  content: '\203a';
+  color: #43596b;
+  margin-right: 5px;
+}
+.ladder .pip { font-size: 11px; line-height: 1; color: currentColor; }
+.ladder .rung.done { color: var(--rung, #4dff9f); opacity: .85; }
+.ladder .rung.next {
+  color: var(--rung, #5df5ff);
+  font-weight: 700;
+  text-shadow: 0 0 12px currentColor;
+}
+.ladder .rung.ahead { opacity: .45; }
+@media (max-width: 720px) {
+  .ladder .rung { font-size: 9px; letter-spacing: .1em; }
+}

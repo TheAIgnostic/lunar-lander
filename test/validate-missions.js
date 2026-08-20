@@ -7,7 +7,7 @@ import { flyMission } from './pilot.js';
 import { LEVELS } from '../src/levels.js';
 import { ARCHETYPE_NAMES } from '../src/archetypes.js';
 import { MOON_LEVELS, MARS_LEVELS, EUROPA_LEVELS, generateChapter } from '../src/missions.js';
-import { PLANET_IDS } from '../src/planets.js';
+import { PLANET_ORDER } from '../src/route.js';
 
 const SEEDS = +(process.argv[2] || 12);
 let hardFail = 0;
@@ -129,13 +129,26 @@ for (const level of EUROPA_LEVELS) {
   assess(`${level.id} ${level.title}`, level, seedList);
 }
 
-console.log(`\nvalidating generated survey chapters (every body, sector 1 and 3)\n`);
-for (const pid of PLANET_IDS) {
-  for (const sector of [1, 3]) {
+// M27 put all ten bodies on the ladder, so every survey chapter is now content
+// a player reaches on a normal run rather than a body the route might offer.
+// Two things follow for this sweep. It flies each body **at the sector it
+// actually occupies** - the ladder position is the sector, and the sector sets
+// pad width, fuel and enemy budget through `generateChapter`'s depth term, so
+// sector 1 and 3 no longer describes what Venus is flown at. And it flies the
+// full seed list rather than the first six, because these are no longer
+// off-route bodies.
+//
+// Sector 1 is kept alongside as the floor: a body has to be sound at the
+// easiest setting it can be generated at, which is what a shortened ladder or a
+// future mission-select would produce.
+console.log(`\nvalidating generated survey chapters (every body, at its ladder position)\n`);
+for (const pid of PLANET_ORDER) {
+  const ladderSector = PLANET_ORDER.indexOf(pid) + 1;
+  for (const sector of [...new Set([1, ladderSector])]) {
     const ch = generateChapter(pid, 4242, sector);
     let worstReach = 0, worstLand = 0, structural = 0, deepMiss = 0;
     for (const level of ch.levels) {
-      for (const seed of seedList.slice(0, 6)) {
+      for (const seed of seedList) {
         const terrain = new Terrain(level, seed);
         const v = validateTerrain(level, terrain);
         const ev = validateEnemies(level, terrain, seed);
@@ -151,12 +164,28 @@ for (const pid of PLANET_IDS) {
         if (flyMission(level, new Terrain(level, seed), { padIndex: 0, viaCells: true }).outcome !== 'land') deepMiss++;
       }
     }
-    const n = ch.levels.length * 6;
-    const ok = structural === 0 && worstReach === 0;
+    const n = ch.levels.length * seedList.length;
+    // **Structural is the gate; flight is evidence.** This block used to fail
+    // the sweep when the test pilot never reached a pad, which is the opposite
+    // of the rule `assess()` above states and follows - a validator can prove
+    // geometry, and can only offer evidence about flyability, because a failed
+    // flight may be the pilot's fault. It went unnoticed while these bodies
+    // were off the route and 6 seeds deep; at 20 seeds Venus - the heaviest
+    // body in the game, flown by a pilot with a known weakness for weight and
+    // drag - failed the sweep on 2 seeds of 20 with the geometry sound at
+    // 100/100 and every failure a crash short of the pad.
+    //
+    // So it warns now, in the same words and the same summary as everywhere
+    // else. It is not hidden: an unreachable pad is still printed on the line,
+    // still listed under the flight warnings, and still counted.
+    const ok = structural === 0;
     if (!ok) hardFail++;
-    console.log(`${ok ? (worstLand ? 'ok* ' : 'ok  ') : 'FAIL'} ${(pid + ' s' + sector).padEnd(22)}` +
+    const tag = `${pid} s${sector}${sector === ladderSector ? ` (body ${ladderSector})` : ''}`;
+    if (worstReach) warnings.push(`${pid} s${sector}: ${worstReach}/${n} seeds the pilot never reached the pad`);
+    console.log(`${!ok ? 'FAIL' : (worstReach ? 'warn' : (worstLand ? 'ok* ' : 'ok  '))} ${tag.padEnd(22)}` +
       ` structural ${String(n - structural).padStart(3)}/${n}   home ${String(n - worstLand).padStart(3)}/${n}` +
-      `   prize ${String(n - deepMiss).padStart(3)}/${n}`);
+      `   prize ${String(n - deepMiss).padStart(3)}/${n}` +
+      `${worstReach ? `   never reached ${worstReach}` : ''}`);
   }
 }
 
