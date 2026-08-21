@@ -954,6 +954,26 @@ scheduled until the MVP is stable — the spec says the same.
   - **both fixtures byte-identical**, full suite green
 
 
+- [x] **M29g — the sniper you can actually meet** (this commit)
+  - Tom: *"did you add the sniper? i did not encounter it"*. It shipped and it worked, and it was
+    effectively unreachable: M29e read "harder levels" as "the hardest bodies" and put the first one
+    on **Ganymede mission 4, body 6 of 10** - about 28 missions in. His own M29a log cleared four
+    bodies, and `docs/PROGRESSION.md` records a typical run dying at body 3 or 4
+  - **a machine nobody meets is not a machine.** The M11 fault at the level of content: M29e proved
+    the sniper engages and never asked whether anyone would be there to see it
+  - it could not simply be moved forward, because the **telegraph is the counterplay** and machines
+    are drawn *inside* the world with dust and darkness over the top - the bodies a run actually
+    reaches bottom out at 0.05-0.20 visibility. A lethal machine's lock line is drawn **above the
+    weather** now, exactly as the pad beacons and ore crates are: blind is difficulty, targetless is
+    a lottery. Only the lock, and only while locked - the machine itself stays lost in the storm
+  - first sighting is now **Titan mission 5, body 3**, present on 17/20 seeds
+  - **a sniper substitutes for a drone rather than adding to the map**, because the at-once rule caps
+    overlapping discs - and it displaces the drones the test pilot struggles with most, so a sniper on
+    `mars-5` quietly took STORM EYE from 6/20 to 12/20. Mars meets it on `mars-4 IRON RAIN` instead,
+    and mars-5 is back to its authored figure
+  - **both fixtures byte-identical**, sanctuary 20/20 on all 40 armed missions, and the way home is
+    unchanged on all three new placements
+
 ## Decisions (Tom, 2026-08-16)
 
 1. **Gravity** — compressed mapping is the *baseline*, then a per-body hand-tuned offset so each
