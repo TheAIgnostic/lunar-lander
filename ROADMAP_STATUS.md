@@ -936,6 +936,23 @@ scheduled until the MVP is stable — the spec says the same.
     every armed mission including `pluto-4`, the single-pad cave with no route around a machine
   - **both fixtures byte-identical**, sanctuary 20/20 on all 40 armed missions, campaign fill 97%
 
+- [x] **M29f — the space bed** (this commit)
+  - a soundbed for the title screen, **synthesized like everything else in `audio.js`** - no audio
+    files were added and none are going to be
+  - four layers: a detuned drone (55 / 55.19 Hz plus a fifth, beating every ~7 s), filtered noise
+    drifting on a 90 s cycle, two quiet high partials swelling against each other, and one sparse
+    beacon ping 9-22 s apart. Peak 0.071 against the engines' 0.55
+  - **all the movement is LFO nodes, not per-frame JavaScript**, because M16 found `engines` writing
+    240 automation events a second forever and a bed that runs while somebody leaves the title screen
+    up is where that would hurt most. One `setTimeout` per ping, and it stops rescheduling when the
+    bed does
+  - **the fault was two owners**: `silence()` was made to stop the bed too, and the frame loop calls
+    `silence()` every frame the game is not in play - so the bed was killed on the one screen it
+    exists for. The screen owns the ambience; `silence()` owns the flight voices
+  - it plays across the front-of-house screens rather than only the menu, because cutting it when
+    somebody opens SETTINGS reads as a fault; anything belonging to a mission is silent
+  - **both fixtures byte-identical**, full suite green
+
 
 ## Decisions (Tom, 2026-08-16)
 

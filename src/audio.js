@@ -79,6 +79,12 @@ export class Audio {
     set(this.rcs, rcsOn);
   }
 
+  /**
+   * Stop the *flight* voices. Deliberately not the space bed: the frame loop
+   * calls this every frame the game is not in play, so a bed switched off here
+   * would be switched off on the very screen it exists for. The bed has exactly
+   * one owner, `setState`, and this is the fault of giving it two.
+   */
   silence() {
     if (!this.ready) return;
     this._mainOn = null;
@@ -275,6 +281,168 @@ export class Audio {
 
   ui(up = true) {
     this.blip(up ? 660 : 440, 0.05, 'square', 0.07);
+  }
+
+  /**
+   * **The space bed: the title screen's ambience.**
+   *
+   * Everything in this file is synthesized - there are no audio files in this
+   * project and there is not going to be one for this - so it is built out of
+   * the same nodes as the engines, just slower and much quieter.
+   *
+   * Four layers, and each is doing a specific job:
+   *
+   *  - **the drone** is the body: two sines a few cents apart at 55 Hz and a
+   *    triangle a fifth above. The detune is the point - they beat against each
+   *    other about every seven seconds, so the bed never sits still without
+   *    anything having to move it.
+   *  - **the wind** is filtered noise with its band drifting on a 90-second
+   *    cycle. It reads as distance rather than as weather, because the band is
+   *    narrow and centred low.
+   *  - **the shimmer** is two quiet high partials that swell against each other
+   *    on a slower cycle again, so the top of the mix breathes instead of
+   *    sitting as a fixed hiss.
+   *  - **the beacon** is one sparse ping, 9 to 22 seconds apart. It is what
+   *    stops the bed being wallpaper: something out there is still transmitting.
+   *
+   * **All the movement is LFO nodes, not per-frame JavaScript.** M16 found
+   * `engines` writing 240 automation events a second forever, and a bed that
+   * plays for as long as somebody leaves the title screen up is exactly where
+   * that fault would be worst. The graph is built once, the oscillators run
+   * themselves, and the only JavaScript that ever runs afterwards is one
+   * `setTimeout` per beacon ping - which stops being rescheduled the moment the
+   * bed is switched off.
+   *
+   * It is deliberately very quiet (peak 0.085 against the engines' 0.55). A
+   * title bed that competes with the UI blips is a title bed people turn off.
+   */
+  spaceBed(on) {
+    if (!this.ready) return;
+    // The `engines` guard: do nothing at all unless the state actually changed.
+    if (this._bedOn === on) return;
+    this._bedOn = on;
+    const t = this.ctx.currentTime;
+
+    if (!this.bed) {
+      if (!on) return;                     // never build it just to switch it off
+      const out = this.ctx.createGain();
+      out.gain.value = 0;
+      out.connect(this.master);
+
+      // A slow LFO helper: an oscillator driving a param through a gain.
+      const lfo = (rate, depth, target, base) => {
+        const o = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        o.type = 'sine';
+        o.frequency.value = rate;
+        g.gain.value = depth;
+        o.connect(g).connect(target);
+        target.value = base;
+        o.start();
+        return o;
+      };
+
+      // --- the drone
+      const droneGain = this.ctx.createGain();
+      droneGain.gain.value = 0.055;
+      const droneFilt = this.ctx.createBiquadFilter();
+      droneFilt.type = 'lowpass';
+      droneFilt.frequency.value = 240;
+      droneFilt.Q.value = 0.7;
+      droneFilt.connect(droneGain).connect(out);
+      for (const [type, freq] of [['sine', 55], ['sine', 55.19], ['triangle', 82.4]]) {
+        const o = this.ctx.createOscillator();
+        o.type = type;
+        o.frequency.value = freq;
+        const g = this.ctx.createGain();
+        g.gain.value = freq > 60 ? 0.35 : 1;
+        o.connect(g).connect(droneFilt);
+        o.start();
+      }
+      // The drone breathes, very slightly, on a 25-second cycle.
+      lfo(0.04, 0.018, droneGain.gain, 0.055);
+
+      // --- the wind
+      const wind = this.ctx.createBufferSource();
+      wind.buffer = this.noiseBuf;
+      wind.loop = true;
+      const windFilt = this.ctx.createBiquadFilter();
+      windFilt.type = 'bandpass';
+      windFilt.Q.value = 1.6;
+      const windGain = this.ctx.createGain();
+      windGain.gain.value = 0.02;
+      wind.connect(windFilt).connect(windGain).connect(out);
+      lfo(0.011, 130, windFilt.frequency, 260);    // ~90 s sweep
+      lfo(0.017, 0.011, windGain.gain, 0.02);
+      wind.start();
+
+      // --- the shimmer
+      const shimmer = this.ctx.createGain();
+      shimmer.gain.value = 0.006;
+      shimmer.connect(out);
+      for (const [freq, rate] of [[1320, 0.023], [1976, 0.031]]) {
+        const o = this.ctx.createOscillator();
+        o.type = 'sine';
+        o.frequency.value = freq;
+        const g = this.ctx.createGain();
+        g.gain.value = 0.5;
+        o.connect(g).connect(shimmer);
+        lfo(rate, 0.5, g.gain, 0.5);
+        o.start();
+      }
+
+      this.bed = { out };
+    }
+
+    this.bed.out.gain.cancelScheduledValues(t);
+    // Long fades either way: a bed that snaps on is a bed you notice, and the
+    // whole job is not being noticed.
+    this.bed.out.gain.setTargetAtTime(on ? 1 : 0, t, on ? 1.6 : 0.5);
+
+    if (on) this._scheduleBeacon();
+    else if (this._beaconTimer) { clearTimeout(this._beaconTimer); this._beaconTimer = null; }
+  }
+
+  /**
+   * One distant ping, then book the next one. The chain reschedules only while
+   * the bed is on, so switching the bed off ends it rather than leaving a timer
+   * running for the rest of the session.
+   */
+  _scheduleBeacon() {
+    if (this._beaconTimer) clearTimeout(this._beaconTimer);
+    const wait = 9000 + Math.random() * 13000;
+    this._beaconTimer = setTimeout(() => {
+      this._beaconTimer = null;
+      if (!this._bedOn || !this.ready) return;
+      this._beacon();
+      this._scheduleBeacon();
+    }, wait);
+  }
+
+  _beacon() {
+    if (!this.ready || this.muted) return;
+    const t = this.ctx.currentTime;
+    // Two partials a fifth apart with a long tail, through a lowpass that
+    // closes as it decays - a signal arriving from a long way off.
+    const filt = this.ctx.createBiquadFilter();
+    filt.type = 'lowpass';
+    filt.frequency.setValueAtTime(2600, t);
+    filt.frequency.exponentialRampToValueAtTime(420, t + 2.6);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.05, t + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 3.0);
+    filt.connect(g).connect(this.master);
+    for (const [freq, level] of [[523.25, 1], [783.99, 0.45]]) {
+      const o = this.ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = freq;
+      const og = this.ctx.createGain();
+      og.gain.value = level;
+      o.connect(og).connect(filt);
+      o.start(t);
+      o.stop(t + 3.2);
+    }
   }
 
   /** Wind bed for atmosphere levels. */

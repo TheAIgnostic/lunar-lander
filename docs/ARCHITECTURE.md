@@ -187,6 +187,20 @@ doing nothing. That is the `hazardLead` fault, and `loadout-tests.js` caught it 
 it now asserts the gyro is worth fitting in *both* named modes rather than in whatever the default
 happens to be.
 
+**Audio is synthesized, and the title screen's bed is too.** There are no audio files in this
+project. The space bed (M29f) is four layers of WebAudio nodes — a detuned drone, filtered noise, two
+high partials, and one sparse beacon ping — and **all of its movement is LFO nodes rather than
+per-frame JavaScript**. That is deliberate: M16 found `engines` writing 240 automation events a
+second forever, and a bed that plays for as long as somebody leaves the title screen up is where that
+fault would hurt most. The graph is built once, the oscillators drive themselves, and the only
+JavaScript that runs afterwards is one `setTimeout` per ping — which stops being rescheduled the
+moment the bed is switched off.
+
+**The bed has exactly one owner: `setState`.** It was briefly given two — `silence()` also switched
+it off "for safety" — and the frame loop calls `silence()` *every frame the game is not in play*, so
+the bed was killed on the one screen it exists for. `silence()` stops the flight voices; the screen
+owns the ambience. One rule, one implementation, again.
+
 **The rule that holds accessibility honest:** every accessibility setting changes *presentation*
 only — shake, flashing, instrument size, contrast and key bindings never reach the simulation.
 `test/settings-tests.js` flies the same mission with all of them changed and asserts the result is

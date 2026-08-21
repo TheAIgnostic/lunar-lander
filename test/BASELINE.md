@@ -2912,3 +2912,66 @@ missions.** At-once distribution 0: 62.8% · 1: 26.1% · 2: 9.7% · 3: 1.4% · 4
 - **The instrument cannot judge whether it feels like a sniper.** 33% engagement on the deep route is
   measured by a pilot with no evasive logic that never loiters. A human lining up a landing is far
   more exposed than that number suggests.
+
+---
+
+## M29f — the space bed (2026-08-21)
+
+A soundbed for the title screen. **Synthesized, like everything else in `audio.js`** — there are no
+audio files in this project and this did not add one.
+
+Four layers, each doing a job:
+
+| layer | what it is | why |
+| --- | --- | --- |
+| drone | two sines at 55 Hz / 55.19 Hz plus a triangle a fifth above | the detune beats about every 7 s, so the bed moves without anything moving it |
+| wind | looped noise through a narrow bandpass, band drifting on a 90 s cycle | reads as distance rather than as weather |
+| shimmer | two quiet high partials swelling against each other | keeps the top of the mix breathing instead of hissing |
+| beacon | one ping, 9–22 s apart, lowpass closing as it decays | stops the bed being wallpaper: something out there is still transmitting |
+
+Measured at the bed's own output, three seconds after it fades in:
+
+```
+peak 0.0711   rms 0.0329        (the engines peak at 0.55)
+drone    40-90 Hz    -54.6 dB
+wind    200-400 Hz   -84.3 dB
+shimmer 1.2-2.1 kHz  -76.1 dB
+        5-8 kHz     -118.1 dB   (nothing harsh up top)
+```
+
+**All movement is LFO nodes, not per-frame JavaScript.** M16 found `engines` writing 240 automation
+events a second forever, and a bed that runs for as long as somebody leaves the title screen up is
+exactly where that fault would be worst. The graph is built once and the oscillators run themselves;
+the only JavaScript afterwards is one `setTimeout` per beacon ping, which stops rescheduling the
+moment the bed is switched off.
+
+### The fault: it had two owners
+
+First version was silent, and the reason is worth keeping. `silence()` was made to stop the bed "for
+safety" — and the frame loop calls `silence()` **every frame the game is not in play**, so the bed
+was switched off on the one screen it was written for. Built, then killed, sixty times a second.
+
+`silence()` stops the *flight* voices. The bed is owned by `setState` and nothing else. One rule, one
+implementation — the same lesson `__settleNow` cost M27 an hour over.
+
+### Verified live
+
+| | |
+| --- | --- |
+| on the menu | on, gain 1, beacon scheduled |
+| in flight | off, fading out, **beacon timer cleared** |
+| back on the menu | on again |
+| in SETTINGS | still on — cutting it there would read as a fault |
+| muted | master 0; the bed keeps its state, so unmuting restores it |
+| beacon ping | fires audibly, peak 0.155 |
+
+WebAudio will not sound before a user gesture and the title screen is already up by then, so
+`unlockAudio` re-applies whatever the current screen asked for. Without it the bed never starts on
+the one screen it is for.
+
+### Left for Tom
+
+- **There is no separate control for it** — mute takes everything. A player who wants the effects but
+  not the ambience has no switch, which is a fair thing to want and a five-line setting if you do.
+- **It plays on the front-of-house screens**, not just the menu: help, settings, keys, logbook and the
+  expedition picker. Anything belonging to a mission is silent.

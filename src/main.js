@@ -1002,8 +1002,20 @@ function drawMenuBackdrop() {
 
 // ------------------------------------------------------------------ screens
 
+/**
+ * Screens the space bed plays under: the title screen and everything you reach
+ * from it without a run in flight.
+ *
+ * The bed follows the *screen*, not the menu specifically, because cutting it
+ * the moment somebody opens SETTINGS would read as a fault rather than as a
+ * design. It stops for anything that belongs to a mission - the briefing, the
+ * flight, the result - so the run has its own silence to fill.
+ */
+const BED_SCREENS = new Set(['menu', 'help', 'settings', 'keys', 'stats', 'chapters']);
+
 function setState(s) {
   g.state = s;
+  audio.spaceBed(BED_SCREENS.has(s));
   renderOverlay();
   touchbar.classList.toggle('hidden', s !== 'play');
 }
@@ -1125,7 +1137,7 @@ input.bind('*', (key) => {
 });
 
 input.bind('m', () => {
-  audio.unlock();
+  unlockAudio();
   audio.setMuted(!audio.muted);
   if (g.state !== 'play') renderOverlay();
 });
@@ -1138,7 +1150,24 @@ document.getElementById('t-hold') && input.bindTouchButton(document.getElementBy
 const abilityBtn = document.getElementById('t-ability');
 if (abilityBtn) abilityBtn.addEventListener('pointerdown', (ev) => { ev.preventDefault(); useAbility(); });
 
-window.addEventListener('pointerdown', () => audio.unlock(), { once: true });
+/**
+ * WebAudio will not make a sound until a user gesture, and the title screen is
+ * already up by then - so unlocking has to re-apply whatever the current screen
+ * asked for. Without this the space bed never starts on the one screen it was
+ * written for: `setState('menu')` runs at boot, asks for the bed, and is
+ * refused because nothing has been touched yet.
+ *
+ * `spaceBed` returns before recording its state when the context is not ready,
+ * which is what makes this second ask work rather than being swallowed by the
+ * no-op guard.
+ */
+function unlockAudio() {
+  audio.unlock();
+  audio.spaceBed(BED_SCREENS.has(g.state));
+}
+
+window.addEventListener('pointerdown', unlockAudio, { once: true });
+window.addEventListener('keydown', unlockAudio, { once: true });
 
 wireFlow({ startLevel, launch, beginExpedition, resumeExpedition, persistRun, setState, toast, renderOverlay });
 
