@@ -96,6 +96,24 @@ Io, Enceladus and Ganymede had no working hazard whatsoever**, at positions 5 to
 run walks. M28b caught the `plume` case from an external review; `heat` and `cold` had never been
 noticed, and *this document listed them as working*.
 
+**The landing envelope belongs to the lander, not to the module.** `ENVELOPE` was a module-level
+constant baked at `gearTier: 1` while the grader evaluates against `capsFor(axis, { ...LANDING,
+gearTier })` — and gear reaches 1.40 with another 0.32 from the skill tree. So the F4 bars, the tilt
+cone, the sink-rate warning, the briefing copy and the crash text all described a **stock** lander:
+graded GOOD at 37.8 px/s while every readout drew 22.0. A player who spent 12,840 salvage on landing
+gear could not see any of it until the debrief — the Gyro Stabilizer fault again, a thing sold and
+not delivered — and the comment above the constant asserted the opposite. `envelopeFor(gearTier)`,
+cached on the ship in `applyLoadout`; `ENVELOPE` is now explicitly *the stock envelope*, which is all
+the fixtures and the briefing ever wanted. **Generalise it: an instrument derived from tunable config
+at module load will not follow a per-run value**, and this was the only one left.
+
+**Every table keyed on a content name needs the same assertion, not just `BUILDERS`.** M29 made each
+hazard *name* resolve to a builder and asserted it. It never asked what else indexes those names —
+and `flightAssist`'s tips table did, on the *builder* names (`thermal`, `cryo`, `plumes`) while
+content declares `heat`, `cold`, `plume`. **8 of 50 missions got a hazard tip**, in the one feature
+built for a player who has already lost three landers to that weather. `forces-tests.js` asserts both
+directions now: every declared hazard has a tip, and every tip is for a declared hazard.
+
 **A hazard entry has two shapes, and printing one is not resolving one.** `PlanetDefinition.hazards`
 mixes bare names with tuned spec objects — Venus declares one of each. M29 made every *name* resolve
 to a builder; nobody asked whether an *entry* could be **printed**, and the expedition card did
@@ -557,18 +575,34 @@ game or the pilot changes. Improving the pilot should move the second and leave 
 | `__advance(dt)` | step the simulation without rendering |
 | `__draw()` | render one frame on demand |
 | `__setSeed(n)` or `?seed=N` | pin every mission for reproducible runs. **`g.forcedSeed` is this pin and nothing else** — never set it from a run's own seed, which `resumeExpedition` used to do, silently pinning every later run in the session |
-| `__flyHeadless({padIndex, approach})` | fly the current mission instantly |
-| `__runAllHeadless(12)` | fly the whole classic campaign in ~450 ms |
 | `__preview(archetype, relief, detail)` | rebuild the current mission with another terrain shape |
 | `__goMission('LUNA', 3)` | jump straight to any mission of any chapter |
 | `__field()` | the live enemy field: machines, shots, kills, suppressed shots |
 | `__game.carried` | what the hold has picked up this mission; `__game.terrain.materialLeft()` is what is still out there |
 | `__useAbility()` | fire the equipped active module |
-| `__runChapter('MARS')` | fly a whole chapter headlessly (after `await __autopilotReady`) |
 | `__settleNow()` | run the *pending* settle immediately — it does not decide anything itself |
 | `__log()` / `__logJSON()` / `__logClear()` | the playtest trace, for pasting straight out of the console |
 | `__pad()` | what the gamepad is doing: pads seen, which one is in use, the 0..1 per action, what it is pressing, where the cursor is |
 | `__padFrame(dt)` | one frame of pad handling — poll, and move the selection cursor. `rAF` does not fire in a hidden tab, so this is the pad's `__advance` |
+| `__setState('menu')`, `__openSettings()`, `__audio` | jump to a screen, open settings, the audio device |
+
+**Three more hooks exist but are *not* on `window` by default**, and this table used to list them as
+though they were, which cost a session a detour hunting a bug that was a missing script tag.
+`__flyHeadless`, `__runAllHeadless` and `__runChapter` live in **`test/autopilot.js`** and only
+appear once it is injected:
+
+```js
+await new Promise((ok) => { const s = document.createElement('script'); s.src = '/test/autopilot.js'; s.onload = ok; document.head.appendChild(s); });
+await __autopilotReady;   // the control law is imported as a module
+```
+
+| `__flyHeadless({padIndex, approach})` | fly the current mission instantly |
+| `__runAllHeadless(12)` | fly the whole classic campaign in ~450 ms |
+| `__runChapter('MARS')` | fly a whole chapter headlessly |
+
+**And `__goMission` does not launch.** It builds the mission and leaves you on the brief; without a
+following `__act('launch')` the state is not `play`, `__advance` does nothing, and a scripted flight
+reports a timeout with a full tank — which reads exactly like a broken autopilot.
 
 ## Environment notes that cost real time
 

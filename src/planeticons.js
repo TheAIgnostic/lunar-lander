@@ -83,4 +83,3 @@ export function planetIcon(planetId, accent = '#5ff5ff', size = 48) {
     aria-hidden="true" focusable="false">${draw(accent)}</svg>`;
 }
 
-export const PLANET_ICON_IDS = Object.keys(ICONS);

@@ -471,8 +471,6 @@ table.stats-table .m-w { text-align: right; color: #7f9db0; font-size: 11px; }
 .route-tag.next { background: rgba(93, 245, 255, .14); color: var(--cyan, #5df5ff); }
 .route-tag.done { background: rgba(159, 192, 212, .12); color: #9fc0d4; }
 .tile.route.is-next { border-color: rgba(93, 245, 255, .38); }
-.tile.route.is-done { opacity: .82; }
-.tile.route.is-done:hover { opacity: 1; }
 .tile.chapter.locked { opacity: .5; }
 
 /* --- M27: the ladder trail ------------------------------------------------

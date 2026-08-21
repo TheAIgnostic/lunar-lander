@@ -3594,3 +3594,131 @@ synthesised, while the keyboard's would fight the browser's.
 Verified in the browser: Down/Up/Right walk the cards, the ring shows, SPACE activates what the
 cursor is on. **In flight, ArrowUp still burns 9.0 fuel/s and no cursor appears** — the guard is
 `g.state !== 'play'`, the same one the stick uses.
+
+---
+
+## M30e — the audit before the demo (2026-08-22)
+
+Tom: *"audit the whole code base for unused code, bugs and clean up if necessary so everything is
+ready for tomorrow."* Measured rather than read: scripts over the import graph, the CSS, the
+content→table lookups and the documented dev hooks.
+
+**Three real bugs, all live and shipping.** Two are this project's oldest fault in new places.
+
+### 1. Flight assist was silent on 42 of 50 missions
+
+`flightAssist` fires after a mission has cost three landers — the anti-frustration feature, aimed at
+a player who is already stuck. Its tips table was keyed on the **builder** names (`thermal`, `cryo`,
+`plumes`) while every planet and mission declares `heat`, `cold`, `plume`.
+
+**That is the M29 fault exactly, in a second table nobody audited.** M29 fixed `BUILDERS` and
+asserted that every hazard name resolves to a builder; it never asked what *else* was keyed on those
+same names.
+
+| | missions given a hazard tip |
+| --- | ---: |
+| before | **8 / 50** |
+| after | **45 / 50** |
+
+The five without are the Moon, which has no weather at all. Titan, Enceladus, Ganymede, Io, Mercury,
+Pluto and Venus were silent on every mission.
+
+Two separate faults in one line, and only one was the names: `hazards[0]` took the **first** hazard
+blindly, so Titan (`wind`, then `glide`, then `dust`) and Venus (`drag` first, `dust` last) threw
+away a tip they already had. It takes the first hazard that *has* something to say now.
+
+Seven hazards had no tip written at all — `glide`, `acid`, `downdraft`, `eruption`, `magnetic`,
+`falseRadar`, `darkness`. All sixteen do now, and `forces-tests.js` asserts **both directions**:
+every declared hazard has a tip, and every tip is for a hazard something declares. Mutation-tested —
+reverting the three names raises 6 failures, deleting one tip raises 1.
+
+### 2. Every instrument understated the gear the player bought, by up to 72%
+
+`ENVELOPE` was a module-level constant baked at `gearTier: 1`. The **grader** is not: it evaluates
+against `capsFor(axis, { ...LANDING, gearTier })`, and gear runs to 1.40 with another 0.32 from the
+skill tree.
+
+| lander | GOOD vy the grader uses | GOOD vy every readout drew |
+| --- | ---: | ---: |
+| stock | 22.0 | 22.0 |
+| Landing Gear L4 | 30.8 | **22.0** |
+| L4 + skill rank 4 | 37.8 | **22.0** |
+
+The F4 envelope bars, the tilt safe-cone, the sink-rate warning, the briefing copy and the crash text
+all described a lander with no gear on it. **A player who spent 12,840 salvage on landing gear could
+not see any of it** until the debrief — the Gyro Stabilizer fault wearing a different hat, a thing
+sold and not delivered.
+
+And the comment directly above it read *"so the HUD, the tilt gauge and the debug overlay always
+describe the same thresholds the grader actually uses"*. It had been false since gear existed.
+
+`envelopeFor(gearTier)` now, cached on the lander in `applyLoadout`, and `ENVELOPE` is what a *stock*
+lander is graded against — which is all the fixtures and the briefing copy ever wanted. **No flight
+behaviour changed**: the grader always used the right caps, only the instruments lied. Both fixtures
+byte-identical, which is the proof.
+
+`loadout-tests.js` asserts the drawn envelope equals the grader's for every gear level, that a
+touchdown just inside the drawn GOOD line is not a crash, and — by reading the source — that no
+instrument still reaches for the constant.
+
+**The first version of that source check required a dot after `ENVELOPE`**, so `const env = ENVELOPE;`
+reintroduced the entire bug and passed. A source check is worth exactly what you mutated against it.
+
+### 3. A fifth open-coded copy of the hazard shape rule
+
+M30c found `typeof h === 'string' ? { type: h } : h` open-coded in three places and fixed four. It
+missed the fifth, in `flightAssist` — the same file it had just fixed. All five read `hazardName()`
+now.
+
+### Dead code removed, all verified by hand first
+
+| | why it was dead |
+| --- | --- |
+| `util.js` `fmt`, `pad` | helpers nothing has ever called; the codebase uses `toFixed` inline |
+| `economy.js` `RESOURCES` | a currency list nothing iterates — the three names appear as object literals, not a loop |
+| `landing.js` `severityNow` | a wrapper whose doc said *"for the HUD and the debug overlay"*; neither calls it |
+| `missions.js` `AUTHORED_MISSIONS` | an index map nothing reads — `CHAPTERS` is the one in use |
+| `planeticons.js` `PLANET_ICON_IDS` | an id list nothing reads |
+| `render.js` `ENVELOPE` import | imported, never referenced |
+| `style.css` `.is-done` | a route-card state class **M27 stopped emitting when it removed replay** |
+
+**46 more exports are used only inside their own file** and were deliberately left. Stripping an
+`export` keyword is churn with no behavioural gain, and `missions.js` exporting each chapter by name
+is legible documentation of what is in there.
+
+### The doc that cost this session a detour
+
+`docs/ARCHITECTURE.md`'s dev-hook table listed `__flyHeadless`, `__runAllHeadless` and `__runChapter`
+beside the always-present hooks. They live in `test/autopilot.js` and **do not exist until it is
+injected** — which cost about twenty minutes of hunting a bug that was a missing script tag. They are
+in their own section now, with the injection snippet.
+
+It also now records that **`__goMission` does not launch**: without a following `__act('launch')` the
+state never reaches `play`, `__advance` does nothing, and a scripted flight reports a timeout with a
+full tank — which reads exactly like a broken autopilot, and did.
+
+Three hooks that exist and were undocumented — `__setState`, `__openSettings`, `__audio` — are listed.
+
+### One bug I introduced, and what caught it
+
+Pointing the tilt gauge at `ship.envelope` reached for a `ship` that `drawTiltGauge` has never had.
+**Every node test passed** — they never render. The browser threw on the first `__draw()`. The safe
+angle is a parameter now.
+
+`node test/run-all.sh` cannot see a rendering fault. That is not new, but it is worth writing down
+next to the reminder that a screenshot found the `[object Object]` forecast a day earlier.
+
+### Audited and found clean
+
+- **Every other content→table lookup is complete**: planet icons, `WORLDS`, `chapterFor`,
+  `RECOMMENDED`, summaries, display names, and every rare material is spent by some hangar rung.
+- **No other module-level constant is baked from tunable config** — the envelope was the only one.
+- **Nothing outside `ship.js` reads raw `SHIP.*`** except `validate.js`, which uses it deliberately:
+  a mission is validated against a *stock* lander, which is the conservative direction.
+- No `TODO`/`FIXME`, no stray `console.log`, and every `==` is an intentional null check.
+
+### What did not move
+
+Both fixtures byte-identical. Full suite green — the campaign crossing is **642/800 (80%)** and every
+encounter-audit figure is identical to the run before the audit started. `forces-tests.js` 100 →
+**133**, `loadout-tests.js` 136 → **151**.

@@ -830,12 +830,6 @@ export const MERCURY_LEVELS = MERCURY_MISSIONS.map(missionToLevel);
 export const PLUTO_LEVELS = PLUTO_MISSIONS.map(missionToLevel);
 export const VENUS_LEVELS = VENUS_MISSIONS.map(missionToLevel);
 
-/** Every authored chapter's missions, in ladder order. */
-export const AUTHORED_MISSIONS = {
-  LUNA: MOON_MISSIONS, EUROPA: EUROPA_MISSIONS, TITAN: TITAN_MISSIONS,
-  MARS: MARS_MISSIONS, ENCELADUS: ENCELADUS_MISSIONS, GANYMEDE: GANYMEDE_MISSIONS,
-  IO: IO_MISSIONS, MERCURY: MERCURY_MISSIONS, PLUTO: PLUTO_MISSIONS, VENUS: VENUS_MISSIONS,
-};
 
 /**
  * The chapter for a body. Accepts a planet id ('LUNA'); a chapter id ('moon') is

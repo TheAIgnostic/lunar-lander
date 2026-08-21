@@ -14,7 +14,7 @@
 //
 // Question 3 is answered by running the physics, never by reading the spec.
 import { readFileSync, readdirSync } from 'node:fs';
-import { Ship, SHIP } from '../src/ship.js';
+import { Ship, SHIP, ENVELOPE } from '../src/ship.js';
 import { Terrain } from '../src/terrain.js';
 import { drawTrajectory } from '../src/render.js';
 import { spawnFor } from '../src/spawn.js';
@@ -25,6 +25,7 @@ import { deriveFull, deriveLoadout, COMPONENTS, COMPONENT_IDS, purchaseCheck, pu
 import { TREES, ALL_NODES, deriveSkills, skillCheck, buySkill, findNode } from '../src/skills.js';
 import { ACTIVE_MODULES, PASSIVE_MODULES, derivePassive } from '../src/modules.js';
 import { missionReward, settleHaul, freshHaul } from '../src/economy.js';
+import { LANDING, capsFor, evaluateLanding } from '../src/landing.js';
 import { MOON_LEVELS, MARS_LEVELS, EUROPA_LEVELS } from '../src/missions.js';
 
 let pass = 0;
@@ -629,6 +630,75 @@ section('3. turning it on moves the simulation');
   check('sensor-pulse reveals to its own declared level',
     ship.env.visibility === ACTIVE_MODULES['sensor-pulse'].effect.revealVisibility,
     `${ship.env.visibility}`);
+}
+
+// --- the instruments describe *this* lander, not a stock one
+//
+// `ENVELOPE` was a module-level constant baked at `gearTier: 1`, and the F4
+// bars, the tilt cone, the sink-rate warning, the briefing copy and the crash
+// text all read it. The grader does not: it evaluates against
+// `capsFor(axis, { ...LANDING, gearTier })`, and gear runs to 1.40 with another
+// 0.32 from the skill tree. **A player in full landing gear was graded GOOD at
+// 37.8 px/s while every readout drew 22.0** - a 72% understatement of the
+// equipment they had bought, which is the Gyro Stabilizer fault wearing a
+// different hat: a thing sold and not delivered.
+{
+  const stock = new Ship();
+  check('a lander with no loadout carries the stock envelope',
+    stock.envelope.GOOD.vy === ENVELOPE.GOOD.vy && stock.gearTier === 1,
+    `${stock.envelope.GOOD.vy} vs ${ENVELOPE.GOOD.vy}`);
+
+  // Every gear level the hangar sells must visibly widen it.
+  const gearLevels = COMPONENTS['gear'].levels.map((_, i) => i + 1);
+  let last = 0;
+  for (const lvl of gearLevels) {
+    const loadout = deriveLoadout({ gear: lvl });
+    const s2 = new Ship();
+    s2.applyLoadout(loadout);
+    check(`gear L${lvl}: the envelope the instruments show matches the grader`,
+      s2.envelope.GOOD.vy === capsFor('vy', { ...LANDING, gearTier: s2.gearTier }).safe,
+      `${s2.envelope.GOOD.vy} vs ${capsFor('vy', { ...LANDING, gearTier: s2.gearTier }).safe}`);
+    check(`gear L${lvl}: it is no narrower than the level below`,
+      s2.envelope.GOOD.vy >= last, `${s2.envelope.GOOD.vy} after ${last}`);
+    last = s2.envelope.GOOD.vy;
+  }
+  check('the top gear level widens the envelope at all', last > ENVELOPE.GOOD.vy,
+    `${last} vs stock ${ENVELOPE.GOOD.vy}`);
+
+  // And the property that actually matters: whatever the instruments draw, a
+  // touchdown at exactly that figure must be graded the way they promise.
+  {
+    const s3 = new Ship();
+    s3.applyLoadout(deriveLoadout({ gear: 4 }));
+    const cfg = { ...LANDING, gearTier: s3.gearTier };
+    const atLimit = evaluateLanding({
+      vy: s3.envelope.GOOD.vy - 0.01, vx: 0, tilt: 0, centerFrac: 0,
+      onPad: true, hullContact: false, stable: true,
+    }, cfg);
+    check('a touchdown just inside the drawn GOOD line is not a crash',
+      atLimit.grade !== 'CRASH', `${atLimit.grade} at vy ${s3.envelope.GOOD.vy - 0.01}`);
+    const past = evaluateLanding({
+      vy: s3.envelope.HARD.vy + 1, vx: 0, tilt: 0, centerFrac: 0,
+      onPad: true, hullContact: false, stable: true,
+    }, cfg);
+    check('a touchdown past the drawn HARD line is a crash',
+      past.grade === 'CRASH', `${past.grade} at vy ${s3.envelope.HARD.vy + 1}`);
+  }
+
+  // No instrument may still be reading the module-level constant. Stated as
+  // "every mention of ENVELOPE also mentions ship.envelope" rather than
+  // "ENVELOPE." - the first version required a dot after it, so `const env =
+  // ENVELOPE;` reintroduced the whole bug and passed. A source check is only as
+  // good as the mutation you tried against it.
+  for (const f of ['debug.js', 'hud.js', 'screens.js']) {
+    const src = readFileSync(new URL(`../src/${f}`, import.meta.url), 'utf8');
+    const bare = src.split('\n').filter((l) => /\bENVELOPE\b/.test(l)
+      && !/^\s*(\/\/|\*)/.test(l)
+      && !/^import\b/.test(l.trim())
+      && !/ship\.envelope/.test(l));
+    check(`${f} reads the lander's envelope, not the stock constant`, bare.length === 0,
+      bare.map((l) => l.trim()).join(' | ').slice(0, 140));
+  }
 }
 
 console.log(`\n  ${pass} passed, ${fail} failed`);

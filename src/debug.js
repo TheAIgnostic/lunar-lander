@@ -130,10 +130,15 @@ export const Debug = {
 
   /** Three bars showing how close each landing criterion is to its limits. */
   drawEnvelope(ctx, W, H, ship) {
+    const env = ship.envelope || ENVELOPE;
     const bars = [
-      ['V-SPD', Math.abs(ship.vy), ENVELOPE.PERFECT.vy, ENVELOPE.GOOD.vy, ENVELOPE.HARD.vy],
-      ['H-SPD', Math.abs(ship.vx), ENVELOPE.PERFECT.vx, ENVELOPE.GOOD.vx, ENVELOPE.HARD.vx],
-      ['TILT', Math.abs(normalizeAngle(ship.angle)), ENVELOPE.PERFECT.tilt, ENVELOPE.GOOD.tilt, ENVELOPE.HARD.tilt],
+      // **This lander's envelope, not the stock one.** Gear widens what the
+      // grader accepts by up to 72%, and bars drawn against the stock figures
+      // describe equipment the player has not got - or worse, hide the
+      // equipment they bought.
+      ['V-SPD', Math.abs(ship.vy), env.PERFECT.vy, env.GOOD.vy, env.HARD.vy],
+      ['H-SPD', Math.abs(ship.vx), env.PERFECT.vx, env.GOOD.vx, env.HARD.vx],
+      ['TILT', Math.abs(normalizeAngle(ship.angle)), env.PERFECT.tilt, env.GOOD.tilt, env.HARD.tilt],
     ];
     const w = 220;
     const x = W - w - 16;

@@ -1,7 +1,7 @@
 // All drawing: parallax background, world, ship, and the flight HUD.
 
 import { clamp, TAU, makeRng } from './util.js';
-import { HULL, LEGS, ENVELOPE, normalizeAngle } from './ship.js';
+import { HULL, LEGS, normalizeAngle } from './ship.js';
 import { WORLDS } from './levels.js';
 import { FONT, throb, RED, CYAN, MAG, AMBER, VIOLET, shade, shadeA, label } from './drawkit.js';
 import { nodeWorth } from './economy.js';

@@ -85,7 +85,11 @@ export function drawHUD(ctx, W, H, g) {
   // tilt bubble on the right of the stack
   const tx = px + pw - 40 * s;
   const ty = rowY + gap * 0.6;
-  drawTiltGauge(ctx, tx, ty, 26 * s, ship.angle, st.tilt);
+  // The safe cone is **this lander's**, so fitting landing gear visibly widens
+  // the gauge it is judged by rather than being invisible until the debrief.
+  // Passed in rather than reached for: the gauge is a drawing function and has
+  // never had a ship, which is what the first version of this assumed.
+  drawTiltGauge(ctx, tx, ty, 26 * s, ship.angle, st.tilt, (ship.envelope || ENVELOPE).GOOD.tilt);
 
   // ---- top-centre mission bar
   const label1 = `${level.world} · ${level.title}`;
@@ -190,7 +194,7 @@ export function drawHUD(ctx, W, H, g) {
   if (threats) drawThreatPointers(ctx, W, H, g);
 
   // ---- proximity alarm vignette
-  const danger = alt < 60 && ship.vy > ENVELOPE.GOOD.vy * 1.4 && ship.alive && !ship.landed;
+  const danger = alt < 60 && ship.vy > (ship.envelope || ENVELOPE).GOOD.vy * 1.4 && ship.alive && !ship.landed;
   if (danger) {
     const a = 0.18 + 0.14 * (flashOf(g) > 0 ? Math.sin(time * 14) * flashOf(g) : 1);
     const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.7);
@@ -216,7 +220,7 @@ function readout(ctx, name, val, x, y, s, color, arrow = '') {
   ctx.fillText(`${arrow}${val}`, x, y + 4 * s);
 }
 
-function drawTiltGauge(ctx, cx, cy, r, angle, ok) {
+function drawTiltGauge(ctx, cx, cy, r, angle, ok, safeTilt) {
   ctx.save();
   ctx.translate(cx, cy);
   ctx.strokeStyle = 'rgba(255,255,255,0.15)';
@@ -228,7 +232,7 @@ function drawTiltGauge(ctx, cx, cy, r, angle, ok) {
   ctx.strokeStyle = 'rgba(77,255,159,0.5)';
   ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.arc(0, 0, r, -Math.PI / 2 - ENVELOPE.GOOD.tilt, -Math.PI / 2 + ENVELOPE.GOOD.tilt);
+  ctx.arc(0, 0, r, -Math.PI / 2 - safeTilt, -Math.PI / 2 + safeTilt);
   ctx.stroke();
   ctx.rotate(normalizeAngle(angle));
   ctx.strokeStyle = ok ? GREEN : RED;

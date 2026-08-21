@@ -153,7 +153,3 @@ export function blockerFor(grade, parts, cfg = LANDING) {
   return `Mostly ${label}.`;
 }
 
-/** Live severity for the HUD and the debug overlay, before touchdown. */
-export function severityNow(vy, vx, tilt, centerFrac, cfg = LANDING) {
-  return evaluateLanding({ vy, vx, tilt, centerFrac, onPad: true, hullContact: false, stable: false }, cfg);
-}

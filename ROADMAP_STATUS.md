@@ -1069,6 +1069,28 @@ scheduled until the MVP is stable — the spec says the same.
     printed. `hazardName()` now, read by all four readers, asserted in `route-tests.js`
   - both fixtures unchanged, `settings-tests.js` 178 → **188**, `route-tests.js` 69 → **99**
 
+- [x] **M30e — the audit before the demo** (this commit)
+  - measured, not read: scripts over the import graph, the CSS, every content→table lookup, and the
+    documented dev hooks against what `window` actually has
+  - **flight assist was silent on 42 of 50 missions.** Its tips table was keyed on *builder* names
+    (`thermal`, `cryo`, `plumes`) while content declares `heat`, `cold`, `plume` - **the M29 fault in
+    a second table nobody audited**. And `hazards[0]` took the first hazard blindly, so Titan and
+    Venus threw away a tip they had. **8/50 → 45/50**; the five left are the Moon, which has no
+    weather. Asserted both directions
+  - **every instrument understated the gear the player bought, by up to 72%.** `ENVELOPE` was baked
+    at `gearTier: 1`; the grader uses the ship's tier. Full landing gear is graded GOOD at 37.8 and
+    every readout drew 22.0 - and the comment above it claimed they always matched. No flight
+    behaviour changed, which is what both fixtures being byte-identical proves
+  - a **fifth** open-coded copy of the hazard shape rule, in the file M30c had just fixed
+  - 6 dead exports, 1 dead import and 1 orphaned CSS rule removed, each verified by hand. **46 more
+    exports are used only in their own file and were deliberately left** - stripping a keyword is
+    churn
+  - the dev-hook table listed three hooks that only exist once `test/autopilot.js` is injected, which
+    cost this session about twenty minutes; and `__goMission` does not launch, which reads as a
+    broken autopilot and did
+  - **one bug I introduced, caught only by the browser**: the tilt gauge reached for a `ship` it has
+    never had. Every node test passed - they do not render
+
 ## Decisions (Tom, 2026-08-16)
 
 1. **Gravity** — compressed mapping is the *baseline*, then a per-body hand-tuned offset so each
@@ -1366,6 +1388,12 @@ command tells you both that the game still works and what a player currently mee
   picks a run from, shipped and live. M29 had made every hazard *name* resolve to a builder and
   nobody asked whether an *entry* could be **printed**. The suite was green throughout. Look at the
   thing, not only at the numbers about the thing.
+- **Fixing a fault class in one table does not fix it in the others.** M29 made every hazard *name*
+  resolve to a builder and asserted it — and two other tables were keyed on the same names and went
+  unchecked for three milestones: the route card *printed* them (six bodies read `[object Object]`)
+  and flight assist *looked them up* under the builder spellings (**8 of 50 missions got a tip**).
+  When you find a name-indexes-a-table fault, grep for every other reader of those names before
+  calling it fixed.
 - **A test that passes is not a test that bites.** M30 wrote a suite specifically to catch a class of
   fault, then broke the code six ways on purpose — and **two mutations survived**. One was a real gap
   the tests should have caught and only differs for a player who has customised twice, so it looks

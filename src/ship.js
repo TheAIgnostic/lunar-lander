@@ -79,13 +79,36 @@ export const DEFAULT_SETTINGS = {
   keys: null,             // null = default bindings, else an action -> keys map
 };
 
-// Derived from the landing config so the HUD, the tilt gauge and the debug
-// overlay always describe the same thresholds the grader actually uses.
-export const ENVELOPE = {
-  PERFECT: { vy: capsFor('vy').perfect, vx: capsFor('vx').perfect, tilt: capsFor('tilt').perfect, q: LANDING.quality.PERFECT },
-  GOOD: { vy: capsFor('vy').safe, vx: capsFor('vx').safe, tilt: capsFor('tilt').safe, q: LANDING.quality.GOOD },
-  HARD: { vy: capsFor('vy').crash, vx: capsFor('vx').crash, tilt: capsFor('tilt').crash, q: LANDING.quality.HARD },
-};
+/**
+ * The landing envelope **for a given gear tier**, derived from the landing
+ * config so the instruments describe the thresholds the grader actually uses.
+ *
+ * The tier argument is the whole point and it was missing. `ENVELOPE` was a
+ * module-level constant baked at `gearTier: 1`, and every instrument read it:
+ * the F4 bars, the tilt cone, the sink-rate warning and the brief. But the
+ * grader evaluates against `capsFor(axis, { ...LANDING, gearTier })`, and gear
+ * runs to 1.40 with another 0.32 from the skill tree - so a player in full
+ * landing gear was **graded GOOD at 37.8 px/s while every readout drew 22.0**,
+ * a 72% understatement of the equipment they had bought.
+ *
+ * That is this project's oldest fault in a new place: a thing sold and not
+ * delivered (the Gyro Stabilizer, `hazardLead`), an instrument that drifted
+ * from the rule it describes (`__settleNow`, the autopilot), and a comment
+ * asserting the opposite of the truth. The envelope belongs to the lander now,
+ * and `ENVELOPE` is what a *stock* one is graded against - which is all the
+ * briefing copy and the fixtures ever wanted.
+ */
+export function envelopeFor(gearTier = 1) {
+  const cfg = gearTier !== 1 ? { ...LANDING, gearTier } : LANDING;
+  return {
+    PERFECT: { vy: capsFor('vy', cfg).perfect, vx: capsFor('vx', cfg).perfect, tilt: capsFor('tilt', cfg).perfect, q: LANDING.quality.PERFECT },
+    GOOD: { vy: capsFor('vy', cfg).safe, vx: capsFor('vx', cfg).safe, tilt: capsFor('tilt', cfg).safe, q: LANDING.quality.GOOD },
+    HARD: { vy: capsFor('vy', cfg).crash, vx: capsFor('vx', cfg).crash, tilt: capsFor('tilt', cfg).crash, q: LANDING.quality.HARD },
+  };
+}
+
+/** The stock envelope: what a lander with no gear fitted is graded against. */
+export const ENVELOPE = envelopeFor(1);
 
 // Hull outline in local space (nose toward -y).
 export const HULL = [
@@ -120,6 +143,9 @@ export class Ship {
       spinDamp: l.spinDampBonus != null ? l.spinDampBonus : SHIP.spinDamp,
     };
     this.gearTier = l.gearTier || 1;
+    // Cached rather than derived per read: the HUD asks for this every frame,
+    // and it can only change when a loadout is applied.
+    this.envelope = envelopeFor(this.gearTier);
     this.restitution = l.restitution;
     this.impactResist = l.impactResist || 1;
     this.hullMax = Math.round(100 * (l.hullMax || 1));

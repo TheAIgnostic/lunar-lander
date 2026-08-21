@@ -11,7 +11,6 @@
 
 import { clamp } from './util.js';
 
-export const RESOURCES = ['salvage', 'data', 'cores'];
 
 /**
  * Material nodes: the reward as an object in the world.

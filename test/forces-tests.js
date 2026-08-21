@@ -1,4 +1,5 @@
 // Unit tests for the force/status interface:  node test/forces-tests.js
+import { readFileSync } from 'node:fs';
 import { applyForces, forcesFor, freshStatus, freshEnv, RADIATION, STATUS_CHANNELS, NON_FORCE_HAZARDS, HEAT, COLD, ACID, MAGNETIC, hazardName } from '../src/forces.js';
 import { PLANETS, PLANET_IDS, gravityFor, gravityPx } from '../src/planets.js';
 import { CHAPTERS } from '../src/missions.js';
@@ -244,6 +245,37 @@ check('difficulty cannot reach gravity',
       `declared by ${[...declared.get(t)].slice(0, 3).join(', ')}`);
   }
   check('every hazard name in the game was checked', declared.size >= 12, String(declared.size));
+
+  // **And the same question of the *other* table keyed on these names.**
+  //
+  // M29 fixed `BUILDERS` and asserted every hazard name resolves to a builder.
+  // It never asked whether anything *else* was keyed on the same names - and
+  // `flightAssist`'s tips table was, on the builder names (`thermal`, `cryo`,
+  // `plumes`) while content declares `heat`, `cold`, `plume`. **8 of 50
+  // missions got a hazard tip**, in the one feature that exists for a player
+  // who has already lost three landers to that weather.
+  //
+  // So the rule generalises rather than being re-learned per table: wherever a
+  // name in content indexes a table in code, assert that every name resolves.
+  {
+    const src = readFileSync(new URL('../src/screens.js', import.meta.url), 'utf8');
+    const from = src.indexOf('const HAZARD_TIPS = {');
+    const to = src.indexOf('export const TIPLESS_HAZARDS');
+    check('the tips table is findable', from > 0 && to > from);
+    const keys = [...src.slice(from, to).matchAll(/^ {2}([a-zA-Z]+):/gm)].map((m) => m[1]);
+    const tipless = (src.match(/export const TIPLESS_HAZARDS = \[([^\]]*)\]/) || [, ''])[1]
+      .split(',').map((x) => x.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean);
+    for (const t of declared.keys()) {
+      check(`the hazard '${t}' has advice for a stuck player`,
+        keys.includes(t) || tipless.includes(t),
+        `declared by ${[...declared.get(t)].slice(0, 3).join(', ')}`);
+    }
+    // And the table has nothing in it that no content declares, which is the
+    // other half: a tip for a hazard that does not exist is a tip nobody sees.
+    for (const k of keys) {
+      check(`the tip for '${k}' is for a hazard something declares`, declared.has(k), k);
+    }
+  }
 }
 
 // --- **Every body on the ladder has weather that does something.**

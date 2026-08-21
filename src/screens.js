@@ -10,6 +10,7 @@ import * as R from './render.js';
 import * as Save from './save.js';
 import { COMPONENTS, COMPONENT_IDS, purchaseCheck, tierCheck } from './components.js';
 import { describeThreats } from './enemies.js';
+import { hazardName } from './forces.js';
 import { ACTIONS, keyLabel } from './input.js';
 import { LANDING, capsFor } from './landing.js';
 import { LEVELS, WORLDS } from './levels.js';
@@ -131,7 +132,7 @@ export function screenHTML(s) {
         <div class="keys">
         </div>
         <p class="body">Land with <b>both legs</b> inside a flashing pad. Keep descent under
-        <b>${(ENVELOPE.GOOD.vy / 6).toFixed(1)}</b>, drift under <b>${(ENVELOPE.GOOD.vx / 6).toFixed(1)}</b>
+        <b>${((ship.envelope || ENVELOPE).GOOD.vy / 6).toFixed(1)}</b>, drift under <b>${((ship.envelope || ENVELOPE).GOOD.vx / 6).toFixed(1)}</b>
         and tilt inside the green arc. Smaller pads pay bigger multipliers, and leftover fuel is worth points, so
         so is a landing streak. Three lander losses ends the run.</p>
         <p class="body">Miss the pad and a clean touchdown on <b>level ground</b> still survives, at the base
@@ -772,6 +773,51 @@ export function metricsTable(d) {
 }
 
 /**
+ * What to say about each hazard when a player is stuck on it.
+ *
+ * **Keyed on the names authored content actually writes**, which is the whole
+ * story of this table. It used to be keyed on the names the *builders* have -
+ * `thermal`, `cryo`, `plumes` - while every planet and mission declares `heat`,
+ * `cold`, `plume`. That is the M29 fault exactly, in a second table nobody
+ * audited: M29 fixed `BUILDERS` and asserted every hazard name resolves to a
+ * builder, and this table indexes the same names and was never checked.
+ *
+ * Measured before the fix: **8 of 50 missions got a hazard tip.** Every Titan,
+ * Enceladus, Ganymede, Io, Mercury, Pluto and Venus mission was silent about
+ * the weather, in the one feature that exists for a player who has already lost
+ * three landers to it.
+ *
+ * `settings-tests.js` asserts that every name any planet or mission declares
+ * has an entry here, with `TIPLESS` as the stated exception - the same shape as
+ * the `BUILDERS` assertion, because the failure mode is the same silence.
+ */
+const HAZARD_TIPS = {
+  dust: 'the storm runs on a cycle, so learn the ground in a clear window and commit during the next one',
+  windChannels: 'the wind reverses between altitude bands, so drop through them one at a time instead of straight down',
+  wind: 'the air answers late here, so start braking earlier than feels right and trim into the gust',
+  drag: 'thick air holds you up on the way down and shoves you on the way across, so carry less speed than feels safe',
+  radiation: 'ridges throw a shadow, and the sheltered route is slower but keeps you alive',
+  heat: 'heat builds while you burn and the engine fades with it, so use short bursts rather than a long hold',
+  cold: 'the cold builds while you coast and stiffens the burners, so a little thrust keeps it back',
+  plume: 'the vents fire on a cycle, so cross the field between them rather than over one',
+  glide: 'there is lift here, so fly it across instead of dropping onto it - a shallow approach costs less fuel than a hover',
+  acid: 'the air eats the hull lowest down, so spend as little time near the deck as you can and land decisively',
+  downdraft: 'there are columns of sinking air, so cross between them and keep some height in hand to trade',
+  eruption: 'the vents throw on a cycle, so watch one fire and move while it is spent',
+  magnetic: 'the anomalies drag the nose and pull you down, so trim early and expect to fight the attitude',
+  falseRadar: 'the instruments lie here, so fly what you can see rather than what the readout says',
+  darkness: 'you cannot see the ground, but the beacons and the crates draw through it - fly the lights',
+  ice: 'this surface barely holds you, so arrive slow and straight and expect to slide',
+};
+
+/**
+ * Hazards that deliberately have no tip. Empty, and the point of it being
+ * declared is that adding a hazard makes writing one a failing test rather
+ * than an omission nobody notices.
+ */
+export const TIPLESS_HAZARDS = [];
+
+/**
  * Offered after a mission has cost three landers (roadmap section 13: "if the
  * player fails the same mission repeatedly, offer an optional forecast tip,
  * practice mode, or temporary loaner module - not an invisible difficulty
@@ -785,19 +831,15 @@ export function flightAssist() {
   if (tries < 3) return null;
 
   const planet = PLANETS[g.level.planet] || null;
-  const hazard = (g.level.hazards || []).map((h) => (typeof h === 'string' ? h : h.type))[0];
-  const TIPS = {
-    dust: 'the storm runs on a cycle, so learn the ground in a clear window and commit during the next one',
-    windChannels: 'the wind reverses between altitude bands, so drop through them one at a time instead of straight down',
-    atmosphere: 'the air answers late here, so start braking earlier than feels right and trim into the gust',
-    radiation: 'ridges throw a shadow, and the sheltered route is slower but keeps you alive',
-    thermal: 'heat builds while you burn, so use short bursts rather than a long hold',
-    cryo: 'the cold builds while you coast, and a little thrust keeps it back',
-    plumes: 'the vents fire on a cycle, so cross the field between them',
-  };
+  // **The first hazard that has something to say, not simply the first.**
+  // `hazards[0]` meant Titan (`wind`, then `glide`, then `dust`) and Venus
+  // (`drag` first, `dust` last) threw away a tip they had, because the one they
+  // led with had none.
+  const named = (g.level.hazards || []).map(hazardName);
+  const hazard = named.find((h) => HAZARD_TIPS[h]) || named[0];
   const tips = [];
-  if (TIPS[hazard]) tips.push(TIPS[hazard]);
-  if (g.level.surfaceFriction != null && g.level.surfaceFriction < 0.3) {
+  if (HAZARD_TIPS[hazard]) tips.push(HAZARD_TIPS[hazard]);
+  if (g.level.surfaceFriction != null && g.level.surfaceFriction < 0.3 && hazard !== 'ice') {
     tips.push('this surface barely holds you, so arrive slow and straight and expect to slide');
   }
   if (g.level.cave) tips.push('the ceiling is as fatal as the floor, so climb in small steps');
@@ -828,8 +870,9 @@ export function crashReason() {
   const tilt = Math.abs(normalizeAngle(ship.angle)) / DEG;
   if (g.terrain.ceiling && ship.contact && ship.contact.y < g.terrain.height * 0.5) return 'Struck the ice ceiling.';
   if (ship.fuel <= 0) return 'Tanks dry on final approach.';
-  if (Math.abs(ship.vy) > ENVELOPE.HARD.vy) return `Descent rate ${(Math.abs(ship.vy) / 6).toFixed(1)}, far outside the envelope.`;
-  if (Math.abs(ship.vx) > ENVELOPE.HARD.vx) return `Lateral drift ${(Math.abs(ship.vx) / 6).toFixed(1)}. The legs sheared off.`;
+  const env = ship.envelope || ENVELOPE;
+  if (Math.abs(ship.vy) > env.HARD.vy) return `Descent rate ${(Math.abs(ship.vy) / 6).toFixed(1)}, far outside the envelope.`;
+  if (Math.abs(ship.vx) > env.HARD.vx) return `Lateral drift ${(Math.abs(ship.vx) / 6).toFixed(1)}. The legs sheared off.`;
   if (tilt > 15) return `Attitude ${tilt.toFixed(0)}° off vertical at contact.`;
   return 'Touched down off the pad. The surface is not level enough to hold a lander.';
 }

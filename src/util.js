@@ -38,8 +38,6 @@ export function angleDelta(a, b) {
   return d;
 }
 
-export const fmt = (n, d = 1) => n.toFixed(d);
-export const pad = (n, w = 2) => String(n).padStart(w, '0');
 
 export function formatScore(n) {
   return Math.round(n).toLocaleString('en-US');
