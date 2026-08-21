@@ -166,6 +166,36 @@ fixtures, because **the physics fixture compares to four decimal places** and re
 a held key returning 0.9999999. `this.thrusting` / `rcsLeft` / `rcsRight` stay **booleans** derived
 from the magnitudes: a dozen consumers read them and none wants a float.
 
+**A pad's two endpoints are exact for the same reason.** Below `PAD.deadzone` a stick reads exactly
+0 and above `PAD.saturate` (0.95) a trigger reads exactly 1, so a pad at the stop commands the same
+full burn a held key does — measured, 9.0 fuel/s and vy −96.0 either way. `saturate` is not cosmetic:
+most triggers never report a clean 1.0, and without it a pad player would fly the whole game at 99%
+throttle and match no recorded figure.
+
+**`PAD.curve` is 1.5 because of where it puts the hover point**, which is the one thing about a
+control curve that is arithmetic rather than taste. Thrust is 130 px/s² against gravity of 8.4-62.9,
+so the throttle that cancels gravity runs 6-48% — and on a *linear* trigger the whole ten-body ladder
+would be flown in the bottom third of the travel, which is where a trigger has the least resolution.
+At 1.5 the hover band is 20-61%, eight of ten bodies between 30% and 49%. Table in `test/BASELINE.md`,
+M30 stages 2-5.
+
+**Two things refuse a NaN from the pad, and the second is not decoration.** `shape()` guards its own
+floor (`!(NaN > floor)` is true), and the fold in `pollGamepad` is written `if (v > next[a])` rather
+than `Math.max` **precisely because `Math.max(0, NaN)` is NaN** and a NaN amount multiplies straight
+into `vx`/`vy`. Do not tidy that line.
+
+**`pollGamepad()` is called from `frame()` and never from `advance()`.** The headless drivers call
+`advance`, and a sweep must not change its answer because somebody left a controller plugged into the
+machine running it.
+
+**A pad control is a pseudo-key in the same binding map** — `pad:7` is button 7, `axis:0-` is axis 0
+pushed negative — so `rebind()`, `setBindings()`, the save format and the settings screen never
+learned what a gamepad is. The one rule that had to change: **`rebind()` replaces within a family,
+not across one.** It used to set `next[action] = [key]`, and with a pad in the map that means binding
+the booster to a trigger silently unbinds the space bar. "An action is never left with nothing on it"
+is asked **per family** now, and an action left with no *keyboard* binding is refused outright,
+because an action reachable only on a pad is the exact lockout that rule exists to prevent.
+
 **Steering is the one setting that is allowed to change the simulation, and there are three.**
 Everything on the settings screen is presentation-only *except* this, which has always been true
 (`direct` has changed the flight model since M0) and is worth stating because the next rule below
@@ -466,6 +496,7 @@ game or the pilot changes. Improving the pilot should move the second and leave 
 | `__runChapter('MARS')` | fly a whole chapter headlessly (after `await __autopilotReady`) |
 | `__settleNow()` | run the *pending* settle immediately — it does not decide anything itself |
 | `__log()` / `__logJSON()` / `__logClear()` | the playtest trace, for pasting straight out of the console |
+| `__pad()` | what the gamepad is doing: pads seen, which one is in use, the 0..1 per action, what it is pressing |
 
 ## Environment notes that cost real time
 
@@ -563,11 +594,11 @@ The MVP is complete and measured (`test/BASELINE.md`, M13 section). What the nex
   number: taking the deposits that lie on the fuel road is comfortable (236/300 landings, 27–55%
   left), but sweeping every deposit lands 156/300 and 0/20 on `mars-2` and `europa-4`. Written for a
   900 px traverse, now flown across 2,000–2,600 px with a road and an ore field in between.
-- **Controller support: the contract is widened, the backend is not built.** M30 stage 1 changed what
-  the simulation reads from a boolean to a **0..1 magnitude** (`Input.amount()`, and `amountOf()` for
-  the plain objects the pilot and the fixtures pass), so a trigger can arrive without `ship.js`
-  changing again. There is still no gamepad backend, no pad binding and no pad in the settings screen.
-  Stages 2-5 are in `ROADMAP_STATUS.md` and are **held** on two balance calls only Tom can make.
+- ~~**Controller support does not exist.**~~ **Built in M30.** The simulation reads a 0..1 magnitude,
+  a gamepad fills it, pad controls are rebindable through the screen that already existed, and the
+  pad hot-plugs. What is **not** built is menu navigation: a pad flies the lander and fires the
+  module, but pausing, confirming and backing out are still keyboard or mouse. START and HOME are
+  reserved against a flight binding so those buttons stay free for it.
 - **Achievements** are deliberately not built. The spec gates them behind stable progression, and
   the statistics they would be built on only started being recorded in M13.
 - **The numbers to tune** live in config objects: `COMBAT` in `enemies.js`, `ABILITY` in

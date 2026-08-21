@@ -1,7 +1,7 @@
 // TERMINAL VELOCITY - state machine, camera, scoring, persistence.
 
 import { clamp, lerp, approach, makeRng, formatScore } from './util.js';
-import { keyLabel } from './input.js';
+import { keyLabel, isPadToken } from './input.js';
 import { Terrain } from './terrain.js';
 import { LEVELS, endlessLevel } from './levels.js';
 import { CHAPTERS, chapterFor } from './missions.js';
@@ -904,6 +904,12 @@ function frame(now) {
   dt = Math.min(dt, 0.05);
   Debug.sample(dt);
   syncSize();
+  // The Gamepad API is poll-only - there is no button event - so the pad is
+  // read here, once a frame, and lands in the same intent object the keyboard
+  // and the touch buttons write to. It is **not** in `advance`, which is what
+  // the headless drivers call: a sweep must not change its answer because
+  // somebody left a controller plugged in.
+  input.pollGamepad();
   advance(dt);
   draw();
   requestAnimationFrame(frame);
@@ -1141,7 +1147,9 @@ input.bind('*', (key) => {
   const action = g.rebinding;
   const next = input.rebind(action, key);
   if (!next) {
-    g.rebindNote = `${keyLabel(key)} is reserved for the interface. Pick another key.`;
+    g.rebindNote = isPadToken(key)
+      ? `${keyLabel(key)} is reserved for the interface. Pick another pad control.`
+      : `${keyLabel(key)} is reserved for the interface. Pick another key.`;
   } else {
     settings.keys = next;
     g.rebindNote = null;
@@ -1195,6 +1203,13 @@ window.__game = g;
 window.__ship = ship;
 window.__act = act;
 window.__input = input;
+/** What the pad is doing right now, and which pad it is. */
+window.__pad = () => ({
+  connected: typeof navigator !== 'undefined' && navigator.getGamepads
+    ? [...navigator.getGamepads()].filter(Boolean).map((g) => `${g.index}: ${g.id}`) : [],
+  using: input.padIndex, name: input.padName,
+  amounts: { ...input.pad }, pressing: input.padToken,
+});
 window.__settings = settings;
 window.__debug = Debug;
 /** Dev: rebuild the current mission with a given terrain archetype. */

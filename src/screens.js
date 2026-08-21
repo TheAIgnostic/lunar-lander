@@ -388,13 +388,18 @@ export function screenHTML(s) {
         const listening = g.rebinding === a;
         return `<button class="opt keyrow${listening ? ' on' : ''}" data-action="rebind:${a}">
           <span class="opt-title">${names[a]}</span>
-          <span class="opt-blurb">${listening ? 'press any key…' : input.bindings[a].map(keyLabel).map((k) => `<kbd>${k}</kbd>`).join(' ')}</span>
+          <span class="opt-blurb">${listening ? 'press a key or a pad control…' : input.bindings[a].map(keyLabel).map((k) => `<kbd>${k}</kbd>`).join(' ')}</span>
         </button>`;
       }).join('');
       return `<div class="screen">
         <h2>CONTROLS</h2>
-        <p class="body">Pick a control, then press the key you want on it. Retry, pause, mute and
-        escape stay where they are, so the menu is always reachable.</p>
+        <p class="body">Pick a control, then press the key — or the gamepad button or stick — you
+        want on it. Keys and pad controls are kept separately, so setting one never clears the
+        other. Retry, pause, mute and escape stay where they are, so the menu is always
+        reachable.</p>
+        <p class="body dim">A gamepad is picked up automatically; the browser will not see it until
+        you have pressed something on it. Triggers and sticks are analog, so how hard you pull is
+        how hard it burns.</p>
         <div class="setting"><div class="opts keys-list">${rows}</div></div>
         ${g.rebindNote ? `<div class="notice">${g.rebindNote}</div>` : ''}
         <div class="btns">${btn('keys-reset', 'RESET TO DEFAULT')}${btn('settings', 'DONE', true, 'SPACE')}</div>

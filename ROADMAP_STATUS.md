@@ -990,7 +990,29 @@ scheduled until the MVP is stable — the spec says the same.
   - **a 4-decimal fixture cannot see a smoothed keyboard.** With `amount()` returning `0.9999999`,
     `physics-fixture.js` still prints "unchanged"; the exactness is asserted in `settings-tests.js`
     instead, 50 → 82
-  - **stage 2 is held** on two balance calls only Tom can make - see "Next task"
+  - stage 2 was held on two balance calls only Tom could make; both **answered 2026-08-21** - accept
+    the analog precision asymmetry, and leave the fuel budgets alone and watch them
+
+- [x] **M30 stages 2-5 — the gamepad backend** (this commit)
+  - `pollGamepad()` once a frame from the loop (the API is poll-only), filling a third source beside
+    the keyboard and the touch buttons. **`ship.js` did not change** - a trigger fills the same 0..1
+    the keyboard fills with 1, which is what stage 1 was for
+  - pad controls are **pseudo-keys in the same binding map** (`pad:7`, `axis:0-`), so `rebind()`, the
+    save format and the settings screen kept working. One rule had to change: **`rebind()` replaces
+    within a family**, or binding the booster to a trigger silently unbinds the space bar
+  - Tom's two calls, taken first: **analog is accepted** as strictly more precise, like the steering
+    modes; **the fuel budgets are left alone** and watched on `mars-2` and `europa-4`
+  - **`PAD.curve` is 1.5 because of where it puts the hover point.** Linear would fly the whole
+    ladder in the bottom third of the trigger - the least precise part. At 1.5 the hover band is
+    20-61%, eight of ten bodies between 30% and 49%
+  - **the endpoints are exact**: a trigger at the stop spends 9.0 fuel/s and reaches vy -96.0, the
+    same two figures a held space bar produces
+  - **mutation-tested, and two mutations survived the first pass.** One was a real gap - `rebind`
+    replacing across families only differs for a player who customised *both*, so it looks perfect on
+    a fresh install. The other was not a bug and surfaced an undocumented NaN guard: the fold is
+    `if (v > next[a])` and not `Math.max`, because `Math.max(0, NaN)` is NaN
+  - both fixtures unchanged, every audit figure identical, `settings-tests.js` 50 → **167**
+  - **a pad cannot work the menus** - deliberately outside the decided plan, see below
 
 ## Decisions (Tom, 2026-08-16)
 
@@ -1009,165 +1031,49 @@ None.
 
 ## Next task
 
-**M30 stage 2 — the gamepad backend.** Stage 1 is done and committed on its own; the two questions
-below it are **for Tom, and stage 2 does not start until they are answered.**
+**M30 is done.** Nothing is scheduled. What follows is what M30 left open and what was already queued.
 
-### Stage 1 — done, and it changed nothing, which was the point
+### M30, as shipped
 
-The input contract is a 0..1 magnitude now instead of a boolean, and the flight model did not fork.
-`Input.amount()` plus a free `amountOf(input, action)`, and nine inserted `* amount` in `ship.js`.
-No gamepad, no new setting, no new behaviour.
+Analog controller support, in two commits: the contract widened (stage 1, provable and committed on
+its own), then the gamepad behind it (stages 2-5). Full measurement in `test/BASELINE.md`.
 
-**Proved rather than hoped**, because both fixtures are weaker than the claim: the physics fixture
-compares to four decimal places and the flight fixture to `outcome/grade/fuelLeft/simSecs`. Both read
-"unchanged", and separately every mission was flown through both trees comparing **raw 64-bit
-doubles — 29,505,039 values across 558 flights, zero differences**, including 295 landings and 8,629
-`settle()` substeps. Full measurement in `test/BASELINE.md`, M30 stage 1.
+**Tom's two balance calls, 2026-08-21, taken before stage 2 was built:**
 
-Two things worth carrying forward:
+1. **Analog precision is accepted.** A controller player will land better than a keyboard player on
+   the same mission, and that is fine for the same reason three steering modes of different
+   difficulty are fine. No compensation, no second balance pass.
+2. **The fuel budgets are not retuned.** Partial throttle costs proportionally less, so hovering is
+   cheaper. Left alone and **watched on `mars-2` and `europa-4`**, the two tightest — the standing
+   rule, which is that nothing moves without a specific complaint to aim at.
 
-- **The first version of that proof was wrong and reported success.** A scripted harness that drops
-  the lander never reaches `settle()` — nothing acts on the event `step()` returns, so the lander
-  falls *through* the ground and `touchdown` never opens. It covered **zero settle substeps** while
-  half of what stage 1 changed lives there. The physics fixture's script does not land either. Only
-  the real autopilot does.
-- **A 4-decimal fixture cannot see a smoothed keyboard.** With `amount()` returning `0.9999999` for a
-  held key, `physics-fixture.js` still prints "unchanged". The exactness is asserted in
-  `settings-tests.js` instead (50 → 82 assertions), because that is the one way this design gets
-  quietly broken later.
+### What M30 left open, and the first is a real gap
 
-### Two things for Tom — stage 2 is held on these
+- **A pad cannot work the menus.** It flies the lander and fires the module; pausing, confirming and
+  backing out are still keyboard or mouse. This is outside the five decided stages and was left out
+  rather than bolted on, because it needs a design call — which button confirms, what moves a
+  selection, whether the d-pad drives the route screen. START and HOME are **reserved** against a
+  flight binding so the buttons are free for it. **This is the thing that would make it feel like
+  controller support rather than an analog throttle.**
+- **The curve is reasoned, not tuned.** `PAD.curve` 1.5 is argued from where the hover point lands,
+  which is arithmetic; whether it *feels* right is not. Four levers: `curve`, `deadzone`, `saturate`,
+  `triggerFloor`.
+- **One line is unverified by anything but a real pad.** `requestAnimationFrame` never fires in the
+  agent's browser pane (`document.hidden` is true even fronted), so the poll and the sim were driven
+  directly and the `input.pollGamepad()` call inside `frame()` is confirmed by reading the served
+  source, not by running it. A controller on your machine closes that in about ten seconds.
+- **The bindings assume the Standard Gamepad mapping.** A pad the browser does not normalise reports
+  raw indices and the labels read `PAD 12`. Nothing breaks; it stops being readable.
 
-Both are balance decisions and not code, and both follow from stage 1 rather than from anything a
-gamepad adds:
+### Still queued, unchanged
 
-1. **Analog is strictly more precise than binary**, so a controller player will land better than a
-   keyboard player on the same mission. Precedent says fine — the game already ships three steering
-   modes of different difficulty and lets the player choose — but it should be a decision, not a side
-   effect.
-2. **Partial throttle costs proportionally less fuel**, which makes hovering cheaper on budgets
-   authored for full-or-nothing burns. Measured: half throttle burns exactly half. Worth *watching*
-   on `mars-2` and `europa-4`, the two tightest, rather than pre-emptively retuned.
-
-### Stages 2-5, unchanged from the plan below
-
-2. **The gamepad backend.** `pollGamepad()` once per frame from the main loop (the API is poll-only),
-   filling a third source ORed into `held()` and `amount()`. Deadzone, and a response curve worth
-   tuning — linear is usually wrong for a throttle.
-3. **Binding and the settings screen.** Pad controls as pseudo-keys — `pad:6`, `axis:1+` — in the
-   existing string binding map, so `rebind()`, the save format and the settings UI keep working.
-4. **One-shot actions.** `ability` fires from `keydown` today, so the pad needs edge detection.
-5. **Hot-plug and pad choice**, and the quirk that a pad often will not appear until it is touched.
-
-Test at the **mapping seam**: fake pad in, intent out. `settings-tests.js`. Do not test the physics
-through a gamepad — the physics was tested by stage 1's fixtures being unmoved.
-
----
-
-**M30 — analog controller support.** Decided with Tom, 2026-08-21. *(The plan as written; stage 1 is
-now done, see above.)*
-
-### The architecture question, answered
-
-Tom asked whether the flight model should be split for controller and keyboard, and whether that
-means refactoring the model or adding a second one. **Neither.** It is a change to the *input
-contract*, and the flight model does not fork.
-
-Today the simulation reads booleans: `input.thrust` is on or off, and `ship.js` smooths the throttle
-itself. A trigger gives 0–1 and a stick gives −1–1. So the contract widens from a boolean to a
-**scalar magnitude**, with the boolean as its degenerate case:
-
-```js
-// today                          // M30
-this.thrusting = input.thrust     const t = amountOf(input, 'thrust');   // 0..1
-if (this.thrusting) vx += ...     vx += noseX * mainThrust * t * dt;
-```
-
-**Two flight models would be the fault this project has been burned by three times** — `__settleNow`
-reimplementing the settle, the autopilot drifting three milestones behind its own control law, and
-Mars running at double drag. One rule, one implementation. Two models also means balancing 50
-missions twice and making every future change twice.
-
-### Why this is safe, and it is provable rather than hopeful
-
-**The keyboard produces exactly 1.0 and 0.0**, so every multiplication it causes is `x * 1.0`.
-Measured before committing to the design: 2,000,400 multiplications across the actual constants and
-magnitudes the simulation produces, plus a random sweep over twelve orders of magnitude — **zero
-values changed by `* 1.0`**. IEEE-754 guarantees it and the sweep confirms it.
-
-So a keyboard flight after M30 must be **byte-identical** to one before it, and both fixtures are the
-test of that. This is the same trick M29c used for `STEERING.pro` (`{ spinCap: 1, idleDamp: null }`),
-which was verified by hand to 1e-9 — the precedent is one milestone old and it held.
-
-### What actually changes
-
-Nine lines in `ship.js`, all in `step()` and `settle()`:
-
-| now | becomes |
-| --- | --- |
-| `this.thrusting = input.thrust && hasFuel` | a 0–1 `throttleIn`, with `thrusting = throttleIn > 0` for audio, particles, heat and the gear cue |
-| `if (this.thrusting) burn += burnMain` | `burn += burnMain * throttleIn` — partial throttle costs proportionally less |
-| `if (this.rcsLeft) spin -= rcsAuth * dir * dt` | `spin -= rcsAuth * leftIn * dir * dt` |
-| `if (this.rcsLeft) vx -= sideAuth * dt` (DIRECT) | the same, scaled |
-| `throttleTarget = this.thrusting ? 1 : 0` | `= throttleIn` |
-
-`this.thrusting` / `rcsLeft` / `rcsRight` stay as booleans derived from the magnitudes, because a
-dozen consumers read them (audio, particles, the HUD, `thermal`, the debug overlay) and none of them
-wants a float.
-
-### Staged, with the fixture as the gate at every step
-
-1. **Widen the contract.** `Input` grows `amount(action) → 0..1`, returning exactly 1 or 0 from
-   keyboard and touch. `ship.js` reads amounts instead of booleans. **Gate: both fixtures
-   byte-identical, full suite green.** Nothing observable has changed yet, which is the point — this
-   step is provable and should be its own commit.
-2. **The gamepad backend.** A `pollGamepad()` called once per frame from the main loop (the Gamepad
-   API is poll-only, no events), filling a third source ORed into `held()` and `amount()` alongside
-   keyboard and touch. Triggers and sticks feed the magnitudes directly. Deadzone, and a response
-   curve worth tuning (linear is usually wrong for a throttle).
-3. **Binding and the settings screen.** Store pad controls as pseudo-keys — `pad:6`, `axis:1+` — in
-   the existing string binding map. `keyLabel()` grows a case, and `rebind()`'s "an action can never
-   be left with nothing on it" rule, the save format and the whole settings UI keep working unmoved.
-4. **One-shot actions.** `ability` fires from a `keydown` event today, so the pad needs edge
-   detection to call the same `onAction` callbacks.
-5. **Hot-plug and pad choice**, plus the `gamepadconnected` event and the browser quirk that a pad
-   often will not appear until it has been touched.
-
-### Where to test it, given there is no pad in node or the headless browser
-
-At the **mapping seam**: a fake pad object in, an intent out. That is a pure function and it is where
-the bugs will be. `settings-tests.js` is the file — it already reads source and drives `Input`
-directly. Do not try to test the physics through a gamepad; the physics is tested by the fixtures
-being unmoved in stage 1.
-
-### Two things for Tom, before stage 2
-
-- **Analog is strictly more precise than binary**, so a controller player will land better than a
-  keyboard player on the same mission. That is a real balance asymmetry. Precedent says it is fine —
-  the game already ships three steering modes of different difficulty and lets the player choose —
-  but it should be a decision rather than a side effect.
-- **Partial throttle costs proportionally less fuel**, which follows from the same change and makes
-  hovering cheaper. The fuel budgets were authored against full-or-nothing burns. Worth watching on
-  the tightest missions (`mars-2`, `europa-4`) rather than pre-emptively retuned.
-
-**The playtest that was:** M27 built the ladder and M28 made the economy under it work; both
-were built and measured by an autopilot that does not dodge and cannot see the screen, and everything
-still queued depends on answers only Tom can give.
-
-**The three questions the code cannot answer**, all open since M24 and now more load-bearing:
-
-1. ~~**Is it hard or is it unfair?**~~ **Answered 2026-08-21: "balance seems good."** Recorded
-   against 80% unarmed crossings and Mars bottoming out at 0.05 visibility.
-2. **Does the ladder ramp?** M27 measured that the machine count barely moves and moves the *wrong*
-   way where it does — every survey body caps at 3 while the authored Moon fields 4 and Mars 5, and
-   **Enceladus at position 5 has no eligible enemy sets at all**.
-3. **Is Venus a wall or a brick?** 86/100 home and 36/100 on the prize route, geometry sound 100/100.
-
-**God mode exists for exactly this** (Settings → GOD MODE): jump to any body with the hangar filled,
-and the playtest log stamps its own header so a cheated run cannot be mistaken for a normal one.
-
-The one M28 item left open — tuning pad width and machine damage against the recommended lander —
-waits on question 1, and should not be attempted before it is answered.
+- **Five enemy designs of eight remain** — Coil Cannon, Patrol Drone, Mortar Platform, Magnetic Mine,
+  Solar Sentry, Shielded Guardian. M29 measured that on a low-gravity body the machine *type* decides
+  almost everything and the count decides almost nothing, so **more designs is the only real lever
+  left on the combat ramp**. Read M29e's findings first: a machine is not finished when it draws and
+  fires, `range` is not the lever it looks like, and reach costs twice what vantage does.
+- **Moving landing platforms** (Europa 5, Io 5) — `padAt` and the landing check become time-aware.
+- **The landing bands and the fuel budgets** still await human data, and are still parked.
 
 ### Tom's decisions (2026-08-20) — constraints, not options
 
@@ -1300,29 +1206,25 @@ turret redrawn, the Mast Sniper built, and a soundbed for the title screen.*
 **The first prompt for a new session:**
 
 > Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then `docs/PROGRESSION.md`, then the **M29**
-> and **M29e** sections of `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything —
-> it takes a few minutes and it is how every milestone here that went well started.
+> and **M30** sections of `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything — it
+> takes a few minutes and it is how every milestone here that went well started.
 >
-> Then build **M30, analog controller support**. The plan is under "Next task" and it is decided, not
-> open: Tom asked whether a controller means a second flight model and the answer is no — the input
-> contract widens from a boolean to a 0–1 magnitude and the model does not fork. Follow the stages in
-> order.
->
-> **Stage 1 is provable, and it is the whole reason the plan is shaped this way.** Widening the
-> contract changes no behaviour, because the keyboard produces exactly 1.0 and 0.0 and `x * 1.0 === x`
-> exactly. So after stage 1 **both fixtures must be byte-identical**. If either moves, stage 1 is
-> wrong — do not re-record them to make it pass. Commit stage 1 on its own.
->
-> **Ask Tom before stage 2**, because both are balance decisions and not code: analog is strictly
-> more precise than binary, so a controller player will land better than a keyboard player on the
-> same mission; and partial throttle costs proportionally less fuel, which makes hovering cheaper on
-> budgets authored for full-or-nothing burns.
+> **Nothing is scheduled.** M30 finished analog controller support and the queue is what is under
+> "Next task": the five unimplemented enemy designs are the most valuable thing left, and the one
+> real gap M30 left is that **a pad cannot work the menus** — it flies the lander and fires the
+> module, and pausing, confirming and backing out are still keyboard. That was left out on purpose
+> because it needs a design call from Tom about what confirms and what moves a selection. Ask him
+> before building it.
 >
 > Two standing rules for this repo. **Measure before you decide** — every milestone here that went
-> badly started from an assumption, and this session alone found four bodies with no working weather,
-> a lethal machine that could see the player for half a second a flight, and a soundbed that was
-> being switched off sixty times a second. And **do not retune balance without a specific complaint
-> to aim at**; Tom's "balance seems good" unparked four items, it did not open them.
+> badly started from an assumption, and M30 alone found a proof that reported success while covering
+> **zero** of the code it was meant to prove, and two mutations that survived a test suite written
+> specifically to catch them. And **do not retune balance without a specific complaint to aim at**;
+> Tom's "balance seems good" unparked four items, it did not open them.
+>
+> One thing worth internalising from M30 before you write a test: **a passing test is not evidence
+> that it bites.** Break the code on purpose and check the test notices. Both of the real faults in
+> that milestone were found that way and neither was found by reading.
 
 **What is different about the state you are inheriting.** For most of this project's history the
 standing problem was that nobody had played the thing. That is no longer true — **Tom playtests
@@ -1339,14 +1241,22 @@ Nothing gets retuned without a specific complaint to aim at.
 3. **`docs/PROGRESSION.md`** — the hangar, the skills and the loadout as one system. Read it before
    touching economy, difficulty or the route. **Three of its figures were wrong when M28 re-measured
    them**; they are corrected in place and the header says so. Re-measure it anyway
-4. **`test/BASELINE.md`** — **M29** for the ten authored bodies and the hazard audit, **M29a** for
-   what a human actually found, **M28** for the economy, **M27** for the ladder, **M19/M20** for
-   where the wall is on terrain
+4. **`test/BASELINE.md`** — **M30** for the input contract and the gamepad, **M29** for the ten
+   authored bodies and the hazard audit, **M29a** for what a human actually found, **M28** for the
+   economy, **M27** for the ladder, **M19/M20** for where the wall is on terrain
 
 Then **measure before editing**: `./test/run-all.sh 20`. It ends with the encounter audit, so one
 command tells you both that the game still works and what a player currently meets in it.
 
 ### What this session did
+
+- **M30 — analog controller support**, in two commits. The input contract widened from a boolean to a
+  0..1 magnitude (provable, and committed on its own), then the gamepad behind it: polling, an analog
+  response curve, pad controls as pseudo-keys in the existing binding map, edge-detected one-shots,
+  and hot-plug. `ship.js` did not change between the two. **A pad still cannot work the menus**, which
+  is the one real gap and is outside the decided plan.
+
+*The session before this one ran M29 through M29h:*
 
 - **M29 — the survey bodies become content.** Seven chapters authored, 50 missions in all, every one
   with its own name, brief, objective and a set piece per body. The hazard audit that opened it found
@@ -1361,7 +1271,7 @@ command tells you both that the game still works and what a player currently mee
 - **M29g — the sniper moved to where it will be met**, after Tom reported never encountering it.
 - **M29h — a raised Ray Shield stops a lethal round** and burns out doing it.
 
-### The instrument, and six ways it has misled a session
+### The instrument, and eight ways it has misled a session
 
 - **The autopilot has no evasive logic, no terrain lookahead, and cannot see the screen.** It is
   still the only automated instrument. The 70% unarmed-crossing figure is a **floor** measured by a
@@ -1387,6 +1297,19 @@ command tells you both that the game still works and what a player currently mee
 - **A recommendation made from a guess, with the measurement already in the log.** The ten-body
   ladder was argued against at "50 missions a run" — the length of the *rarest* outcome. Tom's own
   log had ~3 minutes a body. Measure before recommending, not just before editing.
+- **A proof can report success while covering none of the thing it was meant to prove.** M30's first
+  bit-exact harness compared 1.8M doubles across 90 cases and found zero differences — over **zero
+  settle substeps**, when `settle()` was half of what had changed. A scripted harness that drops the
+  lander never opens `touchdown` at all: nothing acts on the event `step()` returns, so it falls
+  *through* the ground. The physics fixture's own script does not land either. **Ask what your
+  instrument actually touched**, not just what it reported; the fix was to count the substeps it
+  covered and refuse to pass at zero.
+- **A test that passes is not a test that bites.** M30 wrote a suite specifically to catch a class of
+  fault, then broke the code six ways on purpose — and **two mutations survived**. One was a real gap
+  the tests should have caught and only differs for a player who has customised twice, so it looks
+  perfect on a fresh install. The other was not a bug, and finding out why surfaced a load-bearing
+  NaN guard that was undocumented and one tidy-up away from deletion. Mutate the code; it is cheap
+  and it is the only thing that measures a test.
 
 ### Five things worth knowing before touching anything
 
@@ -1425,6 +1348,10 @@ the record, since every one of them is now a number somebody may want to move ag
 
 **Still open, and still only answerable by a person:**
 
+- **Does the controller feel right, and should a pad be able to work the menus?** M30 shipped analog
+  flight and left menu navigation out on purpose, because what confirms and what moves a selection is
+  a design call. And `PAD.curve` is argued from where the hover point lands, which is arithmetic —
+  whether it *feels* right is the one thing only a controller in a hand can say.
 - **Which steering mode is right for you, and for Ian.** M29c split it: CLASSIC settles the rotation
   when you let go, PRO CLASSIC (IAN) is the law you have both been flying. The numbers say the tuned
   mode should feel like pointing the nose rather than fighting momentum, but a control scheme is the

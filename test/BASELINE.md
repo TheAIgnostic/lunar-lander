@@ -3167,3 +3167,130 @@ anything a gamepad adds:
 - **Partial throttle costs proportionally less fuel**, so hovering is cheaper on budgets authored for
   full-or-nothing burns. Measured here: half throttle burns exactly half. Worth watching on
   `mars-2` and `europa-4`, the two tightest, rather than pre-emptively retuned.
+
+---
+
+## M30 stages 2-5 — the gamepad backend (2026-08-21)
+
+The pad itself, on top of the contract stage 1 widened. Nothing in `ship.js` changed: a trigger fills
+the same 0..1 amount the keyboard fills with 1, which is what the staging was for.
+
+**Tom's two calls, taken before this was built:** analog is *accepted* as strictly more precise, like
+the three steering modes — no compensation, no second balance pass. And the fuel budgets are **left
+alone** and watched on `mars-2` and `europa-4`, rather than pre-emptively retuned.
+
+### Where the response curve came from, since feel cannot be measured
+
+A throttle curve is the M29c steering problem again — the least measurable thing in the project. But
+*where it puts the hover point* is arithmetic, and that is where a player's thumb lives for the whole
+of a landing. Thrust is 130 px/s², gravity runs 8.4 to 62.9:
+
+| body | g px/s² | throttle that holds a hover | trigger travel, linear | trigger travel, curve 1.5 |
+| --- | ---: | ---: | ---: | ---: |
+| Enceladus | 8.4 | 6% | 6% | **20%** |
+| Pluto | 18.7 | 14% | 14% | 30% |
+| Europa | 24.7 | 19% | 19% | 35% |
+| Moon | 28.0 | 22% | 22% | 38% |
+| Mars | 42.4 | 33% | 33% | 48% |
+| Mercury | 43.2 | 33% | 33% | 49% |
+| Venus | 62.9 | 48% | 48% | **61%** |
+
+**Linear would fly the entire ladder in the bottom third of the trigger**, which is where a trigger
+has the least resolution and the most stiction. At 1.5 the hover band is 20-61%, the eight ordinary
+bodies between 30% and 49% — the middle of the travel. Raise the curve and the top goes numb, lower
+it and the bottom does. That is the lever, and it is `PAD.curve`.
+
+### The endpoints are exact, and that is the same property stage 1 rests on
+
+Below `PAD.deadzone` a stick reads **exactly 0**; above `PAD.saturate` (0.95) a trigger reads
+**exactly 1**. So a pad at rest and a pad at the stop produce the two values the keyboard produces,
+and a full burn is a full burn whatever it was held with. Measured in the browser against the real
+`Input`: a trigger at the stop spends **exactly 9.0 fuel/s** and reaches **vy −96.0** over one
+second — the same two figures a held space bar produces, to the digit.
+
+`saturate: 0.95` is not cosmetic. Most triggers never report a clean 1.0 at the stop, and without it
+a pad player would fly the whole game at 99% throttle and never match a recorded figure.
+
+### Two guards against NaN, and neither is decoration
+
+Found by mutation-testing rather than by reading. `shape()` subtracts the floor before raising to a
+power, so a reading *below* the floor with no guard is `Math.pow(negative, 1.5)` — **NaN** — and a NaN
+amount multiplies straight into `vx`/`vy` and puts the lander nowhere at all.
+
+Two things refuse it: `shape()` itself (`!(NaN > floor)` is true) and the fold in `pollGamepad`
+(`NaN > 0` is false). **The fold is deliberately not `Math.max`**, because `Math.max(0, NaN)` is NaN.
+That is now a comment in the code and an assertion in the tests, because it is exactly the kind of
+line a later cleanup tidies into `Math.max` without knowing what it was doing.
+
+A property test sweeps every raw reading from −1.5 to 1.5 and requires a finite 0..1 out, plus
+explicit NaN and Infinity cases.
+
+### The rebinding rule had to change, and the fixtures could not have told me
+
+Pad controls live in the **same string binding map** as keys (`pad:7`, `axis:0-`), so `rebind()`,
+`setBindings()`, the save format and the settings screen all keep working. But `rebind()` used to set
+`next[action] = [key]`, which was right when every binding was a key and is wrong now: **binding the
+booster to a trigger would silently unbind the space bar.** It replaces within a family and leaves the
+other alone.
+
+**And the "never left with nothing" rule is asked per family now**, because an action holding only
+`pad:7` is unreachable for a player with no pad — the exact lockout the rule exists to prevent. An
+action with no *pad* control is allowed; that is a choice, not a lockout.
+
+This one survived the first mutation pass. `next[action] = [key]` still passed every test I had
+written, because the restore rule patched the missing family back in **from the defaults** — so it
+only differs for a player who has customised *both* families, and it looks perfect on a fresh
+install. Now asserted directly.
+
+### Mutation-tested, because a passing test is not evidence that it bites
+
+| mutation | failures raised |
+| --- | ---: |
+| `amount()` returns 0.9999999 for a held key | 5 |
+| `ship.js` takes the amount and ignores it | 2 |
+| axis sign flipped (left drives right) | 5 |
+| trigger never reaches exactly 1 | 9 |
+| `ability` fires every poll instead of on the edge | 2 |
+| `rebind` replaces across families | 3 |
+
+The dead-band mutation raised **0** and turned out not to be a bug: the max-fold drops the NaN it
+produces. That is what surfaced the guard above, which was undocumented and one cleanup away from
+being deleted.
+
+### What did not move
+
+**Both fixtures unchanged.** Full suite green — every audit figure identical to the run taken before
+the first edit of this milestone: crossing 642/800 (80%), at-once 0: 63.1% · 1: 25.9% · 2: 9.5% ·
+3: 1.4% · 4: 0.1%, deep-route engagement 751/800. `settings-tests.js` 50 → **167** assertions.
+
+`pollGamepad()` is called from `frame()` and **deliberately not from `advance()`**, which is what the
+headless drivers call — a sweep must not change its answer because somebody left a controller plugged
+into the machine running it.
+
+### Verified in the browser, and the one line that could not be
+
+Driven against the real `Input` and a synthetic Standard Gamepad injected into `navigator.getGamepads`:
+full trigger → exactly 1, 9.0 fuel/s, vy −96.0; trigger at 0.55 → amount 0.409, 3.68 fuel/s, partial
+acceleration; stick left → `rcsLeft` only, spin −1.79, and half-stick −0.50; keyboard with a pad
+connected and idle → still exactly 1 and 0. Rebinding a pad control through the CONTROLS screen
+binds, flies on the new control, kills the old one and leaves the space bar working; START and HOME
+are refused by name.
+
+**`requestAnimationFrame` never fires in this browser pane** — `document.hidden` is true even with the
+tab fronted, the gotcha `docs/ARCHITECTURE.md` already records — so the poll and the sim were driven
+directly. That leaves exactly one line unexercised: the `input.pollGamepad()` call inside `frame()`.
+It is present in the served source and sits immediately before `advance(dt)`. **A real pad on a real
+machine is still the only way to close that**, and to answer whether the curve feels right.
+
+### Left for Tom
+
+- **The curve is reasoned, not tuned.** `PAD.curve`, `PAD.deadzone`, `PAD.saturate` and
+  `PAD.triggerFloor` are the four levers, and the hover table above is the argument for 1.5. A
+  controller in a hand is the only thing that can say whether it is right.
+- **A pad cannot work the menus.** The five stages cover the flight controls and the module button;
+  pausing, confirming and backing out are still keyboard or mouse. START and HOME are **reserved**
+  against a flight binding so the buttons are free for it, but nothing is wired to them yet. This is
+  a real gap in "controller support" and it is deliberately outside the decided plan rather than
+  quietly bolted on — it needs a design call about what confirms and what moves a selection.
+- **The bindings are the Standard Gamepad mapping.** A pad the browser does not normalise reports raw
+  indices and the labels will read `PAD 12`. Nothing breaks; it just stops being readable.

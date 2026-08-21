@@ -585,3 +585,8 @@ table.stats-table .m-w { text-align: right; color: #7f9db0; font-size: 11px; }
 .ladder.roll .rung-name { color: var(--rung, #9fc0d4); }
 .ladder.roll .pip { color: var(--rung, #9fe8ff); }
 .screen.complete .body.dim { color: #7f9db0; font-size: 12px; }
+/* A secondary note under a screen's main copy. Was only ever defined inside
+   `.screen.complete`, so the same class read as normal body text anywhere
+   else - which is a style that silently does nothing, the CSS version of a
+   hazard name with no builder behind it. */
+.screen .body.dim { color: #7f9db0; font-size: 12px; }

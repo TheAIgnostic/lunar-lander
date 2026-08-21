@@ -4,7 +4,7 @@
 // The rule these tests exist to hold: an accessibility setting changes how the
 // game is *presented*, never how it behaves. A player who turns the shake off
 // must be flying exactly the same simulation as one who leaves it on.
-import { Input, ACTIONS, DEFAULT_KEYS, keyLabel, amountOf } from '../src/input.js';
+import { Input, ACTIONS, DEFAULT_KEYS, keyLabel, amountOf, isPadToken, PAD } from '../src/input.js';
 import { DEFAULT_SETTINGS, Ship, SHIP, STEERING, STEERING_MODES } from '../src/ship.js';
 import { defaultMeta, loadMeta, saveMeta } from '../src/save.js';
 import { readFileSync } from 'node:fs';
@@ -35,6 +35,10 @@ function makeInput() {
   globalThis.window = realWindow;
   input._press = (key) => target.fire('keydown', { key, preventDefault() {} });
   input._release = (key) => target.fire('keyup', { key });
+  // The window-level listeners: focus loss, and the pad hot-plug events.
+  input._blur = () => globalTarget.fire('blur', {});
+  input._padConnect = (gamepad) => globalTarget.fire('gamepadconnected', { gamepad });
+  input._padDisconnect = (gamepad) => globalTarget.fire('gamepaddisconnected', { gamepad });
   return input;
 }
 
@@ -434,6 +438,334 @@ function makeInput() {
     Math.abs(half.spent - full.spent / 2) < 1e-9, `${half.spent} vs ${full.spent / 2}`);
   check('half throttle gives less than full acceleration', half.vy > full.vy && half.vy < none.vy,
     `full ${full.vy} half ${half.vy} none ${none.vy}`);
+}
+
+// ---------------------------------------------------------------------------
+// M30 stage 2-5: the gamepad, tested at the mapping seam.
+//
+// There is no pad in node and none in a headless browser, so the thing that can
+// be tested is the seam: **a fake pad object in, an intent out.** That is a pure
+// function and it is where the bugs are. The physics is deliberately not tested
+// through a gamepad - stage 1 proved the flight model by leaving both fixtures
+// unmoved, and re-proving it through a device would only measure the device.
+{
+  // A Standard Gamepad, filled in as a test asks. Triggers are analog, so
+  // `buttons[6]` and `buttons[7]` carry a value rather than just a flag - which
+  // is the whole reason any of this exists.
+  const fakePad = (over = {}) => ({
+    index: over.index != null ? over.index : 0,
+    id: over.id || 'Test Pad (STANDARD GAMEPAD)',
+    connected: over.connected !== false,
+    buttons: Array.from({ length: 17 }, (_, i) => ({
+      value: over.buttons && over.buttons[i] != null ? over.buttons[i] : 0,
+      pressed: !!(over.buttons && over.buttons[i] >= 0.5),
+    })),
+    axes: Array.from({ length: 4 }, (_, i) => (over.axes && over.axes[i] != null ? over.axes[i] : 0)),
+  });
+
+  // 1. **The two endpoints are exact.** This is the same property stage 1 rests
+  //    on, extended to the pad: at rest exactly 0, at the stop exactly 1. If a
+  //    trigger at the stop returned 0.998 then a pad player would be flying a
+  //    measurably different game from every figure in test/BASELINE.md.
+  {
+    const input = makeInput();
+    input.pollGamepad([fakePad()]);
+    check('a pad at rest reads exactly 0', Object.is(input.amount('thrust'), 0), String(input.amount('thrust')));
+    input.pollGamepad([fakePad({ buttons: { 7: 1 } })]);
+    check('a trigger at the stop reads exactly 1', Object.is(input.amount('thrust'), 1), String(input.amount('thrust')));
+    input.pollGamepad([fakePad({ axes: { 0: -1 } })]);
+    check('a stick at the stop reads exactly 1', Object.is(input.amount('left'), 1), String(input.amount('left')));
+    // And the exactness survives *saturate*, so a trigger that never quite
+    // reaches 1.0 - which is most of them - still commands a full burn.
+    input.pollGamepad([fakePad({ buttons: { 7: PAD.saturate } })]);
+    check('a trigger at the saturation point reads exactly 1', Object.is(input.amount('thrust'), 1));
+  }
+
+  // 2. Noise below the floor is not intent.
+  {
+    const input = makeInput();
+    input.pollGamepad([fakePad({ axes: { 0: -PAD.deadzone }, buttons: { 7: PAD.triggerFloor } })]);
+    check('a resting stick is exactly 0', Object.is(input.amount('left'), 0), String(input.amount('left')));
+    check('a resting trigger is exactly 0', Object.is(input.amount('thrust'), 0), String(input.amount('thrust')));
+    check('a resting pad is not "held"', !input.held('left') && !input.held('thrust'));
+  }
+
+  // 2b. **Inside** the dead band, not merely at its edge - and the reason this
+  //     is its own check is that it was not caught by testing the boundary. The
+  //     shaping subtracts the floor before raising to a power, so a reading
+  //     *below* the floor with no guard is `Math.pow(negative, 1.5)`, which is
+  //     **NaN** - and a NaN amount multiplies straight into `vx`/`vy` and puts
+  //     the lander nowhere at all. A test at exactly the floor returns a clean
+  //     zero either way and says nothing.
+  {
+    const input = makeInput();
+    input.pollGamepad([fakePad({ axes: { 0: -0.10 } })]);
+    check('a stick inside the dead band is exactly 0', Object.is(input.amount('left'), 0), String(input.amount('left')));
+    input.pollGamepad([fakePad({ buttons: { 7: 0.03 } })]);
+    check('a trigger inside its floor is exactly 0', Object.is(input.amount('thrust'), 0), String(input.amount('thrust')));
+  }
+
+  // 2c. And the property that covers every reading at once, including the ones
+  //     no real pad should ever send. Whatever comes off the wire, what reaches
+  //     `ship.js` must be a finite number in 0..1 - it gets multiplied into the
+  //     velocity, so a NaN, a negative or a 1.4 is not a bad control feel, it is
+  //     a lander that leaves the world.
+  {
+    const input = makeInput();
+    let bad = null;
+    for (let raw = -1.5; raw <= 1.5001 && !bad; raw += 0.01) {
+      const r = Math.round(raw * 1000) / 1000;
+      input.pollGamepad([fakePad({ axes: { 0: r }, buttons: { 7: r, 6: r, 2: r } })]);
+      for (const a of ACTIONS) {
+        const v = input.amount(a);
+        if (!Number.isFinite(v) || v < 0 || v > 1) { bad = `${a} = ${v} at raw ${r}`; break; }
+      }
+    }
+    check('every raw pad reading maps into a finite 0..1', !bad, bad || '');
+
+    // Including a pad that reports nonsense. Two things refuse a NaN and both
+    // are load-bearing: `shape()` (`!(NaN > floor)` is true) and the fold in
+    // `pollGamepad` (`NaN > 0` is false, which is why it is not `Math.max`).
+    input.pollGamepad([fakePad({ axes: { 0: NaN }, buttons: { 7: NaN } })]);
+    check('a pad reporting NaN reads exactly 0', Object.is(input.amount('left'), 0)
+      && Object.is(input.amount('thrust'), 0), `${input.amount('left')} ${input.amount('thrust')}`);
+    input.pollGamepad([fakePad({ axes: { 0: -Infinity }, buttons: { 7: Infinity } })]);
+    check('a pad reporting Infinity clamps to 1', input.amount('left') === 1 && input.amount('thrust') === 1,
+      `${input.amount('left')} ${input.amount('thrust')}`);
+  }
+
+  // 3. The middle is genuinely analog, and monotonic. A widening that produced
+  //    only 0 and 1 from a trigger would pass every check above.
+  {
+    const input = makeInput();
+    const at = (v) => { input.pollGamepad([fakePad({ buttons: { 7: v } })]); return input.amount('thrust'); };
+    const q = at(0.3), h = at(0.55), t = at(0.8);
+    check('a half-pulled trigger is between the endpoints', h > 0 && h < 1, String(h));
+    check('trigger response is monotonic', q < h && h < t, `${q} ${h} ${t}`);
+  }
+
+  // 4. Direction. A stick pushed left must not also drive right, which is the
+  //    single easiest sign error to make here and invisible until you fly it.
+  {
+    const input = makeInput();
+    input.pollGamepad([fakePad({ axes: { 0: -1 } })]);
+    check('stick left drives left', input.amount('left') === 1);
+    check('stick left does not drive right', Object.is(input.amount('right'), 0), String(input.amount('right')));
+    input.pollGamepad([fakePad({ axes: { 0: 1 } })]);
+    check('stick right drives right', input.amount('right') === 1);
+    check('stick right does not drive left', Object.is(input.amount('left'), 0));
+  }
+
+  // 5. **A connected but idle pad may not change what the keyboard reports.**
+  //    This is the one that would move the fixtures for a player who owns a
+  //    controller and flies on keys anyway.
+  {
+    const input = makeInput();
+    input.pollGamepad([fakePad()]);
+    for (const a of ['thrust', 'left', 'right', 'hold']) {
+      input._press(DEFAULT_KEYS[a][0]);
+      check(`key + idle pad still reads exactly 1 (${a})`, Object.is(input.amount(a), 1), String(input.amount(a)));
+      input._release(DEFAULT_KEYS[a][0]);
+      check(`released key + idle pad still reads exactly 0 (${a})`, Object.is(input.amount(a), 0), String(input.amount(a)));
+    }
+    // And a key beats a feathered trigger rather than averaging with it.
+    input.pollGamepad([fakePad({ buttons: { 7: 0.4 } })]);
+    input._press(' ');
+    check('a held key wins over a part-pulled trigger', Object.is(input.amount('thrust'), 1), String(input.amount('thrust')));
+    input._release(' ');
+  }
+
+  // 6. One-shot actions. `ability` fires from a keydown on the keyboard; the pad
+  //    has no event, so the rising edge has to be found between polls. Once per
+  //    press, not once per frame - or holding X empties the module.
+  {
+    const input = makeInput();
+    let fired = 0;
+    input.bindAction('ability', () => { fired++; });
+    input.pollGamepad([fakePad()]);
+    check('ability does not fire on an idle pad', fired === 0);
+    input.pollGamepad([fakePad({ buttons: { 2: 1 } })]);
+    check('ability fires on the press', fired === 1, String(fired));
+    input.pollGamepad([fakePad({ buttons: { 2: 1 } })]);
+    input.pollGamepad([fakePad({ buttons: { 2: 1 } })]);
+    check('ability does not re-fire while held', fired === 1, `fired ${fired} times while held`);
+    input.pollGamepad([fakePad()]);
+    input.pollGamepad([fakePad({ buttons: { 2: 1 } })]);
+    check('ability fires again after a release', fired === 2, String(fired));
+  }
+
+  // 7. The CONTROLS screen listens on '*' for a key; a pad token has to arrive
+  //    the same way or a trigger cannot be bound through the flow that exists.
+  {
+    const input = makeInput();
+    const seen = [];
+    input.bind('*', (k) => seen.push(k));
+    input.pollGamepad([fakePad({ buttons: { 5: 1 } })]);
+    check('a pad press reaches the rebinding hook', seen[0] === 'pad:5', JSON.stringify(seen));
+    input.pollGamepad([fakePad({ buttons: { 5: 1 } })]);
+    check('and does not repeat while held', seen.length === 1, JSON.stringify(seen));
+    input.pollGamepad([fakePad({ axes: { 1: -1 } })]);
+    check('a stick push reaches it as an axis token', seen[1] === 'axis:1-', JSON.stringify(seen));
+    input.pollGamepad([fakePad({ axes: { 0: 0.2 } })]);
+    check('a barely-moved stick captures nothing', seen.length === 2, JSON.stringify(seen));
+  }
+
+  // 8. Hot-plug. A pad unplugged mid-flight hands control back to the keyboard;
+  //    it never leaves the last reading latched on.
+  {
+    const input = makeInput();
+    input.pollGamepad([fakePad({ buttons: { 7: 1 } })]);
+    check('pad drives thrust while connected', input.amount('thrust') === 1);
+    input.pollGamepad([]);
+    check('an unplugged pad reads 0, not the last value', Object.is(input.amount('thrust'), 0), String(input.amount('thrust')));
+    input.pollGamepad(null);
+    check('no pad list at all is survivable', Object.is(input.amount('thrust'), 0));
+    // A pinned pad that has gone falls back rather than going dead.
+    input.padIndex = 3;
+    input.pollGamepad([fakePad({ index: 0, buttons: { 7: 1 } })]);
+    check('a pinned pad that vanished falls back to one that is there', input.amount('thrust') === 1);
+    check('and stops claiming to be pinned to it', input.padIndex === null);
+    // A slot the browser reports as empty is skipped, not read.
+    input.pollGamepad([null, fakePad({ index: 1, buttons: { 7: 1 } })]);
+    check('an empty pad slot is skipped', input.amount('thrust') === 1);
+  }
+
+  // 8b. The connect event is a *label*, not the plumbing. `pollGamepad` asks the
+  //     browser every frame regardless, because a pad is famously invisible to
+  //     `getGamepads()` until it has been touched - so a player who plugs in and
+  //     presses a button gets no event to hang anything on, and the game has to
+  //     work anyway.
+  {
+    const input = makeInput();
+    check('a pad works with no connect event at all', (() => {
+      input.pollGamepad([fakePad({ index: 0, buttons: { 7: 1 } })]);
+      return input.amount('thrust') === 1;
+    })());
+    input._padConnect({ index: 1, id: 'Second Pad' });
+    check('connecting names the pad', input.padName === 'Second Pad', String(input.padName));
+    input._padDisconnect({ index: 1, id: 'Second Pad' });
+    check('disconnecting unpins it', input.padIndex === null && input.padName === null);
+    check('and zeroes what it was reporting', Object.is(input.amount('thrust'), 0), String(input.amount('thrust')));
+  }
+
+  // 9. Losing focus drops the pad, exactly as it drops the keys. Otherwise a
+  //    trigger held while alt-tabbing stays burning.
+  {
+    const input = makeInput();
+    input.pollGamepad([fakePad({ buttons: { 7: 1 } })]);
+    check('trigger is live before blur', input.amount('thrust') === 1);
+    input._blur();
+    check('blur releases the pad too', Object.is(input.amount('thrust'), 0), String(input.amount('thrust')));
+  }
+}
+
+// The binding map holds both families, and the rules that protected a keyboard
+// player have to keep protecting them now that a pad shares the map.
+{
+  check('every default binding is a key or a parseable pad token', ACTIONS.every((a) =>
+    DEFAULT_KEYS[a].every((k) => typeof k === 'string' && k.length > 0 &&
+      (!isPadToken(k) || /^(pad:\d+|axis:\d+[-+])$/.test(k)))),
+    JSON.stringify(DEFAULT_KEYS));
+
+  // Same rule the hazard table lives under: a name in content indexing a table
+  // in code must resolve, because the failure mode is silence. A pad token that
+  // labels as "PAD 23" is a binding nobody can read on the settings screen.
+  for (const a of ACTIONS) {
+    for (const k of DEFAULT_KEYS[a]) {
+      check(`${a}: ${k} has a readable label`, !!keyLabel(k) && !/^(PAD|AXIS) /.test(keyLabel(k)), keyLabel(k));
+    }
+  }
+
+  // No control drives two actions, in either family.
+  {
+    const seen = new Map();
+    let clash = null;
+    for (const a of ACTIONS) for (const k of DEFAULT_KEYS[a]) {
+      if (seen.has(k)) clash = `${k} on both ${seen.get(k)} and ${a}`;
+      seen.set(k, a);
+    }
+    check('no default control drives two actions', !clash, clash || '');
+  }
+
+  check('every action has a keyboard binding', ACTIONS.every((a) => DEFAULT_KEYS[a].some((k) => !isPadToken(k))));
+  check('every flight action has a pad binding', ['thrust', 'left', 'right', 'hold', 'ability']
+    .every((a) => DEFAULT_KEYS[a].some((k) => isPadToken(k))));
+
+  // **Rebinding replaces within a family, never across one.** Before M30 this
+  // set the action's bindings to `[key]`, which was right when they were all
+  // keys. With a pad in the same map that would mean binding the booster to a
+  // trigger silently unbinds the space bar - and the player who did it finds
+  // out the next time they put the pad down.
+  {
+    const input = makeInput();
+    input.rebind('thrust', 'pad:5');
+    check('binding a pad control keeps the keys', input.bindings.thrust.includes(' '), JSON.stringify(input.bindings.thrust));
+    check('binding a pad control replaces the pad controls', input.bindings.thrust.includes('pad:5')
+      && !input.bindings.thrust.includes('pad:7'), JSON.stringify(input.bindings.thrust));
+  }
+  {
+    const input = makeInput();
+    input.rebind('thrust', 'j');
+    check('binding a key keeps the pad controls', input.bindings.thrust.includes('pad:7'), JSON.stringify(input.bindings.thrust));
+    check('binding a key replaces the keys', input.bindings.thrust.includes('j')
+      && !input.bindings.thrust.includes(' '), JSON.stringify(input.bindings.thrust));
+  }
+  {
+    // The case that actually separates "replace within a family" from "replace
+    // everything and let the restore rule patch it up": a player who has
+    // customised *both* families. Restoring from DEFAULT_KEYS silently throws
+    // away the choice they made first, and it looks fine on a fresh install.
+    const input = makeInput();
+    input.rebind('thrust', 'pad:5');
+    input.rebind('thrust', 'j');
+    check('rebinding a key keeps a pad control the player chose earlier',
+      input.bindings.thrust.includes('pad:5'), JSON.stringify(input.bindings.thrust));
+    check('and does not resurrect the default pad control',
+      !input.bindings.thrust.includes('pad:7'), JSON.stringify(input.bindings.thrust));
+    input.rebind('thrust', 'pad:4');
+    check('and it works the other way round too',
+      input.bindings.thrust.includes('j') && input.bindings.thrust.includes('pad:4')
+      && !input.bindings.thrust.includes('pad:5'), JSON.stringify(input.bindings.thrust));
+  }
+  {
+    // Taking a pad control from another action takes it from there, and leaves
+    // that action's keys intact.
+    const input = makeInput();
+    input.rebind('hold', 'pad:7');
+    check('a stolen pad control leaves the loser its keys', input.bindings.thrust.includes(' '));
+    check('a stolen pad control is gone from the loser', !input.bindings.thrust.includes('pad:7'),
+      JSON.stringify(input.bindings.thrust));
+    check('and the loser is not left with no pad control at all', input.bindings.thrust.some(isPadToken),
+      JSON.stringify(input.bindings.thrust));
+  }
+  {
+    // START and HOME are reserved for the same reason Escape is: they are how
+    // a player gets out of a game, on every other game they own.
+    const input = makeInput();
+    check('START cannot be taken for a flight control', input.rebind('thrust', 'pad:9') === null);
+    check('HOME cannot be taken for a flight control', input.rebind('thrust', 'pad:16') === null);
+    check('escape is still reserved', input.rebind('thrust', 'escape') === null);
+  }
+  {
+    // And the guarantee that has to survive all of it: no action may end up
+    // reachable only on a pad, because a keyboard is the device everyone has.
+    const input = makeInput();
+    for (const a of ACTIONS) for (const k of ['pad:3', 'pad:4', 'pad:5', 'pad:11']) input.rebind(a, k);
+    check('no action is ever left pad-only', ACTIONS.every((a) => input.bindings[a].some((k) => !isPadToken(k))),
+      JSON.stringify(input.bindings));
+  }
+  {
+    // A saved binding map round-trips both families - a pad binding that the
+    // save layer dropped would work for one session and reset on the next
+    // launch, which is the M29c steering-mode fault in a different file.
+    const input = makeInput();
+    input.rebind('thrust', 'pad:5');
+    const saved = JSON.parse(JSON.stringify(input.bindings));
+    const fresh = makeInput();
+    fresh.setBindings(saved);
+    check('a binding map survives a save/load round trip',
+      JSON.stringify(fresh.bindings) === JSON.stringify(input.bindings), JSON.stringify(fresh.bindings.thrust));
+  }
 }
 
 console.log(`\n  ${pass} passed, ${fail} failed`);
