@@ -3294,3 +3294,107 @@ machine is still the only way to close that**, and to answer whether the curve f
   quietly bolted on — it needs a design call about what confirms and what moves a selection.
 - **The bindings are the Standard Gamepad mapping.** A pad the browser does not normalise reports raw
   indices and the labels will read `PAD 12`. Nothing breaks; it just stops being readable.
+
+---
+
+## M30a — the laser that could not reach (2026-08-21)
+
+Tom, on the first controller playtest: *"my pulse laser did not fire on the controller. i saw the
+green circle but no laser was triggered."*
+
+**It was not the controller.** Measured first, because a bug report names a symptom and not a cause.
+On the same seed and mission, parked 120 px from a machine, keyboard and pad are identical: both
+fire, both draw the beam for 139 frames, both deal 30.1 damage and kill it. What the report had
+found was a real fault the pad only happened to be holding at the time.
+
+### What the green ring means, and what it does not
+
+`useAbility` draws the ring and plays the chime **when `trigger()` returns true**, which only means a
+charge was spent and the module came on. The Pulse Laser's beam is separate: it exists only while
+`field.target(ship, range)` finds a machine in reach with line of sight. Reproduced exactly — parked
+997 px from the nearest machine:
+
+```
+chargeSpent 1   active true   targetFound false   beamFrames 0
+```
+
+Green ring, success chime, charge gone, nothing else. Identical on the keyboard.
+
+### The fault: every machine outranged the counterplay
+
+| machine | engages from | laser reached | |
+| --- | ---: | ---: | --- |
+| Seeker Drone | 520 | 430 | **90 px short** |
+| Sentry Turret | 560 | 430 | **130 px short** |
+| Mast Sniper | 640 | 430 | **210 px short** |
+
+So at the moment a machine was shooting at you, the answer to it was out of reach by construction.
+The short range was deliberate — `laserRange` is commented *"short enough that it never becomes the
+whole game"* — but "shorter than everything it exists to answer" was not a decision anyone took.
+
+### The sweep, and a new thing the instrument can do
+
+The autopilot could carry an active module and never press it, so there was no way to ask whether an
+active is any good — the same blind spot `opts.loadout` was added to close for passives. `flyMission`
+takes `opts.ability` now, and **the firing policy is the player's cue**: press when the module is
+ready and the HUD's own threat count says something is aiming at you (`field.engaged`). Deliberately
+*not* "press when a target happens to be in range", which would measure the ceiling rather than the
+experience — the gap between those two is the whole measurement.
+
+40 armed missions × 20 seeds × both routes × 4 reaches = **6,400 flights**:
+
+| reach | press produces a laser | dry press | kills | beam s | way home | prize route |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **430** (was) | 1099 (**80%**) | 275 (**20%**) | 996 | 921 | 753/800 | 116/800 |
+| **520** (now) | 1227 (**92%**) | 108 (8%) | 1228 | 1169 | 756/800 | **133/800** |
+| 560 | 1279 (96%) | 52 (4%) | 1348 | 1283 | 757/800 | 140/800 |
+| 640 | 1317 (99%) | 12 (1%) | 1465 | 1379 | 757/800 | 146/800 |
+
+**One press in five did nothing**, which is the number Tom's complaint reduces to.
+
+The shape is the one M19, M20 and M29 all found for a good knob: **the way home barely moves** — +4
+of 800 across the entire range — and **the prize route carries it**, 116 → 146. Help lands where the
+risk is and the safe route is untouched.
+
+**520, and not 640.** It is the drone's own commitment range, so you can answer the machine that
+closes on you; the turret and the sniper still outreach you, so closing the distance stays the price
+of using it. 640 makes the laser always work, which removes the decision about when to spend a
+charge and lets you answer a Mast Sniper at its own range — most of what makes a sniper a sniper.
+
+### The caveat runs the opposite way to usual here
+
+**The autopilot has no evasive logic** and never keeps its distance from a machine, so it ends up
+closer to them than a person does. So **80% is a ceiling** on how often the laser worked for a real
+player, not a floor. Nearly every autopilot figure in this file understates the *difficulty*; this
+one understated the *problem*, and a human found it first.
+
+### The feedback was left alone, deliberately
+
+Offered and declined (Tom, 2026-08-21): pressing with nothing in reach still spends the charge, still
+draws the ring and still plays the chime. Now that the reach covers the machine that commits to you,
+the remaining dry presses are a judgement the player got wrong rather than a rule they could not see.
+
+### The rule, because a number nobody asserted is a number that drifts
+
+Nothing tied the laser's reach to the ranges it exists to answer, which is exactly why it could sit
+there through M12, M24, M28 and M29. `enemies-tests.js` asserts the **relationship** now, reading the
+module's own effect rather than repeating a figure — this file has been caught encoding a decision
+instead of a property five times:
+
+- the laser reaches the machine that closes on you (`>= seeker-drone`)
+- the turret and the sniper still outrange it (`> laser`)
+- `ABILITY.laserRange` and the module's effect agree, so there is no stale second copy
+
+Mutation-tested: 430 raises 2 failures, 640 raises 3, 900 raises 4.
+
+### What did not move
+
+Both fixtures unchanged — they fly with enemies off, the M12 rule. The unarmed crossing is **642/800
+(80%), unchanged**, and must be: it is flown with nothing equipped, so a module cannot reach it.
+`enemies-tests.js` 95 → 99.
+
+### Verified in the browser, on the pad
+
+Reproduced at the distances that used to fail: **470 px and 505 px now fire a full 139-frame burst**
+where they were previously silent; 560 px catches the machine partway through as the lander drifts in
+(98 frames); 700 px is still dry, which is the design.

@@ -22,6 +22,7 @@ import { Ship } from '../src/ship.js';
 export const PILOT_SETTINGS = { steering: 'pro', invertRotation: false };
 import { spawnFor } from '../src/spawn.js';
 import { EnemyField } from '../src/enemies.js';
+import { Abilities } from '../src/abilities.js';
 import { nodeWorth } from '../src/economy.js';
 
 const THRUST = 130;
@@ -234,6 +235,21 @@ export function flyMission(level, terrain, opts = {}) {
   ship.vy = start.vy;
 
   const field = opts.enemies ? new EnemyField(level, terrain, opts.enemySeed != null ? opts.enemySeed : 1) : null;
+
+  // `opts.ability` flies the mission with an active module and *uses* it. Until
+  // now the pilot could carry a module and never press it, so there was no way
+  // to ask whether an active is any good - the same blind spot `opts.loadout`
+  // was added to close for passives.
+  //
+  // **The firing policy is the player's cue, not a cheat.** It presses when the
+  // module is ready and the HUD's own threat count says something is aiming at
+  // the lander (`field.engaged`) - which is what a person does, and is
+  // deliberately *not* "press when a target happens to be in range". The
+  // difference between those two is the whole measurement: how often does the
+  // thing do anything at the moment you would reach for it?
+  const abilities = opts.ability ? new Abilities(opts.ability, opts.loadout || {}) : null;
+  const abilityStats = { fires: 0, hit: 0, dry: 0, kills: 0, beamSecs: 0 };
+  let burstBeam = false;
   // The road: fly the cells in the order they lie between the entry and the
   // target, then land. This is what proves the deep pad is reachable at all -
   // without it the far half of every map is decoration.
@@ -297,12 +313,29 @@ export function flyMission(level, terrain, opts = {}) {
       // Hull loss is a crash like any other: the run ends where it ends.
       if (ship.hull <= 0 && ship.alive) { ship.alive = false; event = 'crash'; }
     }
+    if (abilities) {
+      if (abilities.ready && field && field.engaged > 0) {
+        if (abilities.trigger(ship)) { abilityStats.fires++; burstBeam = false; }
+      }
+      const wasActive = abilities.active;
+      abilities.update(step, { ship, field, terrain, level });
+      if (abilities.beam) { abilityStats.beamSecs += step; burstBeam = true; }
+      // Counted when the burst *ends*, not when it starts: the question is
+      // whether pressing it produced a laser at any point, which is what a
+      // player sees. A burst that starts with nothing in reach and finds
+      // something as the lander drifts still did its job.
+      if (wasActive && !abilities.active) {
+        if (burstBeam) abilityStats.hit++; else abilityStats.dry++;
+      }
+    }
     t += step;
     // Reachability: how near the pad did it get, low and slow enough to land?
     const alt = terrain.heightAt(ship.x) - ship.y;
     if (alt < 130 && Math.abs(ship.vy) < 60) closest = Math.min(closest, Math.abs(ship.x - targetMid));
     if (event === 'land' || event === 'crash') break;
   }
+
+  if (abilities && abilities.active) { if (burstBeam) abilityStats.hit++; else abilityStats.dry++; }
 
   return {
     // The pad counts as reached if the ship got over it low and controlled -
@@ -319,6 +352,9 @@ export function flyMission(level, terrain, opts = {}) {
     hull: Math.round(ship.hull),
     lostToFire: !!ship.lostToFire,
     combat: field ? field.summary() : null,
+    ability: abilities ? { ...abilityStats, kills: field ? field.kills : 0,
+      spent: abilities.used, left: abilities.charges,
+      beamSecs: +abilityStats.beamSecs.toFixed(2) } : null,
     cellsTaken: terrain.fuelCells.filter((c) => c.taken).length,
     cells: terrain.fuelCells.length,
     carried,

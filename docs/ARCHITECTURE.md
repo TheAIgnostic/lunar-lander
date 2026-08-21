@@ -138,6 +138,33 @@ without it, the lander ends at the same position, velocity and spin to six decim
 asserted. It also follows that no autopilot here can measure whether Ganymede is any good — the same
 blind spot visibility has had since M24, and darkness now shares it.
 
+**A counterplay must reach the thing it answers, and that is a relationship rather than a number.**
+The Pulse Laser reached 430 px while every machine in the game engaged from further — drone 520,
+turret 560, sniper 640 — so at the moment one was shooting at you the answer to it was out of reach
+by construction. Pressing it spent a charge, drew the success ring, played the success chime and did
+nothing; **one press in five, measured over 6,400 flights.** The short reach was deliberate
+(*"short enough that it never becomes the whole game"*); shorter than everything it exists to answer
+was not a decision anybody took, and a human found it before any test did.
+
+It is 520 now — the drone's own commitment range, so you can answer the machine that closes on you
+while the turret and the sniper still outreach you and closing the distance stays the price. The
+durable part is that `enemies-tests.js` asserts the **relationship** against `ENEMY_TYPES` and reads
+the module's own effect rather than repeating a figure. Generalise it: **anywhere a counterplay has a
+reach, assert it against what it is meant to counter**, because a number nobody asserted is a number
+that drifts — and this one drifted through M12, M24, M28 and M29 in silence.
+
+**A module reports that it *fired*, not that it *did* anything.** `useAbility` draws the ring and
+plays the chime when `trigger()` returns true, which only means a charge was spent and the module
+came on; the laser's beam exists only while `field.target()` finds something. Left that way on
+purpose (Tom, 2026-08-21) now that the reach covers the machine that commits to you — the remaining
+dry presses are a judgement the player got wrong rather than a rule they could not see.
+
+**The pilot can press an active module** since M30a (`flyMission({ ability })`), which closes the
+blind spot `opts.loadout` closed for passives — an active could be carried and never used, so nothing
+could measure whether one was any good. **The firing policy is the player's cue**: ready, and the
+HUD's own threat count says something is aiming at you. Deliberately not "fire when a target is in
+range", which measures the ceiling rather than the experience.
+
 **Tech Cores buy the top two hangar rungs.** A core drops on a PERFECT landing on a small pad and
 nowhere else, so salvage measures how much you flew, materials measure where you went, and a core
 measures how well you put the lander down. Cores wipe on death, so M28's affordability rule applies

@@ -1014,6 +1014,25 @@ scheduled until the MVP is stable — the spec says the same.
   - both fixtures unchanged, every audit figure identical, `settings-tests.js` 50 → **167**
   - **a pad cannot work the menus** - deliberately outside the decided plan, see below
 
+- [x] **M30a — the laser that could not reach** (this commit)
+  - Tom, first controller playtest: *"my pulse laser did not fire... i saw the green circle but no
+    laser was triggered."* **Measured first, and it was not the controller** - keyboard and pad are
+    identical on the same seed, both firing a 139-frame burst and killing the machine
+  - the real fault: at 430 px **every machine outranged the counterplay** - drone 520, turret 560,
+    sniper 640 - so at the moment one was shooting at you the answer was out of reach. The ring and
+    the chime say a charge was spent, not that anything happened
+  - **the pilot can press an active module now** (`flyMission({ ability })`), the blind spot
+    `opts.loadout` closed for passives. Fires on the player's cue: ready, and the HUD threat count
+    says something is aiming at you
+  - swept 4 reaches × 40 armed missions × 20 seeds × both routes = **6,400 flights**. **One press in
+    five did nothing** at 430. The way home moves +4 of 800 across the whole range and the prize
+    route carries it - the M19/M20/M29 shape for a good knob
+  - **520**, Tom's call: the drone's commitment range, turret and sniper still outreach you. Dry
+    presses 20% → 8%
+  - **the caveat runs the wrong way here**: the autopilot never keeps its distance, so 80% is a
+    *ceiling* on how often it worked for a person, not a floor. A human found this before any test
+  - the reach is asserted as a **relationship** against `ENEMY_TYPES` now, not a number
+
 ## Decisions (Tom, 2026-08-16)
 
 1. **Gravity** — compressed mapping is the *baseline*, then a per-body hand-tuned offset so each

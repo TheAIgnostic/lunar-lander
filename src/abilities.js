@@ -13,7 +13,17 @@ import { clamp } from './util.js';
 import { ACTIVE_MODULES } from './modules.js';
 
 export const ABILITY = {
-  laserRange: 430,      // px - short enough that it never becomes the whole game
+  // px. **Read against what it has to answer, not on its own.** At 430 every
+  // machine in the game outranged it - drone 520, turret 560, sniper 640 - so
+  // the moment one was shooting at you the counterplay was out of reach, and
+  // pressing it spent a charge, played the success chime and did nothing. Tom
+  // met that as "a green circle but no laser" and it was not a controller bug.
+  // 520 is the drone's own commitment range: you can answer the machine that
+  // closes on you, and the turret and the sniper still outreach you, so closing
+  // the distance stays the price of using it. Measured over 6,400 flights - dry
+  // presses 20% -> 8%, the way home +3 of 800, the prize route +17. Asserted
+  // against the machine ranges in `enemies-tests.js`, so it cannot drift back.
+  laserRange: 520,
   laserDps: 26,
   shieldPool: 26,       // damage a raised shield absorbs before it collapses
   purgeBlind: 0.35,     // how far visibility drops while the vents are open

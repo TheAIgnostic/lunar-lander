@@ -41,7 +41,7 @@ export const ACTIVE_MODULES = {
     blurb: 'Tracks the nearest hostile in line of sight and burns it down. Short range, short burst.',
     good: ['LUNA'],
     charges: 3, duration: 2.5, cooldown: 5,
-    effect: { laserDps: 26, laserRange: 430 },
+    effect: { laserDps: 26, laserRange: 520 },
   },
 };
 

@@ -2,6 +2,7 @@
 //   node test/enemies-tests.js
 import { COMBAT, ENEMY_TYPES, ENEMY_IDS, EnemyField, placeEnemies, lineOfSight, muzzleIsSafe, describeThreats } from '../src/enemies.js';
 import { Abilities, ABILITY } from '../src/abilities.js';
+import { ACTIVE_MODULES } from '../src/modules.js';
 import { validateEnemies, sanctuaryClear } from '../src/validate.js';
 import { Terrain } from '../src/terrain.js';
 import { Ship } from '../src/ship.js';
@@ -320,6 +321,41 @@ function shipAt(x, y, loadout = {}) {
   }
   check('live projectiles stay bounded', peak <= COMBAT.maxShots, `peak ${peak}`);
   check('shots do not leak', field.shots.length < COMBAT.maxShots);
+}
+
+// --- the laser's reach, against what it has to answer
+//
+// **This is a relationship, not a number**, and it was nobody's until a player
+// hit it. At 430 px every machine in the game outranged the Pulse Laser - drone
+// 520, turret 560, sniper 640 - so at the moment one was shooting at you the
+// counterplay was out of reach by 90 to 210 px. Pressing it then spent a
+// charge, drew the success ring, played the success chime and did nothing.
+// Measured over 6,400 flights: **one press in five produced no laser at all.**
+//
+// Nothing asserted the reach against the ranges it exists to answer, which is
+// why it could sit there. It does now: the module's own effect is read rather
+// than a figure repeated here, which is the rule this file has already been
+// caught breaking twice (M24 twice, M28 three times - a test encoding a
+// decision instead of a property).
+{
+  const reach = ACTIVE_MODULES['pulse-laser'].effect.laserRange || ABILITY.laserRange;
+  const rangeOf = (id) => ENEMY_TYPES[id].range;
+
+  check('the laser answers the machine that closes on you',
+    reach >= rangeOf('seeker-drone'),
+    `laser ${reach} vs seeker-drone ${rangeOf('seeker-drone')}`);
+
+  // And the other half, which is what stops it becoming the whole game. A
+  // laser that reaches everything removes the decision about when to spend a
+  // charge, and answering a Mast Sniper at its own range is most of what makes
+  // a sniper a sniper.
+  for (const id of ['sentry-turret', 'mast-sniper']) {
+    check(`${id} still outranges the laser`, rangeOf(id) > reach,
+      `laser ${reach} vs ${id} ${rangeOf(id)}`);
+  }
+
+  check('the fallback reach and the module agree', ABILITY.laserRange === ACTIVE_MODULES['pulse-laser'].effect.laserRange,
+    `${ABILITY.laserRange} vs ${ACTIVE_MODULES['pulse-laser'].effect.laserRange}`);
 }
 
 // --- the active-module runtime
