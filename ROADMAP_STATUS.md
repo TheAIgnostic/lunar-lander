@@ -1225,14 +1225,30 @@ turret redrawn, the Mast Sniper built, and a soundbed for the title screen.*
 
 **The first prompt for a new session:**
 
-> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then `docs/PROGRESSION.md`, then the M29 and
-> M29e sections of `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything. Then build
-> **M30, analog controller support** — the plan under "Next task" is decided and staged, and stage 1
-> is provable: if both fixtures move, stage 1 is wrong.
-
-**Where the game is.** `main` is live on two GitHub Pages sites and current as of `75398e8`. `v2` and
-`main` are level, the tree is clean, the suite is green, both fixtures are byte-identical and
-`./macos/build.sh` self-tests clean.
+> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then `docs/PROGRESSION.md`, then the **M29**
+> and **M29e** sections of `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything —
+> it takes a few minutes and it is how every milestone here that went well started.
+>
+> Then build **M30, analog controller support**. The plan is under "Next task" and it is decided, not
+> open: Tom asked whether a controller means a second flight model and the answer is no — the input
+> contract widens from a boolean to a 0–1 magnitude and the model does not fork. Follow the stages in
+> order.
+>
+> **Stage 1 is provable, and it is the whole reason the plan is shaped this way.** Widening the
+> contract changes no behaviour, because the keyboard produces exactly 1.0 and 0.0 and `x * 1.0 === x`
+> exactly. So after stage 1 **both fixtures must be byte-identical**. If either moves, stage 1 is
+> wrong — do not re-record them to make it pass. Commit stage 1 on its own.
+>
+> **Ask Tom before stage 2**, because both are balance decisions and not code: analog is strictly
+> more precise than binary, so a controller player will land better than a keyboard player on the
+> same mission; and partial throttle costs proportionally less fuel, which makes hovering cheaper on
+> budgets authored for full-or-nothing burns.
+>
+> Two standing rules for this repo. **Measure before you decide** — every milestone here that went
+> badly started from an assumption, and this session alone found four bodies with no working weather,
+> a lethal machine that could see the player for half a second a flight, and a soundbed that was
+> being switched off sixty times a second. And **do not retune balance without a specific complaint
+> to aim at**; Tom's "balance seems good" unparked four items, it did not open them.
 
 **What is different about the state you are inheriting.** For most of this project's history the
 standing problem was that nobody had played the thing. That is no longer true — **Tom playtests
