@@ -997,8 +997,9 @@ system the roadmap still owes, or a question only a person can answer.
 
 **The two systems the spec still owes** (both recorded since M12/M13, neither blocked):
 
-- **Six of the eight enemy designs.** Coil Cannon, Patrol Drone, Mortar Platform, Magnetic Mine,
-  Solar Sentry and Shielded Guardian are roster entries with no implementation. Adding one is an
+- **Five of the eight enemy designs.** Coil Cannon, Patrol Drone, Mortar Platform, Magnetic Mine and
+  Shielded Guardian are roster entries with no implementation (the Mast Sniper was the sixth, built
+  in M29e). Adding one is an
   `ENEMY_TYPES` entry, a draw function in `enemydraw.js`, and a line in
   `PlanetDefinition.eligibleEnemySets`. **M29 makes this the most valuable thing left**: Enceladus
   measured that on a low-gravity body the machine *type* decides everything and the count decides
