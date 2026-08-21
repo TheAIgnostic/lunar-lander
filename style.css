@@ -175,6 +175,17 @@ table.score tr.run td { color: #8fb0c4; font-size: 12px; letter-spacing: .1em; b
   color: #dff6ff; transition: transform .1s, border-color .16s, background .16s;
 }
 .tile:hover:not(.locked) { border-color: var(--cyan); background: rgba(95, 245, 255, .08); transform: translateY(-2px); }
+/* The gamepad's selection cursor. Deliberately louder than :hover - a mouse
+   pointer is visible on its own and tells you where you are, and a stick is
+   not, so the only thing saying where you are is this. */
+.pad-focus {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+  border-color: var(--cyan) !important;
+  background: rgba(95, 245, 255, .10);
+  box-shadow: 0 0 0 4px rgba(95, 245, 255, .16), 0 0 18px rgba(95, 245, 255, .28);
+}
+.tile.pad-focus { transform: translateY(-2px); }
 .tile .num { font-size: 11px; color: #7f9db0; }
 .tile .world { font-size: 10px; letter-spacing: .2em; }
 .tile .name { font-size: 12px; font-weight: 700; }

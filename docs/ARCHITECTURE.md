@@ -96,6 +96,16 @@ Io, Enceladus and Ganymede had no working hazard whatsoever**, at positions 5 to
 run walks. M28b caught the `plume` case from an external review; `heat` and `cold` had never been
 noticed, and *this document listed them as working*.
 
+**A hazard entry has two shapes, and printing one is not resolving one.** `PlanetDefinition.hazards`
+mixes bare names with tuned spec objects — Venus declares one of each. M29 made every *name* resolve
+to a builder; nobody asked whether an *entry* could be **printed**, and the expedition card did
+`hazards.join(', ')`, so **six of the ten bodies read `weather: [object Object]`** on the screen a
+player picks a run from. `typeof h === 'string' ? { type: h } : h` was open-coded in three places and
+the fourth reader did not know the rule existed. It is `hazardName()` / `hazardSpec()` here now, and
+`route-tests.js` asserts a card's forecast is strings that resolve to real hazards. **Generalise it
+the way M29's rule generalises: a name in content is looked up *and printed*, and both need the
+shape.**
+
 Aliases in `BUILDERS` are the fix. The rule is the test: `forces-tests.js` asserts that **every
 hazard string any planet or mission declares resolves to a builder**, with `NON_FORCE_HAZARDS`
 (`ice`, implemented as `surfaceFriction`) as the one stated exception. Generalise it — anywhere a
@@ -214,6 +224,23 @@ into `vx`/`vy`. Do not tidy that line.
 **`pollGamepad()` is called from `frame()` and never from `advance()`.** The headless drivers call
 `advance`, and a sweep must not change its answer because somebody left a controller plugged into the
 machine running it.
+
+**The selection cursor walks geometry, not a list.** Until M30c neither a pad *nor the keyboard*
+could pick an item out of a list — the menus are clickable HTML with one primary action on SPACE. The
+cursor knows nothing about cards: it walks `[data-action]` elements by their bounding boxes, so it
+follows whatever the CSS laid out and every screen gets it free. Off-axis distance is weighted ×2.5
+so a push steps to the neighbour rather than to whatever is nearest in a straight line, and it does
+**not wrap** at an edge, because in a grid wrapping lands you somewhere unrelated.
+
+**The focus is held as an action string, never an element** (`g.padFocus`). `renderOverlay` rebuilds
+the overlay and the toast timer alone re-renders mid-screen, so an element reference goes stale
+constantly; an action survives, and when it stops existing the cursor should drop, which it does.
+
+**Navigation is emitted as steps, and reads the axis raw.** One push moves one item; holding repeats
+after a pause. `NAV.press` 0.55 / `NAV.release` 0.35 are far apart for a stick *wobbling* across the
+threshold — a thumb resting on one — not for a stick easing back to centre, which needs no band.
+Measured: 1 step with the band, 6 without. And it bypasses `shape()`, whose curve exists to place a
+throttle's hover point mid-travel and answers the wrong question here.
 
 **The pad presses interface keys rather than getting a menu layer.** `PAD_UI` maps A to SPACE and
 B/START to Escape, and `pollGamepad` fires the same `onPress` handler a `keydown` would — so every
@@ -537,7 +564,8 @@ game or the pilot changes. Improving the pilot should move the second and leave 
 | `__runChapter('MARS')` | fly a whole chapter headlessly (after `await __autopilotReady`) |
 | `__settleNow()` | run the *pending* settle immediately — it does not decide anything itself |
 | `__log()` / `__logJSON()` / `__logClear()` | the playtest trace, for pasting straight out of the console |
-| `__pad()` | what the gamepad is doing: pads seen, which one is in use, the 0..1 per action, what it is pressing |
+| `__pad()` | what the gamepad is doing: pads seen, which one is in use, the 0..1 per action, what it is pressing, where the cursor is |
+| `__padFrame(dt)` | one frame of pad handling — poll, and move the selection cursor. `rAF` does not fire in a hidden tab, so this is the pad's `__advance` |
 
 ## Environment notes that cost real time
 
@@ -637,9 +665,8 @@ The MVP is complete and measured (`test/BASELINE.md`, M13 section). What the nex
   900 px traverse, now flown across 2,000–2,600 px with a road and an ore field in between.
 - ~~**Controller support does not exist.**~~ **Built in M30.** The simulation reads a 0..1 magnitude,
   a gamepad fills it, pad controls are rebindable through the screen that already existed, the pad
-  hot-plugs, and since M30b it works the interface too. What is **still** missing is *list
-  selection*: picking a chapter or a route needs a click. That is not a pad limitation — the keyboard
-  cannot do it either — so closing it means building a selection cursor for both.
+  hot-plugs, works the interface (M30b) and has a selection cursor for lists (M30c). A pad plays the
+  game start to finish.
 - **Achievements** are deliberately not built. The spec gates them behind stable progression, and
   the statistics they would be built on only started being recorded in M13.
 - **The numbers to tune** live in config objects: `COMBAT` in `enemies.js`, `ABILITY` in

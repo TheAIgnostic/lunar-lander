@@ -3465,3 +3465,109 @@ Both fixtures unchanged. Full suite green. `settings-tests.js` 167 → **178**.
 **Picking an item from a list needs a click** — a chapter, a route card, a hangar rung. Neither
 device can do it: the keyboard cannot either. Closing it means a selection cursor that serves both,
 which is a design call about what moves the selection and how a screen says what is selected.
+
+---
+
+## M30c — the selection cursor, and the forecast nobody could read (2026-08-21)
+
+Tom: *"in expedition menu b should bring you back and a for selecting the active mission, joystick to
+select a mission."* This is the last of the three gaps M30 named — list selection — and **neither
+device could do it**: the menus are clickable HTML with one primary action on SPACE, so the keyboard
+had no cursor either.
+
+### General on purpose, not a case for one screen
+
+The cursor knows nothing about cards. It walks `[data-action]` elements by their **geometry**, so it
+follows whatever a screen's CSS actually laid out and every screen gets it for free. A cursor that
+knew about the expedition screen would need a second implementation for the hangar, which is the
+fault this project keeps paying for.
+
+Measured on the real ladder at 1440×900, a 5×2 grid:
+
+```
+land -> LUNA      right -> EUROPA   right -> TITAN
+down -> MERCURY   (row 2, same column as TITAN)
+left -> IO        left  -> GANYMEDE (row start)
+left -> GANYMEDE  (edge: stays put, no wrap)
+up   -> LUNA      (row 1, same column)
+```
+
+At 800 px the grid collapses to one column and the cursor walks it vertically, because that is what
+the layout became. **No wrapping at edges** — in a grid, wrapping means pushing right at the end of a
+row lands you somewhere unrelated.
+
+The off-axis distance is weighted ×2.5 so a push steps to the *neighbour* rather than to whatever is
+nearest in a straight line: without it, pushing right on a ladder card reaches the card below and
+three columns over, because it is technically closer.
+
+### The focus is an action string, not an element
+
+`renderOverlay` rebuilds the whole overlay, and the toast timer alone re-renders mid-screen — an
+element reference goes stale on every one of those. An action string survives a re-render, and when
+it stops existing the cursor *should* drop, which is what happens.
+
+The cursor only appears once the pad is used, so a mouse or keyboard player never sees it.
+
+### Steps, not a held direction
+
+One push moves one item; holding repeats after 0.42 s, then every 0.13 s. Without the pause a single
+flick crosses the ten-card ladder before you let go.
+
+`press` 0.55 and `release` 0.35 are far apart on purpose, and the case that justifies it is **not**
+"the stick eases back to centre" — that emits nothing either way. It is a stick **wobbling across the
+threshold**, which is what a thumb resting on one does: without the band, each dip below `press` is a
+release and each rise a fresh push. Measured on a 0.62/0.40 wobble: **1 step with the band, 6
+without.** The first version of this test used the easing case, passed against the broken code, and
+proved nothing.
+
+Navigation reads the axis **raw**, not through `shape()`. That curve exists to put a throttle's hover
+point mid-travel, which is exactly the wrong question for "did they push it far enough to mean it".
+
+### The whole chain, on the pad
+
+Verified end to end with no god mode: expedition → stick to a body → **A** → brief → stick to LAUNCH
+→ **A** → flying. B backs out at every step.
+
+### And the thing the screenshot found
+
+Six of the ten expedition cards read **`weather: [object Object]`**.
+
+`PlanetDefinition.hazards` mixes bare names with tuned spec objects — Venus declares one of each —
+and the card did `c.hazards.join(', ')`. Every body M29 authored with a tuned hazard printed garbage,
+on the screen a player picks a run from:
+
+| before | after |
+| --- | --- |
+| `weather: [object Object], [object Object]` | `weather: heat, eruption` |
+| `weather: [object Object], [object Object], [object Object]` | `weather: cold, darkness` |
+| `weather: drag, [object Object], [object Object], [object Object]` | `weather: drag, acid, downdraft, dust` |
+
+`typeof h === 'string' ? { type: h } : h` was already open-coded in **three** places, and the fourth
+reader — the one that printed rather than resolved — did not know the rule existed. It is
+`hazardName()` / `hazardSpec()` in `forces.js` now, read by all of them.
+
+`route-tests.js` asserts that a card's forecast is **strings**, that every name it prints resolves to
+a real hazard, and that nothing renders as `[object ...]`. Reintroducing the bug raises 8 failures.
+
+**This is the M29 lesson from the presentation side.** That milestone made a hazard *name* resolve to
+a builder. Nobody asked whether a hazard *entry* could be printed — and a route card, a summary and a
+briefing all print one.
+
+### Mutation-tested
+
+| mutation | failures |
+| --- | ---: |
+| no edge detection (steps every frame) | 2 |
+| no repeat delay | 1 |
+| navigation deadzone 0.55 → 0.15 | 2 |
+| no hysteresis band | 1 (6 steps from one held direction) |
+| hazards printed raw again | 8 |
+
+### What did not move
+
+Both fixtures unchanged. Full suite green. `settings-tests.js` 178 → **188**, `route-tests.js`
+69 → **99**.
+
+`__padFrame(dt)` is a new dev hook, split out of `frame()` for the same reason `__advance` was:
+`requestAnimationFrame` does not fire in a hidden tab, so without it there is no way to exercise the
+pad without a visible window and a physical controller.

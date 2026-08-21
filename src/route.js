@@ -17,6 +17,7 @@
 import { PLANETS, gravityFor } from './planets.js';
 import { peakMachines } from './missions.js';
 import { makeRng } from './util.js';
+import { hazardName } from './forces.js';
 
 /**
  * The campaign, in order. All ten bodies, sorted by measured difficulty, Moon
@@ -155,7 +156,11 @@ function intensityOf(machines) {
  */
 export function planetCard(planetId, sector, rng) {
   const p = PLANETS[planetId];
-  const hazards = [...p.hazards];
+  // **Names, not specs.** A hazard entry is either a bare string or a tuned
+  // object, and this card is presentation: `join(', ')` on the raw list printed
+  // `weather: [object Object]` for every body M29 authored with a tuned hazard,
+  // which was six of the ten, on the screen a player picks a run from.
+  const hazards = p.hazards.map(hazardName);
   const hidden = hazards.length > 1 && rng() < 0.5 ? hazards.pop() : null;
   const machines = peakMachines(planetId);
   return {

@@ -909,7 +909,7 @@ function frame(now) {
   // and the touch buttons write to. It is **not** in `advance`, which is what
   // the headless drivers call: a sweep must not change its answer because
   // somebody left a controller plugged in.
-  input.pollGamepad();
+  padFrame(dt);
   advance(dt);
   draw();
   requestAnimationFrame(frame);
@@ -1086,6 +1086,108 @@ function renderOverlay() {
   }
   overlay.innerHTML = (g.notice ? `<div class="toast">${g.notice}</div>` : '') + html;
   if (g.state === 'hangar') drawHangarPreview();
+  applyPadFocus();
+}
+
+// ------------------------------------------------- the pad's selection cursor
+//
+// The menus are clickable HTML with one primary action on SPACE, so until now
+// neither a pad *nor* the keyboard could pick an item out of a list - a body on
+// the ladder, a hangar rung, a route card. This is the cursor, driven by the
+// stick and the d-pad, and it is deliberately **general** rather than a special
+// case for the expedition screen: a cursor that knew about one screen would
+// need a second implementation for the next one, which is the fault this
+// project keeps paying for.
+//
+// It knows nothing about cards. It walks `[data-action]` elements by their
+// **geometry**, so it follows whatever a screen's CSS actually laid out - grid,
+// row or column - and a new screen gets it for free.
+
+/**
+ * The focused item is remembered as its **action string**, not as an element.
+ * `renderOverlay` rebuilds the whole overlay, so an element reference goes
+ * stale on every re-render - and the toast timer alone re-renders mid-screen.
+ * An action survives that, and if it does not survive, it *should* be dropped.
+ */
+function padFocusItems() {
+  return [...overlay.querySelectorAll('[data-action]')]
+    .filter((el) => !el.disabled && el.offsetParent !== null);
+}
+
+function applyPadFocus() {
+  for (const el of overlay.querySelectorAll('.pad-focus')) el.classList.remove('pad-focus');
+  if (!g.padFocus) return;
+  const el = padFocusItems().find((n) => n.dataset.action === g.padFocus);
+  if (el) el.classList.add('pad-focus');
+  else g.padFocus = null;   // the screen changed under it
+}
+
+function setPadFocus(el) {
+  g.padFocus = el ? el.dataset.action : null;
+  applyPadFocus();
+  if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+
+/**
+ * Move the cursor one item in the pushed direction, by geometry.
+ *
+ * The off-axis distance is weighted heavily so that on a grid the cursor steps
+ * to the neighbour rather than to whatever happens to be nearest in a straight
+ * line - pushing right on a ladder card should reach the card beside it, not
+ * the one below and three columns over that is technically closer.
+ */
+function movePadFocus(dx, dy) {
+  const items = padFocusItems();
+  if (!items.length) return;
+  const cur = g.padFocus ? items.find((n) => n.dataset.action === g.padFocus) : null;
+  // The first push lands the cursor rather than moving it, so a player never
+  // has to guess where it started.
+  if (!cur) { setPadFocus(items[0]); return; }
+  const r0 = cur.getBoundingClientRect();
+  const cx = r0.left + r0.width / 2;
+  const cy = r0.top + r0.height / 2;
+  let best = null;
+  let bestScore = Infinity;
+  for (const el of items) {
+    if (el === cur) continue;
+    const r = el.getBoundingClientRect();
+    const ax = r.left + r.width / 2 - cx;
+    const ay = r.top + r.height / 2 - cy;
+    const along = dx ? ax * dx : ay * dy;
+    const off = dx ? Math.abs(ay) : Math.abs(ax);
+    if (along <= 4) continue;                  // not in the pushed direction
+    const score = along + off * 2.5;
+    if (score < bestScore) { bestScore = score; best = el; }
+  }
+  // Nothing that way: stay put rather than wrapping. Wrapping in a grid means
+  // pushing right at the end of a row lands you somewhere unrelated.
+  if (best) setPadFocus(best);
+}
+
+/**
+ * The pad's whole per-frame job: read it, and move the cursor.
+ *
+ * Split out of `frame()` for the same reason `advance` is - `requestAnimation-
+ * Frame` does not fire in a hidden tab, so without this there is no way to
+ * exercise the pad without a visible window and a physical controller. Exposed
+ * as `__padFrame(dt)`.
+ */
+function padFrame(dt) {
+  input.pollGamepad(undefined, dt);
+  // The cursor only exists on the overlay screens. In flight the same stick is
+  // the attitude control and must not be doing two jobs at once.
+  if (g.state === 'play') return;
+  if (input.nav.x) movePadFocus(input.nav.x, 0);
+  if (input.nav.y) movePadFocus(0, input.nav.y);
+}
+
+/** Fire whatever the cursor is on. Returns false if it is not on anything. */
+function activatePadFocus() {
+  if (!g.padFocus) return false;
+  const el = padFocusItems().find((n) => n.dataset.action === g.padFocus);
+  if (!el) { g.padFocus = null; return false; }
+  act(el.dataset.action);
+  return true;
 }
 
 /** The large lander in the hangar, redrawn whenever the selection changes. */
@@ -1100,6 +1202,10 @@ overlay.addEventListener('click', (e) => {
 // keyboard shortcuts per screen
 input.bind(' ', () => {
   const s = g.state;
+  // A on the pad is SPACE, and when the selection cursor is on something it
+  // means *that* rather than the screen's default action - which is the whole
+  // point of having a cursor. In flight it is the booster and nothing else.
+  if (s !== 'play' && activatePadFocus()) return;
   if (s === 'menu') act(Save.loadRun() ? 'resume-run' : 'chapters');
   else if (s === 'brief') act('launch');
   else if (s === 'result' || s === 'victory') act('next');
@@ -1204,11 +1310,13 @@ window.__ship = ship;
 window.__act = act;
 window.__input = input;
 /** What the pad is doing right now, and which pad it is. */
+window.__padFrame = (dt = 1 / 60) => { padFrame(dt); return g.padFocus; };
 window.__pad = () => ({
   connected: typeof navigator !== 'undefined' && navigator.getGamepads
     ? [...navigator.getGamepads()].filter(Boolean).map((g) => `${g.index}: ${g.id}`) : [],
   using: input.padIndex, name: input.padName,
   amounts: { ...input.pad }, pressing: input.padToken,
+  focus: g.padFocus, nav: { ...input.nav },
 });
 window.__settings = settings;
 window.__debug = Debug;

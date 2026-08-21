@@ -1,5 +1,5 @@
 // Unit tests for the force/status interface:  node test/forces-tests.js
-import { applyForces, forcesFor, freshStatus, freshEnv, RADIATION, STATUS_CHANNELS, NON_FORCE_HAZARDS, HEAT, COLD, ACID, MAGNETIC } from '../src/forces.js';
+import { applyForces, forcesFor, freshStatus, freshEnv, RADIATION, STATUS_CHANNELS, NON_FORCE_HAZARDS, HEAT, COLD, ACID, MAGNETIC, hazardName } from '../src/forces.js';
 import { PLANETS, PLANET_IDS, gravityFor, gravityPx } from '../src/planets.js';
 import { CHAPTERS } from '../src/missions.js';
 
@@ -228,7 +228,7 @@ check('difficulty cannot reach gravity',
 {
   const declared = new Map();
   const note = (h, where) => {
-    const t = typeof h === 'string' ? h : h.type;
+    const t = hazardName(h);
     if (!declared.has(t)) declared.set(t, new Set());
     declared.get(t).add(where);
   };

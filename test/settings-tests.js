@@ -705,6 +705,72 @@ function makeInput() {
     check('A can still be taken for a flight control', input.rebind('hold', 'pad:0') !== null);
   }
 
+  // 8e. **Menu navigation, as steps rather than a held direction.** One push
+  //     moves one item; holding repeats after a pause, the way a held arrow key
+  //     does. Without the pause a single flick crosses the ten-card ladder
+  //     before you let go, and without the hysteresis a stick resting near the
+  //     threshold emits a step every few frames.
+  {
+    const input = makeInput();
+    const steps = (pads, dt, n) => {
+      let count = 0;
+      for (let i = 0; i < n; i++) { input.pollGamepad(pads, dt); if (input.nav.x) count++; }
+      return count;
+    };
+
+    input.pollGamepad([fakePad()], 1 / 60);
+    check('a centred stick emits nothing', input.nav.x === 0 && input.nav.y === 0);
+
+    // One push, one step - and not another for as long as it is held, until
+    // the repeat delay is up.
+    input.pollGamepad([fakePad({ axes: { 0: 1 } })], 1 / 60);
+    check('a push emits one step', input.nav.x === 1, String(input.nav.x));
+    check('and only one', steps([fakePad({ axes: { 0: 1 } })], 1 / 60, 10) === 0);
+
+    // Held long enough, it repeats.
+    const repeats = steps([fakePad({ axes: { 0: 1 } })], 1 / 60, 60);
+    check('holding repeats after a pause', repeats >= 3 && repeats <= 12, `${repeats} in 1s`);
+
+    // Directions, and the vertical axis.
+    input.pollGamepad([fakePad()], 1 / 60);
+    input.pollGamepad([fakePad({ axes: { 0: -1 } })], 1 / 60);
+    check('pushing left steps left', input.nav.x === -1, String(input.nav.x));
+    input.pollGamepad([fakePad()], 1 / 60);
+    input.pollGamepad([fakePad({ axes: { 1: 1 } })], 1 / 60);
+    check('pushing down steps down', input.nav.y === 1, String(input.nav.y));
+
+    // The d-pad drives the same thing, so a player who never touches the stick
+    // is not locked out of the menus.
+    input.pollGamepad([fakePad()], 1 / 60);
+    input.pollGamepad([fakePad({ buttons: { 15: 1 } })], 1 / 60);
+    check('the d-pad navigates too', input.nav.x === 1, String(input.nav.x));
+
+    // A half-pushed stick is not a direction, and the hysteresis band holds
+    // whatever it had rather than chattering.
+    input.pollGamepad([fakePad()], 1 / 60);
+    check('a stick at 0.45 is not a push', steps([fakePad({ axes: { 0: 0.45 } })], 1 / 60, 20) === 0);
+    // The case the hysteresis exists for, and it is not "eases back to centre"
+    // - that returns 0 steps either way. It is a stick **wobbling across the
+    // threshold**, which is what a thumb resting on one actually does. Without
+    // the band each dip below `press` counts as a release and the next rise
+    // counts as a fresh push, so one held direction machine-guns the cursor
+    // across the list.
+    input.pollGamepad([fakePad()], 1 / 60);
+    let wobbleSteps = 0;
+    for (let i = 0; i < 12; i++) {
+      input.pollGamepad([fakePad({ axes: { 0: i % 2 ? 0.40 : 0.62 } })], 0);
+      if (input.nav.x) wobbleSteps++;
+    }
+    check('a stick wobbling across the threshold steps once, not once per wobble',
+      wobbleSteps === 1, `${wobbleSteps} steps from one held direction`);
+
+    // And navigation is shaped-free: the throttle curve exists to put a hover
+    // point mid-travel, which is exactly wrong for "did they mean it".
+    input.pollGamepad([fakePad()], 1 / 60);
+    input.pollGamepad([fakePad({ axes: { 0: PAD.deadzone + 0.01 } })], 1 / 60);
+    check('a barely-deflected stick does not navigate', input.nav.x === 0, String(input.nav.x));
+  }
+
   // 9. Losing focus drops the pad, exactly as it drops the keys. Otherwise a
   //    trigger held while alt-tabbing stays burning.
   {

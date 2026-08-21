@@ -96,6 +96,24 @@ export const PAD = {
 // with the eight ordinary bodies between 30% and 49%: the middle of the travel.
 // Raise it and the top of the trigger goes numb; lower it and the bottom does.
 
+/**
+ * Menu navigation off the stick and the d-pad.
+ *
+ * Emitted as **steps**, not as a held direction: one push moves one item, and
+ * holding repeats after a pause, the way a held arrow key does. Without the
+ * pause a single flick crosses the whole ten-card ladder before you let go.
+ *
+ * `press` and `release` are far apart on purpose. A stick resting near the
+ * threshold would otherwise chatter between "held" and "let go" and emit a
+ * step every few frames - the hysteresis is what makes one push mean one item.
+ */
+const NAV = {
+  press: 0.55,        // how far to push before it counts as a direction
+  release: 0.35,      // and how far back before it counts as released
+  firstRepeat: 0.42,  // s held before it starts repeating
+  repeat: 0.13,       // s between repeats after that
+};
+
 // Standard Gamepad mapping, for the settings screen.
 const PAD_BUTTONS = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'BACK', 'START',
   'LS', 'RS', 'PAD↑', 'PAD↓', 'PAD←', 'PAD→', 'HOME'];
@@ -136,6 +154,20 @@ function buttonValue(b) {
   return b.pressed ? 1 : 0;
 }
 
+/**
+ * The raw navigation push on one axis, -1..1, from the stick *and* the d-pad.
+ *
+ * Deliberately raw rather than run through `shape()`: that curve exists to put
+ * a throttle's hover point in the middle of the travel, which is exactly the
+ * wrong thing for "did they push it far enough to mean it".
+ */
+function navAxis(gp, axis, negBtn, posBtn) {
+  const a = gp.axes && gp.axes[axis];
+  let v = typeof a === 'number' && Number.isFinite(a) ? a : 0;
+  v += buttonValue(gp.buttons && gp.buttons[posBtn]) - buttonValue(gp.buttons && gp.buttons[negBtn]);
+  return v > 1 ? 1 : v < -1 ? -1 : v;
+}
+
 /** How hard `gp` is driving one binding token, 0..1. */
 function readToken(gp, token) {
   if (token.startsWith('pad:')) {
@@ -161,6 +193,12 @@ export class Input {
     this.padName = null;
     this.padToken = null;   // what the pad is pressing, for the CONTROLS screen
     this.padUi = {};        // last state of each interface control, for edges
+    // Menu navigation. `nav` is what this poll *emitted* - a step or nothing -
+    // rather than what the stick is currently doing, so a screen reads it once
+    // and moves once. Zeroed every poll.
+    this.nav = { x: 0, y: 0 };
+    this._navHeld = { x: 0, y: 0 };
+    this._navTimer = { x: 0, y: 0 };
     this.onPress = new Map();   // key -> callback, for one-shot UI actions
     this.onAction = new Map();  // action -> callback, for one-shot bound actions
     this.setBindings(null);
@@ -184,7 +222,14 @@ export class Input {
     // A held trigger must not survive the tab losing focus, for the same reason
     // a held key must not: the browser stops reporting either, and whatever was
     // last seen would stay latched on.
-    window.addEventListener('blur', () => { this.keys.clear(); this.pad = zeroPad(); this.padToken = null; this.padUi = {}; });
+    window.addEventListener('blur', () => {
+      this.keys.clear();
+      this.pad = zeroPad();
+      this.padToken = null;
+      this.padUi = {};
+      this.nav = { x: 0, y: 0 };
+      this._navHeld = { x: 0, y: 0 };
+    });
     // Hot-plug. This is a *label*, not the plumbing: `pollGamepad` asks the
     // browser what is there every frame regardless, because a pad is famously
     // invisible to `getGamepads()` until it has been touched, so a player who
@@ -214,7 +259,7 @@ export class Input {
    * out. The physics does not need testing through a gamepad - stage 1 proved
    * the flight model by leaving both fixtures unmoved.
    */
-  pollGamepad(list) {
+  pollGamepad(list, dt = 0) {
     const pads = list !== undefined ? list
       : (typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : null);
     const gp = this.choosePad(pads);
@@ -259,6 +304,11 @@ export class Input {
       }
       this.padUi[token] = down;
     }
+    // Menu navigation, as a step per push. Read by whatever is on screen; the
+    // pad has no idea what a card or a button is, and the screen has no idea
+    // what a stick is.
+    this.nav.x = gp ? this._navStep('x', navAxis(gp, 0, 14, 15), dt) : this._navStep('x', 0, dt);
+    this.nav.y = gp ? this._navStep('y', navAxis(gp, 1, 12, 13), dt) : this._navStep('y', 0, dt);
     // And the raw token, for the CONTROLS screen, which listens on '*' exactly
     // as it does for a key. That is what lets a trigger be bound to an action
     // through the rebinding flow that already exists.
@@ -269,6 +319,32 @@ export class Input {
     }
     this.padToken = token;
     return gp;
+  }
+
+  /**
+   * One axis of menu navigation: raw push in, a step or zero out.
+   *
+   * Between `release` and `press` the direction is *kept* rather than
+   * recomputed, which is the hysteresis that stops a stick resting on the
+   * threshold from emitting a step every few frames.
+   */
+  _navStep(axis, raw, dt) {
+    const held = this._navHeld[axis];
+    let dir;
+    if (raw >= NAV.press) dir = 1;
+    else if (raw <= -NAV.press) dir = -1;
+    else if (Math.abs(raw) < NAV.release) dir = 0;
+    else dir = held;
+    let step = 0;
+    if (dir && dir !== held) {
+      step = dir;                       // the push itself
+      this._navTimer[axis] = NAV.firstRepeat;
+    } else if (dir) {
+      this._navTimer[axis] -= dt;       // held: repeat, after a pause
+      if (this._navTimer[axis] <= 0) { step = dir; this._navTimer[axis] = NAV.repeat; }
+    }
+    this._navHeld[axis] = dir;
+    return step;
   }
 
   /**

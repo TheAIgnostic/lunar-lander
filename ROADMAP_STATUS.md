@@ -1050,6 +1050,25 @@ scheduled until the MVP is stable — the spec says the same.
   - **still open: picking an item from a list needs a click** - and *neither* device can do it, so
     closing it means a selection cursor for both
 
+- [x] **M30c — the selection cursor, and the forecast nobody could read** (this commit)
+  - Tom: *"in expedition menu b should bring you back and a for selecting the active mission,
+    joystick to select a mission."* The last of the three gaps M30 named
+  - **general on purpose**: the cursor knows nothing about cards, it walks `[data-action]` elements
+    by their **geometry**, so it follows whatever the CSS laid out and every screen gets it free. A
+    cursor that knew about the expedition screen would need a second one for the hangar
+  - focus is held as an **action string, not an element**, because `renderOverlay` rebuilds the
+    overlay and the toast timer alone re-renders mid-screen
+  - **steps, not a held direction.** The hysteresis band is for a stick *wobbling* across the
+    threshold - a thumb resting on one - not for one easing back to centre. **1 step with the band,
+    6 without**; the first version of that test used the easing case, passed against broken code and
+    proved nothing
+  - **and the screenshot found something else: six of the ten expedition cards read
+    `weather: [object Object]`**. `PlanetDefinition.hazards` mixes names with tuned spec objects, and
+    the card did `join(', ')`. **This is M29's lesson from the presentation side** - that milestone
+    made every hazard *name* resolve to a builder, and nobody asked whether an *entry* could be
+    printed. `hazardName()` now, read by all four readers, asserted in `route-tests.js`
+  - both fixtures unchanged, `settings-tests.js` 178 → **188**, `route-tests.js` 69 → **99**
+
 ## Decisions (Tom, 2026-08-16)
 
 1. **Gravity** — compressed mapping is the *baseline*, then a per-body hand-tuned offset so each
@@ -1085,12 +1104,13 @@ its own), then the gamepad behind it (stages 2-5). Full measurement in `test/BAS
 
 ### What M30 left open, and the first is a real gap
 
-- ~~**A pad cannot work the menus.**~~ **Done in M30b**, at parity with the keyboard: A confirms,
-  B and START go back. What is **still** missing is *list selection* — picking a chapter, a route
-  card or a hangar rung needs a click. **Neither device can do it**, since the keyboard has no cursor
-  either, so closing it means building a selection cursor that serves both: what moves it, how a
-  screen shows what is selected, and whether the d-pad drives the route screen. That is a design call
-  and it is the last thing between this and full controller support.
+- ~~**A pad cannot work the menus.**~~ **Done — M30b** gave it the interface keys and **M30c** the
+  selection cursor. A pad plays the game start to finish: stick or d-pad to move, A to confirm, B or
+  START to go back, triggers and stick to fly. The cursor is general rather than per-screen, so the
+  hangar, the route card and the outfit screen got it without knowing about it.
+  - **The keyboard still has no cursor.** It gained nothing here, and the same `movePadFocus` is one
+    binding away from serving the arrow keys. Left alone because it was not asked for and arrow keys
+    are flight controls — worth a decision rather than a side effect.
 - **The curve is reasoned, not tuned.** `PAD.curve` 1.5 is argued from where the hover point lands,
   which is arithmetic; whether it *feels* right is not. Four levers: `curve`, `deadzone`, `saturate`,
   `triggerFloor`.
@@ -1340,6 +1360,12 @@ command tells you both that the game still works and what a player currently mee
   *through* the ground. The physics fixture's own script does not land either. **Ask what your
   instrument actually touched**, not just what it reported; the fix was to count the substeps it
   covered and refuse to pass at zero.
+- **A screenshot is an instrument, and it reads things no assertion was pointed at.** M30c opened a
+  screenshot to check a focus ring and found **six of the ten expedition cards printing
+  `weather: [object Object]`** — every body M29 authored with a tuned hazard, on the screen a player
+  picks a run from, shipped and live. M29 had made every hazard *name* resolve to a builder and
+  nobody asked whether an *entry* could be **printed**. The suite was green throughout. Look at the
+  thing, not only at the numbers about the thing.
 - **A test that passes is not a test that bites.** M30 wrote a suite specifically to catch a class of
   fault, then broke the code six ways on purpose — and **two mutations survived**. One was a real gap
   the tests should have caught and only differs for a player who has customised twice, so it looks

@@ -7,6 +7,7 @@ import { WORLDS } from '../src/levels.js';
 import { chapterFor, CHAPTERS } from '../src/missions.js';
 import { VALIDATION } from '../src/validate.js';
 import { everyMaterial } from '../src/components.js';
+import { forcesFor, NON_FORCE_HAZARDS } from '../src/forces.js';
 
 let pass = 0, fail = 0;
 const check = (n, c, e = '') => { if (c) pass++; else { fail++; console.log(`  FAIL  ${n}  ${e}`); } };
@@ -311,6 +312,35 @@ check('but not before one is cleared', !isCheckpoint(0));
   check('a short drought does not', early.cores === 0);
   const earned = missionReward({ grade: 'PERFECT', padMultiplier: 5, fuelLeft: 10, maxFuel: 100, firstClear: false, coreDrought: 0 });
   check('an earned core is still an earned core', earned.cores === 1 && !earned.pityCore);
+}
+
+// --- the route card is presentation, and a hazard entry has two shapes
+//
+// `PlanetDefinition.hazards` mixes bare names with tuned spec objects - Venus
+// declares one of each - so anything that *prints* the list has to normalise
+// first. It did not: `c.hazards.join(', ')` put **`weather: [object Object]`**
+// on six of the ten cards, every body M29 authored with a tuned hazard, on the
+// screen a player picks a run from. Nothing caught it because nothing asserted
+// that a card is made of strings.
+{
+  for (const id of PLANET_ORDER) {
+    const card = planetCard(id, 1, makeRng(4242));
+    const bad = card.hazards.filter((h) => typeof h !== 'string' || !h);
+    check(`${id}: the forecast is names, not objects`, bad.length === 0,
+      `${JSON.stringify(card.hazards)}`);
+    // And every name it prints is a hazard the game actually knows, which is
+    // the M29 rule: a name in content indexing a table in code must resolve.
+    for (const h of card.hazards) {
+      check(`${id}: "${h}" is a hazard the game implements`,
+        NON_FORCE_HAZARDS.includes(h) || forcesFor({ id: `probe-${h}`, width: 3000, hazards: [h] }).length > 0, h);
+    }
+  }
+  // The rule stated directly, so it holds for a body added later too.
+  const printable = (v) => typeof v === 'string' && v.length > 0 && !v.startsWith('[object');
+  check('every card renders a readable forecast', PLANET_ORDER.every((id) => {
+    const c = planetCard(id, 1, makeRng(99));
+    return (c.hazards.join(', ') || 'nothing reported').split(', ').every(printable);
+  }));
 }
 
 console.log(`\n  ${pass} passed, ${fail} failed`);

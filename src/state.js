@@ -92,4 +92,9 @@ export const g = {
   forcedSeed: null,   // pinned by ?seed= or __setSeed() so runs are reproducible
   warn: { low: false, crit: false, dry: false },
   token: 0,          // invalidates pending outcome timers when the level changes
+  // The gamepad's selection cursor, held as the focused item's **action
+  // string** rather than as an element: `renderOverlay` rebuilds the overlay,
+  // so an element reference goes stale on every re-render. null = no cursor,
+  // which is the state a mouse or keyboard player never leaves.
+  padFocus: null,
 };

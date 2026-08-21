@@ -153,7 +153,7 @@ export function obscure(v) {
 export function worstVisibility(level) {
   let worst = obscure(level.visibility != null ? level.visibility : 1);
   for (const h of level.hazards || []) {
-    const spec = typeof h === 'string' ? { type: h } : h;
+    const spec = hazardSpec(h);
     if (spec.type !== 'dust') continue;
     worst = Math.min(worst, obscure(spec.minVisibility != null ? spec.minVisibility : 0.35));
   }
@@ -850,6 +850,27 @@ const BUILDERS = {
 export const NON_FORCE_HAZARDS = ['ice'];
 
 /**
+ * **A hazard entry is either a bare name or a spec object**, and every reader
+ * has to know that. `'wind'` and `{ type: 'dust', period: 12 }` are both legal
+ * in the same array - Venus declares one of each - because a hazard that needs
+ * tuning carries it and one that does not should not have to.
+ *
+ * This was open-coded in three places, and the third got it wrong: the
+ * expedition screen printed `c.hazards.join(', ')` and **six of the ten bodies
+ * read `weather: [object Object]`** - every body M29 authored with a tuned
+ * hazard, on the screen a player picks a run from. The shape is the rule, so
+ * the rule lives here and gets read rather than re-derived.
+ */
+export function hazardSpec(h) {
+  return typeof h === 'string' ? { type: h } : (h || {});
+}
+
+/** The hazard's name - what a screen prints and what `BUILDERS` is keyed on. */
+export function hazardName(h) {
+  return hazardSpec(h).type;
+}
+
+/**
  * Force list for a level, built once and cached on it. Legacy levels declare
  * wind/gust/drag directly; authored missions declare `hazards`.
  */
@@ -869,7 +890,7 @@ export function forcesFor(level) {
   const add = (f) => { if (f && !seen.has(f.id)) { seen.add(f.id); list.push(f); } };
   if (level.wind || level.gust || level.drag) add(atmosphere(level));
   for (const h of level.hazards || []) {
-    const spec = typeof h === 'string' ? { type: h } : h;
+    const spec = hazardSpec(h);
     const build = BUILDERS[spec.type];
     if (build) add(build({ ...level, ...spec }));
   }
