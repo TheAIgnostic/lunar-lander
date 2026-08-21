@@ -7,6 +7,38 @@ import { FONT, GREEN, RED, CYAN, AMBER } from './drawkit.js';
 import { ENEMY_TYPES } from './enemies.js';
 import { clamp, TAU } from './util.js';
 
+/**
+ * **A lethal machine's warning has to survive the weather.**
+ *
+ * Machines are drawn inside the world, and dust and darkness are painted over
+ * the top of it - so on Mars at 0.05 visibility, or Pluto at 0.86 darkness, a
+ * telegraph is very nearly invisible. For a turret that is harsh and
+ * survivable. For the Mast Sniper, whose whole counterplay is *seeing the lock
+ * and not being there*, it is a coin toss.
+ *
+ * So the lock line of a lethal machine is redrawn above the weather, exactly as
+ * the pad beacons and the ore crates are (M18, M22). It is the same rule those
+ * came from - blind is difficulty, targetless is a lottery - pointed at the one
+ * thing in the game that can kill you outright.
+ *
+ * Only the lock, and only while it is locked: the machine itself stays lost in
+ * the storm, which is as it should be. What comes through is the line.
+ */
+export function drawLethalWarnings(ctx, cam, W, H, field, time, opts = {}) {
+  if (!field || !field.enemies) return;
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+  ctx.scale(cam.scale, cam.scale);
+  ctx.translate(-cam.x, -cam.y);
+  for (const e of field.enemies) {
+    if (e.dead || e.state !== 'telegraph') continue;
+    const type = ENEMY_TYPES[e.type];
+    if (!type || !type.shot || !type.shot.lethal) continue;
+    drawTelegraph(ctx, e, type, time, opts);
+  }
+  ctx.restore();
+}
+
 export function drawEnemies(ctx, field, ship, time, opts = {}) {
   if (!field) return;
   for (const e of field.enemies) {

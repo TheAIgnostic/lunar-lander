@@ -208,7 +208,11 @@ export const MARS_MISSIONS = [
     pads: [{ mult: 3, width: 115 }, { mult: 2, width: 175 }],
     hazards: [{ type: 'dust', period: 18, minVisibility: 0.5, duty: 0.3 }],
     optionalObjective: { id: 'salvage-iron', text: 'Recover the iron-ceramic salvage off the safe route', reward: { salvage: 70 } },
-    enemyBudget: 4, enemySets: ['sentry-turret', 'seeker-drone'], fuelCells: 2,
+    // Mars meets the sniper on IRON RAIN rather than on STORM EYE: the exam
+    // mission is the one whose composition was balanced by hand, and a sniper
+    // displaces a drone rather than adding to the map (the at-once rule), so
+    // putting one there quietly took STORM EYE from 6/20 to 12/20.
+    enemyBudget: 4, enemySets: ['sentry-turret', 'seeker-drone', 'mast-sniper'], fuelCells: 2,
   },
   {
     id: 'mars-5', planet: 'MARS', index: 5, name: 'STORM EYE',
@@ -395,7 +399,9 @@ export const TITAN_MISSIONS = [
     hazards: ['wind', { type: 'glide', lift: 0.00032, liftCap: 18 },
       { type: 'dust', period: 15, minVisibility: 0.55, duty: 0.45 }],
     optionalObjective: { id: 'quick', text: 'Cross and land in under a minute', reward: { cores: 1 } },
-    enemyBudget: 3, fuelCells: 3,
+    // The first Mast Sniper on the ladder, on the exam mission of body 3.
+    // Anything later and a typical run never meets one at all.
+    enemyBudget: 3, enemySets: ['seeker-drone', 'mast-sniper'], fuelCells: 3,
   },
 ];
 
@@ -471,7 +477,7 @@ export const ENCELADUS_MISSIONS = [
       { atX: 0.87, period: 8, duty: 0.40, radius: 200, force: 16 },
     ] }],
     optionalObjective: { id: 'fuel-25', text: 'Land with at least 25% fuel left', reward: { cores: 1 } },
-    enemyBudget: 4, enemySets: ['sentry-turret', 'seeker-drone'], fuelCells: 3,
+    enemyBudget: 4, enemySets: ['sentry-turret', 'seeker-drone', 'mast-sniper'], fuelCells: 3,
   },
 ];
 

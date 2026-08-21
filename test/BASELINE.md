@@ -2975,3 +2975,87 @@ the one screen it is for.
   not the ambience has no switch, which is a fair thing to want and a five-line setting if you do.
 - **It plays on the front-of-house screens**, not just the menu: help, settings, keys, logbook and the
   expedition picker. Anything belonging to a mission is silent.
+
+---
+
+## M29g — the sniper you can actually meet (2026-08-21)
+
+Tom: *"did you add the sniper? i did not encounter it"*. It shipped, it worked, and it was
+effectively unreachable.
+
+### The mistake
+
+M29e read "harder levels" as "the hardest bodies" and put the first Mast Sniper on **Ganymede
+mission 4 — body 6 of 10**, about 28 missions into a run. Tom's own M29a log cleared four bodies in
+29 minutes, and `docs/PROGRESSION.md` records the typical run as dying at body 3 or 4. So the newest
+and most distinctive machine in the game sat past the point almost every run ends.
+
+A machine nobody meets is not a machine. This is the M11 fault at the level of *content* rather than
+code: M29e proved the sniper engages, and never asked whether anyone would be there to see it.
+
+### Why it could not simply be moved forward
+
+The telegraph is the counterplay — a frozen aim you move out of — and machines are drawn **inside**
+the world, with dust and darkness painted over the top. Measured worst visibility on the bodies a run
+actually reaches:
+
+| | worst visibility |
+| --- | ---: |
+| titan-3 / -4 / -5 | 0.13 / 0.20 / 0.17 |
+| mars-3 / -4 / -5 | 0.05 / 0.13 / 0.05 |
+| enceladus-3 / -4 / -5 | 1.00 |
+
+For a turret at 50 damage, an unseen lock is harsh and survivable. For a machine that kills outright
+it is a coin toss. So a lethal machine's lock line is now redrawn **above the weather**, exactly as
+the pad beacons (M18) and the ore crates (M22) are — the same rule those came from, blind is
+difficulty and targetless is a lottery, pointed at the one thing that can kill you in one shot.
+
+Only the lock, and only while locked: the machine itself stays lost in the storm, which is correct.
+Verified at 0.06 visibility on `titan-5` — terrain and sniper both invisible, lock line and closing
+ring fully legible.
+
+### Where it is now
+
+| body | | missions | present on |
+| ---: | --- | --- | --- |
+| 3 | Titan | **5** | 17/20 seeds |
+| 4 | Mars | **4** | — |
+| 5 | Enceladus | **5** | 15/20 |
+| 6 | Ganymede | 4, 5 | 14/20 · 17/20 |
+| 7 | Io | 4, 5 | 13/20 · 16/20 |
+| 8 | Mercury | 4, 5 | 14/20 · 19/20 |
+| 9 | Pluto | 5 | 12/20 |
+| 10 | Venus | 4, 5 | 15/20 · 18/20 |
+
+First sighting is the exam mission of body 3 — reachable on a normal run.
+
+### A sniper substitutes for a drone, it does not add to the map
+
+The at-once rule caps overlapping engagement discs, so putting a sniper on a mission **displaces**
+other machines rather than adding one. Measured over 20 seeds:
+
+| mission | without | with |
+| --- | --- | --- |
+| titan-5 | 60 drones | 39 drones + 17 snipers |
+| mars-5 | 59 drones, 40 turrets | 43 drones, 35 turrets, 13 snipers |
+| enceladus-5 | 40 drones, 40 turrets | 20 drones, 43 turrets, 15 snipers |
+
+It displaces **drones** in particular, which are the machines the test pilot struggles with most — so
+`mars-5 STORM EYE` went **6/20 → 12/20** on the way home. A large, silent difficulty *reduction* on
+hand-balanced content, and the reason Mars meets the sniper on `mars-4 IRON RAIN` instead. With that
+move: mars-4 17/20 with and without, mars-5 back to its authored 6/20.
+
+The substitution itself is left as designed and is arguably right — a mission gets a *different* kind
+of threat, not more threat. It is recorded here because it is not obvious from the budgets.
+
+### What did not move
+
+Both fixtures byte-identical. Sanctuary **20/20 on all 40 armed missions**. Full suite green. On the
+three new placements the way home is unchanged: titan-5 13/20, mars-4 17/20, enceladus-5 14/20, each
+identical with and without.
+
+### Left for Tom
+
+- **It is still absent on about one seed in four** on maps with no vantage, so it is a surprise
+  rather than a fixture. Deliberate, and worth knowing when it does not turn up.
+- **Whether body 3 is early enough.** It is one authored line per mission to pull it earlier still.

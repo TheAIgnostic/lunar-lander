@@ -21,7 +21,7 @@ import { EnemyField } from './enemies.js';
 import { evaluateObjective } from './objectives.js';
 import { Abilities, ABILITY } from './abilities.js';
 import * as R from './render.js';
-import { drawEnemies, drawBeam, drawShield } from './enemydraw.js';
+import { drawEnemies, drawBeam, drawShield, drawLethalWarnings } from './enemydraw.js';
 import { drawHUD } from './hud.js';
 import { Debug } from './debug.js';
 import { spawnFor } from './spawn.js';
@@ -967,6 +967,11 @@ function draw() {
     const hidden = Math.max(1 - vis, dark);
     R.drawPadBeacons(ctx, cam, W, H, g.terrain, g.level, g.time, hidden, present);
     R.drawMaterialBeacons(ctx, cam, W, H, g.terrain, g.time, hidden, present);
+    // ...and the lock line of anything that kills in one shot. Same rule as the
+    // beacons: what you must be able to see comes through the weather.
+    drawLethalWarnings(ctx, cam, W, H, g.field, g.time, {
+      ...present, threatWarning: !!(g.loadout && g.loadout.threatWarning),
+    });
   }
 
   if (g.state === 'play' || g.state === 'paused') {
