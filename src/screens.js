@@ -399,7 +399,9 @@ export function screenHTML(s) {
         reachable.</p>
         <p class="body dim">A gamepad is picked up automatically; the browser will not see it until
         you have pressed something on it. Triggers and sticks are analog, so how hard you pull is
-        how hard it burns.</p>
+        how hard it burns. <kbd>A</kbd> confirms and <kbd>B</kbd> or <kbd>START</kbd> goes back —
+        those are the interface's and cannot be reassigned, except <kbd>A</kbd>, which doubles as a
+        booster exactly as <kbd>SPACE</kbd> does.</p>
         <div class="setting"><div class="opts keys-list">${rows}</div></div>
         ${g.rebindNote ? `<div class="notice">${g.rebindNote}</div>` : ''}
         <div class="btns">${btn('keys-reset', 'RESET TO DEFAULT')}${btn('settings', 'DONE', true, 'SPACE')}</div>

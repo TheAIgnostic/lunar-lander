@@ -4,7 +4,7 @@
 // The rule these tests exist to hold: an accessibility setting changes how the
 // game is *presented*, never how it behaves. A player who turns the shake off
 // must be flying exactly the same simulation as one who leaves it on.
-import { Input, ACTIONS, DEFAULT_KEYS, keyLabel, amountOf, isPadToken, PAD } from '../src/input.js';
+import { Input, ACTIONS, DEFAULT_KEYS, keyLabel, amountOf, isPadToken, PAD, PAD_UI } from '../src/input.js';
 import { DEFAULT_SETTINGS, Ship, SHIP, STEERING, STEERING_MODES } from '../src/ship.js';
 import { defaultMeta, loadMeta, saveMeta } from '../src/save.js';
 import { readFileSync } from 'node:fs';
@@ -648,6 +648,63 @@ function makeInput() {
     check('and zeroes what it was reporting', Object.is(input.amount('thrust'), 0), String(input.amount('thrust')));
   }
 
+  // 8c. **The interface controls.** A pad flies the lander; without these it
+  //     cannot get past the brief that launches the mission. The pad does not
+  //     get a menu layer of its own - it presses the keys the interface already
+  //     listens on, so every screen and every `input.bind(...)` keeps working.
+  {
+    const input = makeInput();
+    const fired = [];
+    input.bind(' ', () => fired.push('confirm'));
+    input.bind('escape', () => fired.push('back'));
+
+    input.pollGamepad([fakePad()]);
+    check('an idle pad presses nothing', fired.length === 0, JSON.stringify(fired));
+
+    input.pollGamepad([fakePad({ buttons: { 0: 1 } })]);
+    check('A confirms, like SPACE', fired[0] === 'confirm', JSON.stringify(fired));
+    input.pollGamepad([fakePad({ buttons: { 0: 1 } })]);
+    check('and does not repeat while held', fired.length === 1, JSON.stringify(fired));
+    input.pollGamepad([fakePad()]);
+    input.pollGamepad([fakePad({ buttons: { 0: 1 } })]);
+    check('and confirms again after a release', fired.length === 2, JSON.stringify(fired));
+
+    input.pollGamepad([fakePad()]);
+    input.pollGamepad([fakePad({ buttons: { 1: 1 } })]);
+    check('B backs out, like Escape', fired[2] === 'back', JSON.stringify(fired));
+    input.pollGamepad([fakePad()]);
+    input.pollGamepad([fakePad({ buttons: { 9: 1 } })]);
+    check('START backs out too', fired[3] === 'back', JSON.stringify(fired));
+
+    // Every interface control maps to a key something is actually bound to.
+    // The M29 rule: a name in content indexing a table in code must resolve,
+    // because the failure mode is a button that silently does nothing.
+    check('every PAD_UI control maps to a key the interface binds',
+      Object.values(PAD_UI).every((k) => input.onPress.has(k)), JSON.stringify(PAD_UI));
+  }
+
+  // 8d. **The ordering that stops the back button binding itself.** B is
+  //     Escape; Escape cancels a listening rebind; the rebind capture reads the
+  //     same flag. So the interface key has to fire *before* the capture, which
+  //     is the order a `keydown` already has. Get it the other way round and
+  //     pressing B on the CONTROLS screen binds B to whatever was listening,
+  //     and the player can no longer back out of anything.
+  {
+    const input = makeInput();
+    let listening = true;
+    const seen = [];
+    input.bind('escape', () => { listening = false; });
+    input.bind('*', (k) => { if (listening) seen.push(k); });
+    input.pollGamepad([fakePad({ buttons: { 1: 1 } })]);
+    check('B cancels the rebind rather than being captured by it',
+      !listening && seen.length === 0, JSON.stringify(seen));
+    check('B is reserved from being taken for a flight control',
+      input.rebind('thrust', 'pad:1') === null);
+    // A is not reserved, because it is SPACE's counterpart and SPACE is a
+    // flight control a player is allowed to move.
+    check('A can still be taken for a flight control', input.rebind('hold', 'pad:0') !== null);
+  }
+
   // 9. Losing focus drops the pad, exactly as it drops the keys. Otherwise a
   //    trigger held while alt-tabbing stays burning.
   {
@@ -656,6 +713,14 @@ function makeInput() {
     check('trigger is live before blur', input.amount('thrust') === 1);
     input._blur();
     check('blur releases the pad too', Object.is(input.amount('thrust'), 0), String(input.amount('thrust')));
+    // And an interface control held across the blur re-fires on the way back,
+    // rather than being stuck down and eating the next real press.
+    let confirms = 0;
+    input.bind(' ', () => confirms++);
+    input.pollGamepad([fakePad({ buttons: { 0: 1 } })]);
+    input._blur();
+    input.pollGamepad([fakePad({ buttons: { 0: 1 } })]);
+    check('an interface control is not stuck down across a blur', confirms === 2, String(confirms));
   }
 }
 

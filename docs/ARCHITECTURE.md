@@ -215,6 +215,20 @@ into `vx`/`vy`. Do not tidy that line.
 `advance`, and a sweep must not change its answer because somebody left a controller plugged into the
 machine running it.
 
+**The pad presses interface keys rather than getting a menu layer.** `PAD_UI` maps A to SPACE and
+B/START to Escape, and `pollGamepad` fires the same `onPress` handler a `keydown` would — so every
+screen, every `input.bind(...)` and every shortcut works with nothing added, and the pad is at
+**exact parity with the keyboard**: driven from the menu, both produce the identical state trail.
+A doubles as the booster the way SPACE does, which is harmless because the SPACE handler has no
+`play` case. There is no d-pad cursor because there is no keyboard cursor either.
+
+**The order inside `pollGamepad` is the mechanism, not tidiness.** The interface keys fire *before*
+the rebinding capture, because B is Escape, Escape cancels a listening rebind by clearing
+`g.rebinding`, and the capture reads that same flag. Reversed, pressing B on the CONTROLS screen
+binds B to whatever was listening and the player can no longer back out of anything. That is the
+order a `keydown` already has, and it is matched deliberately. B is in `RESERVED` for the same reason
+Escape is; A is not, because SPACE is not.
+
 **A pad control is a pseudo-key in the same binding map** — `pad:7` is button 7, `axis:0-` is axis 0
 pushed negative — so `rebind()`, `setBindings()`, the save format and the settings screen never
 learned what a gamepad is. The one rule that had to change: **`rebind()` replaces within a family,
@@ -622,10 +636,10 @@ The MVP is complete and measured (`test/BASELINE.md`, M13 section). What the nex
   left), but sweeping every deposit lands 156/300 and 0/20 on `mars-2` and `europa-4`. Written for a
   900 px traverse, now flown across 2,000–2,600 px with a road and an ore field in between.
 - ~~**Controller support does not exist.**~~ **Built in M30.** The simulation reads a 0..1 magnitude,
-  a gamepad fills it, pad controls are rebindable through the screen that already existed, and the
-  pad hot-plugs. What is **not** built is menu navigation: a pad flies the lander and fires the
-  module, but pausing, confirming and backing out are still keyboard or mouse. START and HOME are
-  reserved against a flight binding so those buttons stay free for it.
+  a gamepad fills it, pad controls are rebindable through the screen that already existed, the pad
+  hot-plugs, and since M30b it works the interface too. What is **still** missing is *list
+  selection*: picking a chapter or a route needs a click. That is not a pad limitation — the keyboard
+  cannot do it either — so closing it means building a selection cursor for both.
 - **Achievements** are deliberately not built. The spec gates them behind stable progression, and
   the statistics they would be built on only started being recorded in M13.
 - **The numbers to tune** live in config objects: `COMBAT` in `enemies.js`, `ABILITY` in

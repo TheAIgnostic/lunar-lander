@@ -37,6 +37,30 @@ export const DEFAULT_KEYS = {
 
 export const ACTIONS = Object.keys(DEFAULT_KEYS);
 
+/**
+ * Pad controls that stand in for an **interface key**.
+ *
+ * The pad does not get a menu layer of its own: it presses the keys the
+ * interface already listens on, so every screen, every `input.bind(...)` and
+ * every shortcut keeps working with nothing added. A is SPACE — the universal
+ * per-screen confirm, which on the keyboard is the same key that fires the
+ * booster and is harmless in flight because that handler has no `play` case.
+ * B and START are Escape, which is back, cancel-a-rebind, and pause.
+ *
+ * **This is parity with the keyboard, not a new navigation system.** There is
+ * no d-pad cursor because there is no keyboard cursor either — the menus are
+ * clickable HTML with one primary action on SPACE, and that is exactly what a
+ * pad can now reach.
+ *
+ * Deliberately *not* in the rebindable map: these are interface controls, the
+ * same way `input.bind('escape')` is independent of `DEFAULT_KEYS`.
+ */
+export const PAD_UI = {
+  'pad:0': ' ',        // A     - confirm
+  'pad:1': 'escape',   // B     - back, and cancel a rebind
+  'pad:9': 'escape',   // START - pause in flight, back out everywhere else
+};
+
 /** Is this binding a gamepad pseudo-key rather than a keyboard key? */
 export function isPadToken(k) {
   return typeof k === 'string' && (k.startsWith('pad:') || k.startsWith('axis:'));
@@ -58,6 +82,7 @@ export const PAD = {
   deadzone: 0.18,      // a stick at rest is never quite centred
   triggerFloor: 0.06,  // nor is a trigger quite released
   saturate: 0.95,      // and it rarely reaches a clean 1.0 at the stop
+  uiPress: 0.5,        // a firm press, for the interface controls in PAD_UI
   curve: 1.5,          // see below - it is where the hover point lands
 };
 
@@ -135,6 +160,7 @@ export class Input {
     this.padIndex = null;   // null = whichever pad answers; set to pin one
     this.padName = null;
     this.padToken = null;   // what the pad is pressing, for the CONTROLS screen
+    this.padUi = {};        // last state of each interface control, for edges
     this.onPress = new Map();   // key -> callback, for one-shot UI actions
     this.onAction = new Map();  // action -> callback, for one-shot bound actions
     this.setBindings(null);
@@ -158,7 +184,7 @@ export class Input {
     // A held trigger must not survive the tab losing focus, for the same reason
     // a held key must not: the browser stops reporting either, and whatever was
     // last seen would stay latched on.
-    window.addEventListener('blur', () => { this.keys.clear(); this.pad = zeroPad(); this.padToken = null; });
+    window.addEventListener('blur', () => { this.keys.clear(); this.pad = zeroPad(); this.padToken = null; this.padUi = {}; });
     // Hot-plug. This is a *label*, not the plumbing: `pollGamepad` asks the
     // browser what is there every frame regardless, because a pad is famously
     // invisible to `getGamepads()` until it has been touched, so a player who
@@ -219,6 +245,20 @@ export class Input {
       }
     }
     this.pad = next;
+    // The interface controls, on a rising edge each. **Before the rebinding
+    // capture below**, and the order is the mechanism rather than a tidiness:
+    // B is Escape, Escape cancels a listening rebind by clearing `g.rebinding`,
+    // and the capture reads that flag - so firing the key first is what stops
+    // the back button binding *itself* to whatever was listening. That is the
+    // order a `keydown` already has, and this matches it deliberately.
+    for (const token of PAD_UI_TOKENS) {
+      const down = gp ? readToken(gp, token) >= PAD.uiPress : false;
+      if (down && !this.padUi[token]) {
+        const cb = this.onPress.get(PAD_UI[token]);
+        if (cb) cb();
+      }
+      this.padUi[token] = down;
+    }
     // And the raw token, for the CONTROLS screen, which listens on '*' exactly
     // as it does for a key. That is what lets a trigger be bound to an action
     // through the rebinding flow that already exists.
@@ -387,7 +427,13 @@ export function amountOf(input, action) {
 const RESERVED = new Set(['escape', 'enter', 'p', 'r', 'm', 'f3', 'f4', 'f5', '`', 'tab',
   // START and HOME on a pad, for the same reason Escape is reserved on a
   // keyboard: they are how a player gets out, on every other game they own.
-  'pad:9', 'pad:16']);
+  'pad:9', 'pad:16',
+  // B is the back button now (see PAD_UI), so it is the interface's for the
+  // same reason Escape is. A is deliberately *not* here: it is SPACE's
+  // counterpart, and SPACE is a flight control you are allowed to move.
+  'pad:1']);
+
+const PAD_UI_TOKENS = Object.keys(PAD_UI);
 
 /** A fresh, all-zero pad reading - one per action, same shape as `amount`. */
 function zeroPad() {

@@ -1033,6 +1033,23 @@ scheduled until the MVP is stable — the spec says the same.
     *ceiling* on how often it worked for a person, not a floor. A human found this before any test
   - the reach is asserted as a **relationship** against `ENEMY_TYPES` now, not a number
 
+- [x] **M30b — the pad can work the interface** (this commit)
+  - Tom: *"space in the menu needs to be bound to a button."* The gap M30 shipped with and named
+  - **A → SPACE, B and START → Escape.** The pad presses the keys the interface already listens on
+    rather than getting a menu layer of its own, so every screen and every `input.bind(...)` works
+    with nothing added. A doubles as the booster exactly as SPACE does, which is harmless because
+    that handler has no `play` case
+  - **parity is the claim and it is measured**: driven from the menu, pad and keyboard produce the
+    identical state trail. Where SPACE backs out of the chapters screen, so does A - because that is
+    what the keyboard does there
+  - **the ordering is the mechanism**: the interface keys fire *before* the rebinding capture,
+    because B is Escape and Escape cancels a listening rebind by clearing the flag the capture reads.
+    Reversed, pressing B on the CONTROLS screen binds B to whatever was listening and the player can
+    never back out again. Mutation-tested
+  - both fixtures unchanged, `settings-tests.js` 167 → **178**
+  - **still open: picking an item from a list needs a click** - and *neither* device can do it, so
+    closing it means a selection cursor for both
+
 ## Decisions (Tom, 2026-08-16)
 
 1. **Gravity** — compressed mapping is the *baseline*, then a per-body hand-tuned offset so each
@@ -1068,12 +1085,12 @@ its own), then the gamepad behind it (stages 2-5). Full measurement in `test/BAS
 
 ### What M30 left open, and the first is a real gap
 
-- **A pad cannot work the menus.** It flies the lander and fires the module; pausing, confirming and
-  backing out are still keyboard or mouse. This is outside the five decided stages and was left out
-  rather than bolted on, because it needs a design call — which button confirms, what moves a
-  selection, whether the d-pad drives the route screen. START and HOME are **reserved** against a
-  flight binding so the buttons are free for it. **This is the thing that would make it feel like
-  controller support rather than an analog throttle.**
+- ~~**A pad cannot work the menus.**~~ **Done in M30b**, at parity with the keyboard: A confirms,
+  B and START go back. What is **still** missing is *list selection* — picking a chapter, a route
+  card or a hangar rung needs a click. **Neither device can do it**, since the keyboard has no cursor
+  either, so closing it means building a selection cursor that serves both: what moves it, how a
+  screen shows what is selected, and whether the d-pad drives the route screen. That is a design call
+  and it is the last thing between this and full controller support.
 - **The curve is reasoned, not tuned.** `PAD.curve` 1.5 is argued from where the hover point lands,
   which is arithmetic; whether it *feels* right is not. Four levers: `curve`, `deadzone`, `saturate`,
   `triggerFloor`.

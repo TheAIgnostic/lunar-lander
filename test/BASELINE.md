@@ -3398,3 +3398,70 @@ Both fixtures unchanged — they fly with enemies off, the M12 rule. The unarmed
 Reproduced at the distances that used to fail: **470 px and 505 px now fire a full 139-frame burst**
 where they were previously silent; 560 px catches the machine partway through as the lander drifts in
 (98 frames); 700 px is still dry, which is the design.
+
+---
+
+## M30b — the pad can work the interface (2026-08-21)
+
+Tom: *"space in the menu needs to be bound to a button."* This is the gap M30 shipped with and named
+— a pad that flies the lander and cannot get past the brief that launches it.
+
+### The pad presses interface keys; it does not get a menu layer
+
+`PAD_UI` maps three controls onto keys the interface already listens on:
+
+| control | key | what it does |
+| --- | --- | --- |
+| **A** | `SPACE` | confirm — the universal per-screen primary action |
+| **B** | `Escape` | back, cancel a listening rebind, pause |
+| **START** | `Escape` | pause in flight, back out everywhere else |
+
+`pollGamepad` fires the same `onPress` handler a `keydown` fires, so every screen, every
+`input.bind(...)` and every shortcut works with nothing added. **A doubles as the booster exactly as
+SPACE does**, which is harmless because that handler has no `play` case — measured: A held for one
+second in flight spends 9.0 fuel and leaves the state at `play`.
+
+Deliberately **not** in the rebindable map, the same way `input.bind('escape')` is independent of
+`DEFAULT_KEYS`. These are the interface's.
+
+### Parity is the claim, and it is measured
+
+Driven from the menu with confirm and back, the pad and the keyboard produce the **identical state
+trail**: `menu -> chapters -> menu -> chapters -> menu`. Where SPACE backs out of the chapters screen,
+so does A — because that is what the *keyboard* does there, not because the pad is limited.
+
+That is the scope on purpose: **parity with the keyboard, not a new navigation system.** There is no
+d-pad cursor because there is no keyboard cursor — the menus are clickable HTML with one primary
+action on SPACE, and that is now what a pad reaches.
+
+### The ordering that stops the back button binding itself
+
+Inside `pollGamepad` the interface keys fire **before** the rebinding capture, and that is the
+mechanism rather than tidiness. B is Escape; Escape cancels a listening rebind by clearing
+`g.rebinding`; the capture reads that same flag. Reversed, pressing B on the CONTROLS screen binds B
+to whatever was listening and **the player can no longer back out of anything**. It is the order a
+`keydown` already has, and it is matched deliberately. B is in `RESERVED` for the same reason Escape
+is; A is not, because SPACE is not.
+
+Mutation-tested, since an ordering nobody asserts is an ordering that gets refactored:
+
+| mutation | failures |
+| --- | ---: |
+| interface keys fire *after* the rebind capture | 1 — B binds itself |
+| no edge detection (fires every poll) | 3 |
+| A no longer mapped to SPACE | 7 |
+
+Also asserted: every `PAD_UI` control maps to a key something is actually bound to — the M29 rule
+about a name in content indexing a table in code, where the failure mode here is a button that
+silently does nothing. And an interface control held across a focus loss re-fires on the way back
+rather than sticking down and eating the next real press.
+
+### What did not move
+
+Both fixtures unchanged. Full suite green. `settings-tests.js` 167 → **178**.
+
+### Still open
+
+**Picking an item from a list needs a click** — a chapter, a route card, a hangar rung. Neither
+device can do it: the keyboard cannot either. Closing it means a selection cursor that serves both,
+which is a design call about what moves the selection and how a screen says what is selected.
