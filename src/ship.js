@@ -218,15 +218,30 @@ export class Ship {
     if (!this.alive || this.landed || this.hull <= 0 || amount <= 0) {
       return { absorbed: 0, damage: 0, hull: this.hull, destroyed: false };
     }
+    // **A raised Ray Shield stops a lethal round, and dies doing it** (Tom's
+    // call, M29h). It shipped blowing straight through, which followed from
+    // "one shot one kill" read literally and made the shield worthless against
+    // the one thing in the game worth raising it for.
+    //
+    // The shield is spent completely rather than debited: a lethal hit is not a
+    // quantity, so there is no sensible amount to subtract. That keeps both
+    // halves true - the round is survivable exactly once per charge, and it is
+    // still the only thing in the game a hull upgrade cannot answer.
+    if (opts.lethal && this.shieldActive && this.shieldHp > 0) {
+      const absorbed = this.shieldHp;
+      this.shieldHp = 0;
+      this.shieldActive = false;
+      this.hitsTaken++;
+      this.hitFlash = 0.45;
+      return { absorbed, damage: 0, hull: this.hull, destroyed: false, shieldBroke: true };
+    }
     // **A lethal hit is a property, not a big number.** The Mast Sniper kills
     // in one shot whatever is fitted, and writing that as `damage: 999` would
     // be a figure that silently stops being true the day a Hull L5 exists -
     // the same class of fault M24 and M28 each found in an assertion. So it is
     // asked for by name and costed here, against whatever is actually in the
     // way: the hull, plus a raised shield if there is one.
-    let left = opts.lethal
-      ? this.hull + (this.shieldActive ? Math.max(0, this.shieldHp) : 0)
-      : amount;
+    let left = opts.lethal ? this.hull : amount;
     let absorbed = 0;
     if (this.shieldActive && this.shieldHp > 0) {
       absorbed = Math.min(this.shieldHp, left);

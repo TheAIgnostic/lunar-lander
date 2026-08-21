@@ -106,9 +106,10 @@ export const ENEMY_TYPES = {
    *
    * The shape of it is the opposite of the casemate. A turret is a thing you
    * fly around; this is a thing you must not be in front of when it finishes
-   * aiming. It cannot be tanked - no hull level survives a hit - so armour is
-   * not the answer and evasion is, which is a genuinely new question to ask a
-   * player who has spent nine bodies learning to soak two shots.
+   * aiming. **No hull level survives a hit**, so armour is not the answer and
+   * evasion is - a genuinely new question to ask a player who has spent nine
+   * bodies learning to soak two shots. The one thing that does answer it is the
+   * Ray Shield, which stops exactly one and burns out doing so.
    *
    * **It is avoidable five ways, and that is what makes lethal fair:**
    *  1. `turnRate` 0.42 - less than half the turret's, so it is slow to bring
@@ -118,6 +119,7 @@ export const ENEMY_TYPES = {
    *  3. losing line of sight during the telegraph cancels the shot outright
    *  4. `minRange` 260 - a big blind spot; getting close is a real answer
    *  5. `ammo` 3 - it runs out, permanently, and shows you how many are left
+   *  6. a raised **Ray Shield** stops one outright and is spent doing it (M29h)
    *
    * ...and `cooldown` 8 s between them, so a mission never sees more than a
    * handful even if it never runs dry.
@@ -182,7 +184,7 @@ export const ENEMY_TYPES = {
     // encoded a number instead of the rule; this is the same trap in content.
     shot: { speed: 950, damage: 100, lethal: true, radius: 4.5, life: 6, drift: 0 },
     reward: 64,
-    counterplay: 'It holds its aim before it fires. Be somewhere else by then, or break its line.',
+    counterplay: 'It holds its aim before it fires. Be somewhere else by then, break its line, or take the shot on a raised shield.',
   },
   'seeker-drone': {
     id: 'seeker-drone',
@@ -808,7 +810,13 @@ export class EnemyField {
       if (ship && Math.hypot(p.x - ship.x, p.y - ship.y) < COMBAT.shipRadius + p.radius) {
         const res = ship.damage(p.damage, 'shot', { lethal: p.lethal });
         this.hitsTaken++;
-        events.push({ kind: 'hit', x: p.x, y: p.y, damage: p.damage, absorbed: res.absorbed, destroyed: res.destroyed });
+        events.push({
+          kind: 'hit', x: p.x, y: p.y, damage: p.damage,
+          absorbed: res.absorbed, destroyed: res.destroyed,
+          // A shield that collapsed stopping a killing shot is worth its own
+          // feedback: it is the loudest thing the module will ever do.
+          shieldBroke: !!res.shieldBroke,
+        });
         this.shots.splice(i, 1);
         continue;
       }

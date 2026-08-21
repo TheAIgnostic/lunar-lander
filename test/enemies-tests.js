@@ -58,6 +58,26 @@ for (const id of ENEMY_IDS) {
       check(`${id}: is lethal on purpose, and pays for it in warning`,
         t.telegraph >= 1.5 && t.ammo > 0 && t.maxPerMission === 1,
         `telegraph ${t.telegraph}s, ammo ${t.ammo}, cap ${t.maxPerMission}`);
+      // **A raised Ray Shield stops it, once** (Tom, M29h). It shipped blowing
+      // straight through - which followed from "one shot one kill" read
+      // literally, and made the shield worthless against the only thing in the
+      // game worth raising it for. Both halves are asserted: it saves you, and
+      // it is spent doing so.
+      const rig = () => { const sh = new Ship(); sh.reset(100, 100, 100); sh.applyLoadout(null); sh.alive = true; return sh; };
+      const bare = rig();
+      bare.damage(t.shot.damage, 'shot', { lethal: true });
+      check(`${id}: kills an unshielded lander outright`, bare.hull === 0);
+
+      const shielded = rig();
+      shielded.shieldActive = true;
+      shielded.shieldHp = ABILITY.shieldPool;
+      const saved = shielded.damage(t.shot.damage, 'shot', { lethal: true });
+      check(`${id}: a raised shield stops it`, !saved.destroyed && shielded.hull === shielded.hullMax,
+        `hull ${shielded.hull}`);
+      check(`${id}: ...and the shield is spent doing it`,
+        !!saved.shieldBroke && shielded.shieldHp === 0 && !shielded.shieldActive);
+      const again = shielded.damage(t.shot.damage, 'shot', { lethal: true });
+      check(`${id}: the next one kills`, again.destroyed && shielded.hull === 0);
       continue;
     }
     const shots = Math.ceil(BASE_HULL / t.shot.damage);

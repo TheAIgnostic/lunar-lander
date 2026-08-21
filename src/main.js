@@ -353,7 +353,17 @@ function combatEffect(e) {
       particles.sparks(e.x, e.y, 5, 0);
       break;
     case 'hit':
-      if (e.absorbed > 0 && e.damage <= 0) {
+      if (e.shieldBroke) {
+        // The shield gave everything to stop a killing shot. Say so - a player
+        // who does not know the round would have ended them has learned
+        // nothing about why they were carrying it.
+        audio.shieldHit();
+        audio.warn('hull');
+        particles.ring(e.x, e.y, 120, 0.5, '#7ef2d0');
+        particles.sparks(e.x, e.y, 18, 0);
+        particles.text(ship.x, ship.y - 44, 'SHIELD BURNED OUT', '#7ef2d0', 17);
+        g.cam.trauma = Math.min(1, g.cam.trauma + 0.5);
+      } else if (e.absorbed > 0 && e.damage <= 0) {
         audio.shieldHit();
         particles.ring(e.x, e.y, 60, 0.25, '#7ef2d0');
       } else {

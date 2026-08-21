@@ -1010,7 +1010,8 @@ system the roadmap still owes, or a question only a person can answer.
 
 **The one deliberately outstanding tuning item**, unchanged since M28: pad width and machine damage
 have not been tuned against the recommended lander, because that is a difficulty change and *is it
-hard or is it unfair?* is still unanswered.
+hard or is it unfair?* was unanswered. **Tom answered it on 2026-08-21 - "balance seems good" -
+which unparks the item without demanding it be acted on.** See "Open with Tom".
 
 **`generateChapter` is deleted** (Tom's call, 2026-08-21). It produced a five-mission survey chapter
 for any body without authored content, and it earned its keep: it is what let the ladder go from
@@ -1040,7 +1041,8 @@ still queued depends on answers only Tom can give.
 
 **The three questions the code cannot answer**, all open since M24 and now more load-bearing:
 
-1. **Is it hard or is it unfair?** 70% unarmed crossings, Mars bottoming out at 0.05 visibility.
+1. ~~**Is it hard or is it unfair?**~~ **Answered 2026-08-21: "balance seems good."** Recorded
+   against 80% unarmed crossings and Mars bottoming out at 0.05 visibility.
 2. **Does the ladder ramp?** M27 measured that the machine count barely moves and moves the *wrong*
    way where it does — every survey body caps at 3 while the authored Moon fields 4 and Mars 5, and
    **Enceladus at position 5 has no eligible enemy sets at all**.
@@ -1291,13 +1293,18 @@ the record, since every one of them is now a number somebody may want to move ag
   single least measurable thing in this project. If CLASSIC still gets away from you the lever is
   `STEERING.classic.idleDamp` (0.90 - lower settles harder) and `spinCap` (0.56 of the original
   183 deg/s cap).
-- **Nothing in M29's content has been flown by a human.** Seven chapters, seven new hazards and 35
-  missions shipped on measurements and screenshots. Two of them — **`falseRadar` and `darkness`** —
-  are provably unmeasurable by this project's instrument, because the autopilot flies on state and
-  cannot see the screen. Ganymede's whole identity is one of them.
-- **Is it hard or is it unfair?** Open since M24. The campaign-wide unarmed crossing reads 80% now
-  against M24's 70%, but that is a wider sample over more turret bodies, not the game getting
-  easier — and it is still a floor measured by a pilot that does not dodge.
+- **Tom playtests continuously** (his words, 2026-08-21), so content does not sit unflown the way
+  this file assumed for most of its history. What remains true is narrower and still worth knowing:
+  **`falseRadar` and `darkness` are unmeasurable by this project's instrument**, because the
+  autopilot flies on state and cannot see the screen. Ganymede's whole identity is one of them, so
+  those two only ever get judged in the hand.
+- **Is it hard or is it unfair?** Open since M24, and **Tom's first direct answer is "balance seems
+  good" (2026-08-21)**, given after M29's content, the steering split and the sniper were all live.
+  That is the answer four parked items were waiting on - pad width, machine damage, the landing bands
+  and the fuel budgets. Read it for what it is: a judgement on the game as it stands, not a licence
+  to start moving those numbers. **Nothing should be retuned without a specific complaint to aim at**,
+  which is the same discipline that kept them parked. The campaign-wide unarmed crossing reads 80%
+  against M24's 70%, but that is a wider sample over more turret bodies, not the game getting easier.
 - **`pluto-4 UNDER THE PLAIN` lands 16/20 on the way home.** In family with the two shipped caves
   (18/20 and 17/20) and unmoved by every knob tried, so it is the single-pad cave geometry against a
   pilot with no terrain lookahead — but it is the weakest new mission and worth watching.
@@ -1307,8 +1314,9 @@ the record, since every one of them is now a number somebody may want to move ag
 - **The landing bands and the fuel budgets** have awaited human data since M13 and M15.
 - **Half of M29a's session was menus** — 13.5 minutes at supply stops against 15.5 flying.
 - **The clicking noise is not confirmed fixed** (open since M16).
-- **God mode is public.** It ships on both live sites as a visible settings button. Gating it behind
-  `?god=1` was offered and not taken; the offer stands.
+- ~~**God mode is public.**~~ **Decided (Tom, 2026-08-21): it stays as it is.** It ships on both live
+  sites as a visible settings button, and that is intended - gating it behind `?god=1` was offered
+  twice and declined twice. Stop offering.
 
 ### Superseded
 
