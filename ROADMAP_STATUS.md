@@ -44,6 +44,11 @@ update looks like it did not land, hard-reload before believing it.
 
 ## Current state (measured, not assumed)
 
+> **This table records the state at M0, before the expansion.** For where the game actually is, read
+> "Progress" below and the M27-M29a sections of `test/BASELINE.md`: it is one game mode, a fixed
+> ten-body ladder, 15 authored missions plus 35 generated ones, and every body has its own palette,
+> material and weather.
+
 | Spec assumption | Reality in this codebase |
 | --- | --- |
 | "approximately 15 levels" | 12 campaign missions (4 worlds x 3) + endless mode |
@@ -998,135 +1003,119 @@ that needs none of the conversation that produced this plan.
 
 ### Handover
 
-*Rewritten 2026-08-21, after the session that ran M27 (the ten-body ladder), god mode and M28.*
+*Rewritten 2026-08-21, after the session that ran **M27, god mode, M28, M28b and M29a** — the
+ten-body ladder, the economy under it, an external review, and Tom's first playtest of the result.*
 
 **The first prompt for a new session:**
 
 > Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then `docs/PROGRESSION.md`, then the M28 and
-> M29a sections of `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything. Then build
-> **M29 — the survey bodies become content**, under "Next task". Four things Tom's playtest left open
-> are listed there and are design calls, not code.
+> M29a sections of `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything. Then pick
+> up "Next task" — **M29, the survey bodies become content** — but read "Open with Tom" first,
+> because four of the things that came out of his playtest are design calls and not code.
 
 That shape matters more than the wording: read the state, then *measure* the state, then build.
 Every milestone here that went well started from a number, and every one that went badly started
-from an assumption. **M27 proved it three more times** — see "the instrument" below.
+from an assumption. This session proved it four more times — see "the instrument" below.
+
+**Where the game is.** `main` is live on two GitHub Pages sites (see "Where it is published") and is
+current as of `059bfcb`. `v2` and `main` are level. The tree is clean, the suite is green, both
+fixtures are byte-identical, and `./macos/build.sh` self-tests clean.
 
 ### Reading order
 
 1. **this file** — what is done, what is next, and the decisions behind both
 2. **`docs/ARCHITECTURE.md`** — what each module owns, which way the imports point, and the
    environment gotchas that have each cost real time at least once
-3. **`docs/PROGRESSION.md`** — the hangar, the skills and the loadout as one system. Its headline
-   blocker (four of five tracks unclimbable) was **cleared by M27**; what remains is the ordering
-   and the payout, which is M28. Read it before touching economy, difficulty or the route. Every
-   figure carries the snippet that reproduces it
-4. **`test/BASELINE.md`**, the **M27** section for the ladder as it stands, and **M24–M26** for how
-   it got here — the lethality change and what it cost, the visibility formula and why the obvious
-   one was wrong, and the terrain shuffle
+3. **`docs/PROGRESSION.md`** — the hangar, the skills and the loadout as one system. Read it before
+   touching economy, difficulty or the route. **Three of its figures were wrong when M28 re-measured
+   them**; they are corrected in place and the header says so. Re-measure it anyway
+4. **`test/BASELINE.md`** — **M29a** for what a human actually found, **M28** for the economy,
+   **M27** for the ladder, **M19/M20** for where the wall is on terrain
 
 Then **measure before editing**: `./test/run-all.sh 20`. It ends with the encounter audit, so one
 command tells you both that the game still works and what a player currently meets in it.
 
 ### What this session did
 
-- **M28** — the economy under the ladder. The floor check found that M13's anti-frustration debrief
-  had not paid out since M24 (banked, then wiped on the next line); the material costs were re-cut
-  for both ordering and *scale*, because every L4 rung wanted more of one material than a single
-  visit can produce; and a recommended tier is printed at the supply stop. **Two of the brief's four
-  items closed as "already true, the record was stale"** — the payout clears the cheapest rung on
-  every profile, and Hull L2 already buys the third shot
-- **god mode** — a test switch in settings: any body startable, bottomless pot, stamped into the
-  playtest log header so a cheated run cannot be read as a normal one
-- **M27** — the ten-body ladder. `PLANET_ORDER` is all ten, difficulty-sorted; no replay; shuttles
-  attrit; the hangar unblocked from four capped tracks (Sensors unbuyable) to **all five reaching
-  L4**. Four faults found on the way, all in the M27 baseline section: a saturating route forecast,
-  a generator producing sub-stance pads at sectors the old ladder never reached, a supply stop
-  printing zeroes at a player holding 2,329 salvage, and `__settleNow` silently bypassing the settle
-- M9's discovery-tier machinery (`TIERS`, `eligibleBodies`, `routeOffers`, `MIN_OFFERS`, `SECTORS`)
-  **deleted** — M27 answered the question that was keeping it alive
+- **M27 — the ten-body ladder.** `PLANET_ORDER` is all ten, difficulty-sorted; no replay; shuttles
+  attrit `+1` capped at 3. The hangar went from four capped tracks (Sensors unbuyable at all) to all
+  five reaching L4, by putting the bodies back on the route rather than repointing a single cost.
+  M9's discovery-tier machinery was deleted — M27 answered the question keeping it alive.
+- **God mode** — a test switch in settings: any body startable, bottomless pot, hangar window held
+  open. Stamped into the playtest log header so a cheated run cannot be read as a normal one.
+- **M28 — the economy.** The floor check it insisted on doing first found that M13's anti-frustration
+  debrief **had not paid out since M24** (banked, then wiped on the next line). Materials were re-cut
+  for ordering *and scale*, because every L4 rung wanted more of one material than a single visit can
+  produce. Two of the brief's four items closed as "already true, the record was stale".
+- **M28b — an external review, checked line by line.** Four of its claims did not survive. The three
+  that did: `resumeExpedition` pinned `g.forcedSeed` so **every run after a resume flew identical
+  terrain**; Mars ran at **double drag** from M6 to now; and abandoning a run was strictly better than
+  losing one, with a farmable floor.
+- **M29a — Tom's playtest, acted on.** Salvage cut to 30% and L3/L4 repriced to ~5 and ~8-9 body
+  clears; **six of ten bodies were wearing another body's name**; radiation given 3x damage, an
+  altitude belt and a drawn edge; Titan's and Venus's storms made to exist at all, plus 3-5 s
+  squalls; a diamond and a real completion screen for clearing all ten.
 
-*The session before this one:*
-
-- **M24** — Tom's own eleven-item list. Two-shot machines, a 0.25 s turret lock, projectiles ×3,
-  visibility ×3, classic and endless gone, no route choice, death keeps the hangar and takes the
-  skills, a NEW GAME reset, and `src/gamelog.js` (the playtest trace Tom pastes into chat)
-- **M25 / M25a / M25b** — the linear ladder, and three economy bugs Tom hit in playtest. The last is
-  the instructive one: M25 opened the hangar at every body but banked the haul when the player
-  *left* the stop, so the shop opened on an empty pot
-- **M26** — authored chapters deal fresh terrain shapes per run: **1 → 24 layouts** per body
-- **`docs/PROGRESSION.md`** — the audit that found the blocker
-- **published** — `main` is live on two GitHub Pages sites; see "Where it is published"
-
-### The instrument, and three ways it has misled a session
+### The instrument, and four ways it has misled a session
 
 - **The autopilot has no evasive logic, no terrain lookahead, and cannot see the screen.** It is
-  still the only measuring instrument. M24 cut unarmed safe-route crossings from 240/240 to 167/240,
-  and that 70% is a **floor** measured by a pilot that does not dodge — not what a person meets. And
-  **no automated test in this project can measure the visibility change at all**, because the pilot
-  flies on state rather than on what is drawn. Both fixtures stayed byte-identical through it.
-- **A document is an instrument too, and this one had drifted.** M28 opened with three figures from
-  `docs/PROGRESSION.md` — the payout is an order of magnitude short, Hull caps where 112 dies in two,
-  Hull L4 gates on Io — and **all three were wrong when re-measured**. Two of them had already sent
-  M27 and M28 briefs off in the wrong direction. The audit was honest when written; the code moved
-  under it. Re-measure the doc before building from it, exactly as you would re-measure the game.
-- **A debug hook reimplemented the rule it was meant to run, and drifted.** `__settleNow` decided
-  the post-landing state itself, against `LEVELS.length` — the twelve *classic* missions — so on an
-  expedition it skipped banking, the blueprint grants and the whole chapter-clear branch. A scripted
-  five-mission Moon run landed all five and reported `cleared=[]`, which reads exactly like a broken
-  ladder. It cost M27 about an hour. Same class as M23's drifted autopilot copy: **a second
-  implementation of a rule, quietly falling behind the first.** Both settles go through
-  `settleAfter` now and the hook runs the pending one rather than imitating it.
-- **A recommendation was made from a guess while the measurement was already recorded.** The
-  ten-body ladder was argued against on the grounds that a run is 50 missions ≈ 60–90 minutes. That
-  is the length of a run that *clears all ten bodies*, the rarest outcome in a permadeath game.
-  Tom's own playtest log had the real figure — **~3 minutes per body**, so a typical run that dies at
-  body 4 is about twelve minutes. Tom was right and the recommendation was wrong. Measure before
-  recommending, not just before editing.
+  still the only automated instrument. The 70% unarmed-crossing figure is a **floor** measured by a
+  pilot that does not dodge, and **no automated test here can measure visibility at all** — which is
+  why M29a's squalls and radiation belt were measured but never flown before shipping.
+- **A document is an instrument too, and it drifts.** M28 opened with three figures from
+  `docs/PROGRESSION.md` and all three were wrong when re-measured; two had already sent briefs off in
+  the wrong direction. Re-measure a doc before building from it.
+- **A debug hook that reimplements a rule will fall behind it.** `__settleNow` decided the
+  post-landing state itself against `LEVELS.length` — the twelve *classic* missions — so a scripted
+  expedition landed five missions and reported `cleared=[]`. Cost about an hour. Same class as M23's
+  drifted autopilot copy. One settle now, held by `settleAfter`.
+- **A recommendation made from a guess, with the measurement already in the log.** The ten-body
+  ladder was argued against at "50 missions a run" — the length of the *rarest* outcome. Tom's own
+  log had ~3 minutes a body. Measure before recommending, not just before editing.
 
-### Four things worth knowing before touching anything
+### Five things worth knowing before touching anything
 
-- **The bundle cannot catch a missing import**, and M24 produced one within an hour of the M23 note
-  saying so: `obscure()` was called in `main.js`, which does not import `forces.js`. `node build.js`
-  passed. The browser caught it. Only real module loading proves imports.
-- **The macOS self-test is the bundling canary and has now caught five.** The newest: `bankHaul`
-  declared in both `economy.js` and `main.js` — the bundle is one scope. Run `./macos/build.sh`
-  before calling any milestone done, and **commit first**, since it can revoke Desktop access.
-- **`mulberry32`'s first output correlates across nearby seeds.** A two-item pool rides entirely on
-  that value, and M26's Europa dealt an identical chapter on every seed until four draws were
-  discarded. Anything reading one or two numbers from a fresh `makeRng` wants a warm-up.
-- **A test can encode a decision rather than a property.** M24 replaced `telegraph >= 0.8` and
-  `shot.speed < 400` — those were M12's *answer*, not its rule. The rule was the reaction window
-  between lock and hit, and it is asserted as that now. If a test blocks a deliberate change, ask
-  which of the two it is before deleting it. **M28 found three more**, one of which had escaped into
-  the documentation: `Math.ceil(150 / damage)` asserted "a hull upgrade buys a third shot" against
-  150, a hull no level produces, and `docs/PROGRESSION.md` built a recommendation on the wrong
-  conclusion. The other two hardcoded a material name and a price that the re-cut moved.
+- **The bundle cannot catch a missing import.** Only real module loading proves imports — `node
+  build.js` passes through them and the browser does not.
+- **The macOS self-test is the bundling canary and has caught five.** Run `./macos/build.sh` before
+  calling a milestone done, and **commit first**, since it can revoke Desktop access to the repo.
+- **`mulberry32`'s first output correlates across nearby seeds.** Anything reading one or two numbers
+  from a fresh `makeRng` wants a warm-up.
+- **A test can encode a decision rather than a property.** M24 found two, M28 found three more — one
+  of which (`Math.ceil(150 / damage)`, against a hull no level produces) had escaped into the
+  documentation and shaped a whole recommendation.
+- **A named hazard is not an implemented one.** `wind`, `glide`, `acid`, `downdraft`, `eruption`,
+  `magnetic` and `falseRadar` are strings with no builder, and `plume` (Enceladus) is spelled against
+  a `plumes` builder so it never even reaches the no-op. Check `BUILDERS` before believing a body has
+  weather.
 
 ### Open with Tom
 
-- **M27 and M28 are done; M29 is planned and not started.** The plan is under "Next task".
-- **The next move is Tom's, not the code's.** Three questions, all open since M24 and all listed
-  under "Next task": is it hard or unfair, does the ladder ramp, is Venus a wall or a brick. God mode
-  exists to make answering them quick.
-- **Two things M27 measured that are Tom's calls, not the code's.** The machine count barely moves
-  down the ladder and moves the wrong way where it does — every survey body caps at 3 while the
-  authored Moon fields 4 and Mars 5 — and **Enceladus, at position 5, has no eligible enemy sets at
-  all**. And Venus, the wall, lands the prize route 36/100 with the geometry sound at 100/100.
-  Whether those are difficulty or defects is a design answer.
-- **The biggest risk in that plan** is that removing replay removed the player's only recovery
-  mechanism. Income is now bounded by how far a run gets, and a player stuck at body 3 cannot grind
-  out of it. M28 must verify that floor *before* tuning anything else.
-- **The landing bands and the fuel budgets still await human playtest data** — recorded as such
-  since M13 and M15, and now more so: M24 changed lethality and visibility, and neither can be
-  measured by the autopilot.
-- **Is it hard or is it unfair?** At 70% unarmed crossings and Mars bottoming out at 0.05 visibility,
-  only Tom can answer. The playtest log exists for exactly this: Settings → COPY TO CLIPBOARD, or
-  `__log()` in the console.
-- **The clicking noise is still not confirmed fixed** (open since M16). Instrumentation found no
-  repeated audio triggers; the change made was to stop `audio.engines` writing 240 automation events
-  a second, which is the likeliest cause rather than a diagnosis.
-- **`europa-3 RADIATION PASS` deep route is 5/20** since M20's ice, measured as the pilot flying into
-  blades for want of terrain lookahead. Worth a human playtest before anything is tuned down.
+**Four design calls, all from his own playtest, all recorded under "Next task" and none of them code:**
+
+1. **Mars is now the easiest body on the ladder**, two milestones after being the hardest — M28b took
+   its double drag off, and his log shows mars-5 flown in 10 seconds with 129 of 138 fuel left. The
+   fix is one authored number; which way is his call.
+2. **The Moon is where runs die.** Both his crashes were on body 1, flown stock *and unarmed* — the
+   weapon blueprint only arrives after a body has shot at you. Bodies 2-4 cost him nothing.
+3. **Tech Cores do nothing.** Earned, banked, pitied, granted by god mode, spent nowhere. Either
+   something gets priced in them or they stop being shown.
+4. **Pluto's "darkness" renders as coloured fog**, because it is implemented as low `visibility` and
+   the renderer draws visibility as dust. It wants to dim, not haze.
+
+**Still open from earlier, and still only answerable by a person:**
+
+- **The six re-skinned bodies and the new weather have never been flown**, only measured. Titan and
+  Venus squalls, the radiation belt, and the ten palettes all shipped on screenshots and numbers.
+- **The landing bands and the fuel budgets** have awaited human data since M13 and M15.
+- **Half of M29a's session was menus** — 13.5 minutes at supply stops against 15.5 flying, including
+  7.7 minutes at one. Worth knowing whether that is deliberation or confusion.
+- **The clicking noise is not confirmed fixed** (open since M16) — the change made was a likely cause
+  rather than a diagnosis.
+- **`europa-3 RADIATION PASS` deep route is 5/20** since M20's ice, and radiation just got three
+  times more dangerous. Worth watching.
+- **God mode is public.** It ships on both live sites as a visible settings button. Gating it behind
+  `?god=1` was offered and not taken; the offer stands.
 
 ### Superseded
 
