@@ -491,7 +491,16 @@ export function screenHTML(s) {
         <h2>SKILLS AND MODULES</h2>
         <div class="stats"><span>RESEARCH DATA</span><b>${formatScore(data)}</b></div>
         <div class="trees">${trees}</div>
-        <div class="setting"><div class="setting-name">ACTIVE MODULE</div><div class="grid comps">${slot(ACTIVE_MODULES, 'active')}</div></div>
+        <div class="setting">
+          <div class="setting-name">ACTIVE MODULE</div>
+          <!-- Tom: "how do you unlock blueprints?" - nothing on this screen said,
+               and a locked tile reading "Blueprint not yet recovered" is a
+               statement of fact rather than an instruction. -->
+          <p class="body">Blueprints are <b>found, not bought</b>. Clearing your first body hands one
+          over, and surviving a mission that shot at you hands over the weapon. They are the one
+          thing a lost expedition never takes back, so what you recover is yours for good.</p>
+          <div class="grid comps">${slot(ACTIVE_MODULES, 'active')}</div>
+        </div>
         <div class="setting"><div class="setting-name">PASSIVE MODULE</div><div class="grid comps">${slot(PASSIVE_MODULES, 'passive')}</div></div>
         <div class="btns">${btn('back', 'DONE', true, 'SPACE')}</div>
       </div>`;
@@ -535,7 +544,10 @@ export function screenHTML(s) {
           </div>
         </div>
         <div class="grid comps">${tabs}</div>
-        <div class="stats"><span>BANKED</span><b>${formatScore(b.salvage)} salvage · ${formatScore(b.data)} data · ${b.cores} cores</b></div>
+        <!-- Salvage and materials only. Research buys skills and Tech Cores buy
+             nothing yet; showing either here invites the question Tom asked -
+             "what do cores do?" - on the one screen that cannot answer it. -->
+        <div class="stats"><span>BANKED</span><b>${formatScore(b.salvage)} salvage</b></div>
         ${mats.length ? `<div class="mats">${mats.map(([m, v]) => `<span>${v} <i>${m}</i></span>`).join('')}</div>` : ''}
         <div class="btns">${btn('back', 'LEAVE HANGAR', true, 'SPACE')}</div>
       </div>`;
@@ -604,19 +616,32 @@ export function screenHTML(s) {
     }
 
     case 'expedition-complete': {
+      // The rarest screen in the game, and until now the plainest. Ten bodies is
+      // 50 missions on three shuttles that never fully refill, so it earns the
+      // trophy, the roll of what was crossed, and a way out that is not a menu
+      // button squeezed between two others.
       const b = meta.banked;
       const sum = g.lastRunSummary || { missions: 0 };
-      return `<div class="screen">
-        <div class="verdict" style="color:#4dff9f;text-shadow:0 0 30px #4dff9f">EXPEDITION COMPLETE</div>
-        <p class="body">All ${PLANET_ORDER.length} bodies, Moon to Venus, and the lander came home.
-        Everything you carried is banked.</p>
+      const roll = PLANET_ORDER.map((id) => {
+        const acc = WORLDS[PLANETS[id].world].accent;
+        return `<li style="--rung:${acc}"><span class="pip">◆</span><span class="rung-name">${PLANETS[id].displayName}</span></li>`;
+      }).join('');
+      return `<div class="screen wide complete">
+        <div class="diamond" aria-hidden="true">◆</div>
+        <div class="verdict" style="color:#9fe8ff;text-shadow:0 0 34px #9fe8ff">EXPEDITION COMPLETE</div>
+        <p class="body">All ${PLANET_ORDER.length} bodies, the Moon to Venus, and the lander came
+        home. Nobody has to do this twice — but the ones who do get another stone.</p>
+        <ol class="ladder roll">${roll}</ol>
         <table class="score">
           <tr><td>Missions flown</td><td>${sum.missions}</td></tr>
+          <tr><td>Bodies cleared</td><td>${sum.bodies || PLANET_ORDER.length} of ${PLANET_ORDER.length}</td></tr>
           <tr><td>Run score</td><td>${formatScore(g.score)}</td></tr>
-          <tr class="tot"><td>BANKED SALVAGE</td><td>${formatScore(b.salvage)}</td></tr>
-          <tr class="run"><td>BANKED RESEARCH</td><td>${formatScore(b.data)}</td></tr>
+          <tr><td>Banked salvage</td><td>${formatScore(b.salvage)}</td></tr>
+          <tr class="tot"><td>DIAMOND RECOVERED</td><td>${'◆'.repeat(Math.min(8, meta.diamonds || 1))} ${meta.diamonds || 1}</td></tr>
         </table>
-        <div class="btns">${btn('chapters', 'NEW EXPEDITION', true, 'SPACE')}${btn('hangar', 'HANGAR')}${btn('menu', 'MENU')}</div>
+        <p class="body dim">A diamond is not spent and not lost. It is the record that you finished,
+        and it is what the ship cosmetics will be cut from.</p>
+        <div class="btns">${btn('menu', 'BACK TO THE START', true, 'SPACE')}</div>
       </div>`;
     }
 

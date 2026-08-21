@@ -31,6 +31,10 @@ export function defaultMeta() {
     // "is god mode on?" has one answer with one owner. See `act('god')`.
     godMode: false,
     banked: { salvage: 0, data: 0, cores: 0, materials: {} },
+    // Awarded for carrying an expedition through all ten bodies, and **kept on
+    // death** like the hangar - it is a trophy, not a resource, and the ship
+    // cosmetics it will buy are a later feature. One per completed expedition.
+    diamonds: 0,
     // The five tracks in `COMPONENT_IDS`, and only those. `power` and `utility`
     // were carried here for years and no component ever used them; an old save
     // keeps whatever it has, because `coerceMeta` merges rather than replaces.
@@ -296,6 +300,7 @@ export function wipeForDeath(meta, { debrief = null } = {}) {
   };
   m.clearedChapters = [];
   m.discoveredPlanets = ['LUNA'];
+  // `diamonds` is deliberately absent: it survives, like the hangar.
   return m;
 }
 

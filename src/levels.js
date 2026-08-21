@@ -1,10 +1,39 @@
 // Mission table. 12 hand-tuned levels across 4 worlds, then a scaling endless mode.
 
+/**
+ * A world is a name and a palette, and **every body on the ladder gets its own**.
+ *
+ * Six of the ten used to borrow: Mercury, Io and Venus pointed at MARS, and
+ * Enceladus, Ganymede and Pluto at EUROPA. `world` drives both the name drawn
+ * over the mission and the whole colour scheme, so more than half the ladder
+ * announced itself as somewhere else - Tom, on a full run: "when I click
+ * Mercury, levels for Mars come", "when I click Pluto, levels for Europa come".
+ * The terrain underneath was always the right body's; the label and the paint
+ * were not.
+ *
+ * The four originals are untouched, because `levels.js` is the M0 physics
+ * baseline and both fixtures regress against it.
+ */
 export const WORLDS = {
   LUNA: { name: 'LUNA', sky: ['#05060c', '#0b1226'], hill: '#141c33', accent: '#5ff5ff', planet: '#1b2647', dustRGB: '120,140,180' },
   MARS: { name: 'MARS', sky: ['#0a0507', '#2a0f14'], hill: '#331520', accent: '#ff8a5f', planet: '#4a1d22', dustRGB: '184,96,54' },
   EUROPA: { name: 'EUROPA', sky: ['#03080e', '#0a2230'], hill: '#0e2b3a', accent: '#7ef2d0', planet: '#124055', dustRGB: '150,190,210' },
   TITAN: { name: 'TITAN', sky: ['#0b0703', '#2e1c05'], hill: '#3a2708', accent: '#ffd166', planet: '#5a3d0d', dustRGB: '190,150,70' },
+
+  // Sulphur and frozen nitrogen, pale gold on near-black - a small bright world
+  // with the plumes going up behind you.
+  ENCELADUS: { name: 'ENCELADUS', sky: ['#04070c', '#0d1a2b'], hill: '#16283d', accent: '#a8e8ff', planet: '#1d3a55', dustRGB: '190,225,245' },
+  // Rust and iron, dark and magnetic. Warmer than Europa, colder than Mars.
+  GANYMEDE: { name: 'GANYMEDE', sky: ['#06070a', '#1c1a24', ], hill: '#2b2733', accent: '#c9b6ff', planet: '#3a3346', dustRGB: '170,160,190' },
+  // Sulphur yellow over basalt: the loudest palette in the game, for the
+  // loudest body.
+  IO: { name: 'IO', sky: ['#0a0803', '#2e2606'], hill: '#3d3208', accent: '#ffe14d', planet: '#5c4a0c', dustRGB: '220,200,90' },
+  // Iron and slag, scorched grey-white under a hard sun.
+  MERCURY: { name: 'MERCURY', sky: ['#08070a', '#241f1c'], hill: '#332c26', accent: '#ffb38a', planet: '#4a3f34', dustRGB: '200,180,160' },
+  // Tholin: the real Pluto is red-brown, not blue. Dark, with a cold sky.
+  PLUTO: { name: 'PLUTO', sky: ['#07050a', '#211525'], hill: '#2e1f2e', accent: '#ff9ecb', planet: '#402c3d', dustRGB: '210,170,190' },
+  // Sulphuric acid haze: sickly yellow-green, the densest air on the ladder.
+  VENUS: { name: 'VENUS', sky: ['#0a0903', '#2f2a08'], hill: '#3d3512', accent: '#e8ff70', planet: '#584c14', dustRGB: '220,215,120' },
 };
 
 const base = {

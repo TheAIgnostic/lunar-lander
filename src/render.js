@@ -706,6 +706,64 @@ export function drawDust(ctx, W, H, level, visibility, time, focus = null) {
   ctx.restore();
 }
 
+/**
+ * The radiation belt, drawn where it actually is.
+ *
+ * Tom: *"radiation ... is not visible on the screen (radiation should only be in
+ * high altitude - around half of the top screen)"*. Both halves of that are the
+ * same complaint - a hazard whose only expression is a rising gauge cannot be
+ * learned, because nothing on screen tells you where it starts or which way to
+ * go. So the belt is a band with a **visible lower edge**: cross it downward and
+ * the sweep stops.
+ *
+ * It draws only while a sweep is running, and it fades with the sweep's own
+ * envelope, so the sky is clear between fronts and the warning arrives before
+ * the damage does.
+ */
+export function drawRadiation(ctx, cam, W, H, terrain, ship, time) {
+  const env = ship.env;
+  if (!env || !(env.radiationSweep > 0.02) || !env.radiationBand) return;
+  const s = env.radiationSweep;
+  ctx.save();
+  // The edge follows the ground, because the belt is an altitude above terrain
+  // rather than a line on the screen: over a ridge it rides up with the ridge.
+  const step = 24;
+  const edge = [];
+  for (let sx = 0; sx <= W; sx += step) {
+    const wx = cam.x + (sx - W / 2) / cam.scale;
+    edge.push([sx, (terrain.heightAt(wx) - env.radiationBand - cam.y) * cam.scale + H / 2]);
+  }
+  // The gradient is anchored on the **edge**, not on the top of the screen. Draw
+  // it from the screen top and the boundary is the faintest part of it - and the
+  // boundary is the only thing the player needs to see, because crossing it
+  // downward is the whole counterplay. It also has to read when the edge is off
+  // the bottom of the view, which is exactly when you are deepest in the belt.
+  const avgY = edge.reduce((a, [, y]) => a + y, 0) / edge.length;
+  const grd = ctx.createLinearGradient(0, avgY - 340, 0, avgY);
+  grd.addColorStop(0, `rgba(158,255,140,${0.07 * s})`);
+  grd.addColorStop(0.72, `rgba(158,255,140,${0.16 * s})`);
+  grd.addColorStop(1, `rgba(158,255,140,${0.30 * s})`);
+  ctx.beginPath();
+  ctx.moveTo(W, -H);
+  ctx.lineTo(0, -H);
+  for (const [x, y] of edge) ctx.lineTo(x, y);
+  ctx.closePath();
+  ctx.fillStyle = grd;
+  ctx.fill();
+  // The edge itself, which is the line the player is actually flying against.
+  ctx.beginPath();
+  edge.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+  ctx.strokeStyle = `rgba(158,255,140,${0.4 + 0.5 * s})`;
+  ctx.lineWidth = 2;
+  ctx.shadowColor = 'rgba(158,255,140,0.7)';
+  ctx.shadowBlur = 12;
+  ctx.setLineDash([14, 10]);
+  ctx.lineDashOffset = -time * 26;
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
 /** Pad markers only, drawn above the dust so the target never disappears. */
 export function drawPadBeacons(ctx, cam, W, H, terrain, level, time, strength, opts = {}) {
   if (strength <= 0.02) return;

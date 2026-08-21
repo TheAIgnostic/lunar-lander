@@ -782,6 +782,36 @@ scheduled until the MVP is stable — the spec says the same.
   - Tech Cores having no sink is real and **left alone** - pricing something in cores is a design call
 
 
+- [x] **M29a — Tom's playtest, acted on** (this commit)
+  - the first human run since M24 and the first ever on the ten-body ladder: four bodies, 23
+    attempts, 20 landings, 2 crashes, ~29 minutes. Both crashes on the **Moon**, body 1, flown stock
+    and unarmed - bodies 2-4 cost nothing at all
+  - **the payout was 3-4x what M28 modelled** (850/1496/1353/580 banked, average 1,070 against a
+    modelled 300-711) because the model counted neither the kill bonus nor ore carried home. Tom's
+    call: 70% less salvage, and L3/L4 should cost at least five good body clears. Both shipped -
+    `SALVAGE_SCALE = 0.3` applied **once**, where every source has been summed, and L3/L4 repriced to
+    ~5 and ~8-9 clears. Materials untouched, per his note. The M28 income floor still holds
+  - **six of ten bodies wore another body's name.** `world` picks a palette and the palette carries
+    the name: Mercury/Io/Venus announced themselves as MARS, Enceladus/Ganymede/Pluto as EUROPA -
+    exactly what he reported. All six have their own world and accent; Enceladus, Ganymede and Pluto
+    also stop generating rock, which is the "enceladus looks like the moon" half
+  - **radiation had no shape.** x3 damage, gated to an altitude belt (nothing below 420 px, full
+    above 580), and **drawn** - a glow and a moving dashed edge following the terrain, anchored on
+    the boundary because the boundary is the only part the player needs
+  - **Titan's sandstorm did not exist.** Its hazards were `['wind','glide']` and Venus's
+    `['drag','acid','downdraft']`, and not one of those five has a builder. Both storm now, and dust
+    gained **squalls**: 3-5 s near-zero phases, deterministic from a hashed time slot because a force
+    may not call `Math.random()`, salted per mission. First tuning was wrong and the measurement
+    caught it - a 0.3 front floor is already at the v³ clamp, so the front *was* the blackout
+  - the hangar shows salvage only; the loadout explains where blueprints come from; clearing all ten
+    bodies awards a **diamond**, kept on death, with a completion screen worth the rarest event in
+    the game
+  - **both fixtures byte-identical** - all of it is economy or presentation
+  - **left for Tom:** Mars is now the *easiest* body two milestones after being the hardest; the Moon
+    is where runs die because it is flown unarmed; Pluto's "darkness" renders as coloured fog because
+    it is implemented as low visibility; and cores still do nothing
+
+
 ## Decisions (Tom, 2026-08-16)
 
 1. **Gravity** — compressed mapping is the *baseline*, then a per-body hand-tuned offset so each
@@ -799,7 +829,27 @@ None.
 
 ## Next task
 
-**A human playtest, then M29.** M27 built the ladder and M28 made the economy under it work; both
+**M29 — the survey bodies become content.** The playtest happened (M29a) and its mechanical findings
+are all fixed; what is left on the seven survey bodies is *writing*: 35 missions sharing five names
+and five briefs, 35 with `optionalObjective: null`, no set pieces, and the hollow hazards below.
+
+**Four things that playtest left open, all design calls rather than code:**
+
+1. **Mars is now the easiest body on the ladder**, two milestones after being the hardest — M28b took
+   its double drag off and M29a's log is what that looks like in the hand. One authored number.
+2. **The Moon is where runs die**, because it is flown stock *and unarmed* — the weapon blueprint only
+   arrives after a body has shot at you. Both of Tom's crashes were there.
+3. **Cores do nothing.** Earned, banked, pitied, granted by god mode, spent nowhere.
+4. **Pluto's "darkness" renders as coloured fog**, because it is low `visibility` and the renderer
+   draws visibility as dust. It wants to dim, not haze.
+
+Known-hollow hazards, for whoever authors these bodies: `acid`, `downdraft` (Venus), `eruption` (Io),
+`magnetic`, `falseRadar` (Ganymede), `glide` (Titan), `wind` as a bare string. **And `plume`
+(Enceladus) is spelled against a `plumes` builder**, so authoring vents alone will not switch it on.
+
+*(Superseded — the three questions this section used to hold are answered in the M29a baseline.)*
+
+**The playtest that was:** M27 built the ladder and M28 made the economy under it work; both
 were built and measured by an autopilot that does not dodge and cannot see the screen, and everything
 still queued depends on answers only Tom can give.
 
@@ -952,10 +1002,10 @@ that needs none of the conversation that produced this plan.
 
 **The first prompt for a new session:**
 
-> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then `docs/PROGRESSION.md`, then the M27 and
-> M28 sections of `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything. Then ask
-> Tom for the playtest answers under "Next task" — three questions no test here can answer — and
-> build **M29** once they are in.
+> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then `docs/PROGRESSION.md`, then the M28 and
+> M29a sections of `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything. Then build
+> **M29 — the survey bodies become content**, under "Next task". Four things Tom's playtest left open
+> are listed there and are design calls, not code.
 
 That shape matters more than the wording: read the state, then *measure* the state, then build.
 Every milestone here that went well started from a number, and every one that went badly started

@@ -96,6 +96,28 @@ export function freshHaul() {
  */
 export const SALVAGE_BASE = 0.65;
 
+/**
+ * The whole salvage economy, scaled in one place.
+ *
+ * Tom, after the 2026-08-21 full run: *"Receive 70% less salvage, the hangar
+ * upgrades seem too cheap (materials seem fine but on the salvage side)"*. His
+ * four banked figures were 850 / 1496 / 1353 / 580, averaging **1,070 a body**,
+ * against a cheapest rung of 260 - so a single body clear bought three or four
+ * upgrades and the permanent track had no weight at all.
+ *
+ * It is applied at the point every source has been summed - the computed
+ * mission pay, the ore carried home, the kill bonus and the objective - rather
+ * than to any one of them, because four separate multipliers are four things to
+ * forget. `scaleSalvage` is the funnel and `missionReward` does not apply it:
+ * the caller assembles the total first.
+ */
+export const SALVAGE_SCALE = 0.3;
+
+/** Apply the economy-wide salvage scale. */
+export function scaleSalvage(n) {
+  return Math.round((n || 0) * SALVAGE_SCALE);
+}
+
 export function missionReward({
   grade, padMultiplier, fuelLeft, maxFuel, rareMaterial, firstClear, offPad,
   coreDrought = 0, padTier = 0, carried = null,

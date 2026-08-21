@@ -36,8 +36,24 @@ const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 export const RADIATION = {
   bite: 55,             // exposure % at which it stops warning and starts biting
-  hullPerSecond: 2.5,   // hull per second at full exposure, unsheltered
+  // Hull per second at full exposure, unsheltered. Tripled on Tom's note
+  // (2026-08-21): at 2.5 the sweep was survivable by ignoring it, which made
+  // the terrain shadow and the Ray Shield both optional.
+  hullPerSecond: 7.5,
   floor: 0.45,          // it will never take you below this fraction of the hull
+  /**
+   * **Radiation lives in the sky.** Above this many pixels of altitude the sweep
+   * reaches you; below it you are under the belt and it decays.
+   *
+   * Tom asked for it "only in high altitude - around half of the top screen",
+   * and that turns the hazard into a *descent* problem: the sweep prices
+   * loitering on the way in, and getting low is the answer. It also gives the
+   * thing a shape a player can see, which is the other half of the same note -
+   * a hazard that is only a gauge is a hazard nobody can learn.
+   */
+  minAltitude: 420,
+  /** How far above `minAltitude` the sweep reaches full strength. */
+  falloff: 160,
 };
 
 /** Status channels a hazard can raise. */
@@ -106,7 +122,7 @@ export function worstVisibility(level) {
 
 /** Environment readings a force can write and the renderer/HUD can read. */
 export function freshEnv() {
-  return { visibility: 1, dust: 0, radiationSweep: 0, shielded: false };
+  return { visibility: 1, dust: 0, radiationSweep: 0, radiationBand: 0, radiationReach: 0, shielded: false };
 }
 
 /**
@@ -199,19 +215,77 @@ function plumes(cfg) {
  * as a passing front (long period, shallow floor) or a storm that must be
  * waited out (short period, deep floor). Deterministic in t.
  */
+/**
+ * A deterministic hash of an integer into 0..1. Forces must be pure functions of
+ * `(ship, level, t)` - that is what makes the same seed reproduce the same
+ * flight - so a "random" squall cannot call `Math.random()`. It hashes the time
+ * slot instead: unpredictable to the player, identical on every replay.
+ */
+function hash01(n) {
+  let h = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+
+/** Stable per-mission salt, so two missions do not storm in lockstep. */
+function saltOf(level) {
+  let h = 2166136261;
+  for (const ch of String((level && (level.missionId || level.id)) || '')) {
+    h ^= ch.charCodeAt(0);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/**
+ * Airborne dust: a slow front that comes and goes, plus **squalls**.
+ *
+ * The slow front is readable by design - you can see it coming and wait it out.
+ * Tom, after the full run: *"there should be random phases with close to zero
+ * visibility for 3-5 seconds"*. That is a different thing and it is the one that
+ * makes weather frightening: a front you can plan around, and inside it a squall
+ * you cannot. It lands on the floor `obscure` already enforces, so the pad
+ * beacons and the ore still draw - blind, but never a coin toss.
+ *
+ * One squall is rolled per `squallSlot` seconds and most slots come up empty, so
+ * they arrive irregularly rather than on a beat the player can count.
+ */
 function dust(cfg) {
   const period = cfg.period || 14;
   const offset = cfg.offset || 0;
   const floor = cfg.minVisibility != null ? cfg.minVisibility : 0.35;
   const duty = cfg.duty != null ? cfg.duty : 0.45;   // fraction of the cycle obscured
+  const squallSlot = cfg.squallSlot || 9;            // seconds per roll
+  const squallChance = cfg.squallChance != null ? cfg.squallChance : 0.3;
+  const squallFloor = cfg.squallFloor != null ? cfg.squallFloor : 0.06;
+  const salt = saltOf(cfg);
   return {
     id: 'dust',
     apply(ship, level, t) {
       const phase = ((t / period) + offset) % 1;
       // smooth in and out so the player can read the front coming
       const inStorm = phase < duty ? Math.sin((phase / duty) * Math.PI) : 0;
-      ship.env.visibility = obscure(1 - (1 - floor) * inStorm);
-      ship.env.dust = inStorm;
+
+      // The squall. One roll per slot; when it hits, it runs 3-5 s somewhere
+      // inside that slot, ramping in and out over about half a second so it
+      // reads as weather arriving rather than as a light switch.
+      const slot = Math.floor(t / squallSlot);
+      let squall = 0;
+      if (hash01(slot ^ salt) < squallChance) {
+        // Nominal 3.5-6 s. The ramp in and out costs about half a second at
+        // each end, so the *fully blind* stretch lands on the 3-5 s Tom asked
+        // for rather than the envelope being 3-5 s and the blackout shorter.
+        const dur = 3.5 + hash01((slot * 7 + 1) ^ salt) * 2.5;
+        const start = hash01((slot * 13 + 5) ^ salt) * Math.max(0, squallSlot - dur);
+        const u = (t - slot * squallSlot - start) / dur;
+        if (u >= 0 && u <= 1) squall = Math.min(1, Math.min(u, 1 - u) * 8);
+      }
+
+      const front = 1 - (1 - floor) * inStorm;
+      ship.env.visibility = obscure(Math.min(front, 1 - (1 - squallFloor) * squall));
+      ship.env.dust = Math.max(inStorm, squall);
     },
   };
 }
@@ -262,8 +336,16 @@ function radiation(cfg) {
     id: 'radiation',
     apply(ship, level, t, dt, terrain) {
       const phase = (t / period + (cfg.offset || 0)) % 1;
-      const active = phase < duty;
-      ship.env.radiationSweep = active ? 1 - Math.abs(phase / duty - 0.5) * 2 : 0;
+      // How far up the lander is. The belt is an altitude band, so this decides
+      // whether the sweep reaches at all - and it is published on `env` so the
+      // renderer can draw the edge of it rather than leaving the player to
+      // infer a boundary from a gauge.
+      const alt = terrain ? terrain.heightAt(ship.x) - ship.y : RADIATION.minAltitude + RADIATION.falloff;
+      const reach = clamp01((alt - RADIATION.minAltitude) / RADIATION.falloff);
+      const active = phase < duty && reach > 0;
+      ship.env.radiationSweep = phase < duty ? 1 - Math.abs(phase / duty - 0.5) * 2 : 0;
+      ship.env.radiationBand = RADIATION.minAltitude;
+      ship.env.radiationReach = reach;
       if (!active) {
         ship.statusLevels.radiation = Math.max(0, ship.statusLevels.radiation - rate * 0.5 * dt);
         ship.env.shielded = false;
@@ -277,7 +359,9 @@ function radiation(cfg) {
       }
       ship.env.shielded = shielded;
       const res = hazardScale(ship, 'radiation');
-      const take = (shielded ? rate * 0.15 : rate) * res;
+      // Two shelters, and they answer different questions: a ridge shadows you
+      // where you are, and altitude takes you out of the belt entirely.
+      const take = (shielded ? rate * 0.15 : rate) * res * reach;
       const before = ship.statusLevels.radiation;
       ship.statusLevels.radiation = Math.min(100, before + take * dt);
 

@@ -19,7 +19,7 @@ Everything under `src/` is a plain ES module, loaded directly in the browser and
 | `src/archetypes.js` | 7 macro silhouettes and their landing-zone anchors | M2 |
 | `src/spawn.js` | the starting position and momentum rule (the terrain owns the entry since M14) | M3/M14 |
 | `src/validate.js` | structural mission checks: spawn clearance, approach corridors, delta-v bound | M3 |
-| `src/planets.js` | 10 PlanetDefinitions, the gravity mapping, and what the ground is made of | M4/M5/M20 |
+| `src/planets.js` | 10 PlanetDefinitions, the gravity mapping, and what the ground is made of | M4/M5/M20/M29a |
 | `src/planeticons.js` | one icon per body, for the route screen | M17 |
 | `src/missions.js` | authored Moon/Mars/Europa chapters, survey-chapter generator, `chapterFor` | M4-M9 |
 | `src/forces.js` | force/status interface: atmosphere, dust, wind channels, thermal, cryo, plumes, radiation | M5-M7/M28b |
@@ -68,6 +68,30 @@ gun stands on the roof. Terrain still does not know what a turret is — it prod
 geometry and records it, and `placeEnemies` chooses among what it finds. A roof is derived from the
 *highest* ground under the whole footprint, never the height at its centre, or the high end of a
 slope stands proud through it.
+
+**A body's `world` is its identity, not a palette it borrows.** `world` picks the sky, the hills, the
+accent and the dust colour — and the **name drawn over the mission**. Six of the ten used to point at
+another body's: Mercury, Io and Venus announced themselves as MARS, and Enceladus, Ganymede and Pluto
+as EUROPA, which is what Tom found on the first full run of the ladder. The terrain underneath was
+always the right body's. `route-tests.js` asserts that no two bodies share a world or an accent and
+that none draws a name belonging to a different body — deliberately *not* "the world name equals the
+display name", because the Moon is THE MOON on a world called LUNA.
+
+**Ice and friction travel together.** `terrainStyle: 'ice'` makes the ground look frozen and
+`surfaceFriction` makes it behave that way; setting one without the other gives either a texture with
+no consequence or a surprise with no warning. Asserted.
+
+**A force may not call `Math.random()`.** Forces are pure functions of `(ship, level, t)` and that is
+what makes a seed reproduce a flight. The dust squall needs to feel random anyway, so it hashes the
+time slot — unpredictable to the player, identical on replay, salted per mission so two missions do
+not storm in lockstep. Anything else that wants "occasionally, unpredictably" wants the same trick.
+
+**A hazard that is only a gauge cannot be learned.** Radiation raised a number and drew nothing, so
+there was no way to know where it was or which way to go; it is an altitude belt with a drawn edge
+now. The general rule: if a hazard has a boundary, draw the boundary. And check a named hazard has a
+builder before believing it does anything — `wind`, `glide`, `acid`, `downdraft`, `eruption`,
+`magnetic` and `falseRadar` are all strings with nothing behind them, and `plume` (Enceladus) is
+spelled against a `plumes` builder, so it never even reaches the no-op.
 
 **The rule that holds accessibility honest:** every accessibility setting changes *presentation*
 only — shake, flashing, instrument size, contrast and key bindings never reach the simulation.

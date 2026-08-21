@@ -320,6 +320,27 @@ console.log('save, migration and recovery');
     wipeForDeath(defaultMeta(), { debrief: rich.debrief }).banked.salvage === 0);
 }
 
+// --- the diamond
+//
+// Awarded for carrying an expedition through all ten bodies. It is a trophy
+// rather than a resource: nothing spends it, and unlike every banked resource it
+// survives a death, because the thing it records already happened.
+{
+  check('a new save has no diamonds', defaultMeta().diamonds === 0);
+  const earned = { ...defaultMeta(), diamonds: 2, banked: { salvage: 900, data: 90, cores: 3, materials: { X: 5 } } };
+  const dead = wipeForDeath(earned);
+  check('death does not take the diamonds', dead.diamonds === 2, String(dead.diamonds));
+  check('death still takes everything else', dead.banked.salvage === 0 && dead.banked.cores === 0);
+  const s = mkStore();
+  saveMeta(earned, s);
+  check('diamonds survive a save and reload', loadMeta(s).meta.diamonds === 2);
+  check('NEW GAME clears them', resetAll(earned, mkStore()).diamonds === 0);
+  const legacy = { ...defaultMeta() };
+  delete legacy.diamonds;
+  check('a save from before they existed loads at zero',
+    loadMeta(mkStore({ [KEYS.meta]: JSON.stringify(legacy) })).meta.diamonds === 0);
+}
+
 // --- god mode is a test switch, and must behave like one
 //
 // It lives in the save so it survives a reload - which is exactly why it has to

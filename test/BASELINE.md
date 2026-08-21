@@ -2260,3 +2260,151 @@ of climbing.
 
 The **physics fixture**, every non-Mars mission in the flight fixture, the sanctuary guarantee
 (20/20 everywhere) and the campaign crossing figure (167/240).
+
+---
+
+## M29a — Tom's playtest, acted on (2026-08-21)
+
+The first human run since M24, and the first ever on the ten-body ladder: four bodies cleared in one
+sitting, 23 attempts, 20 landings, 2 crashes, ~29 minutes. Everything below comes from that log or
+from the notes he wrote against it.
+
+### What the log said before he did
+
+Read on its own, the trace already carried three findings:
+
+| | Moon | Europa | Titan | Mars |
+| --- | ---: | ---: | ---: | ---: |
+| flight time | 283 s | 247 s | 214 s | **120 s** |
+| crashes | **2** | 0 | 0 | 0 |
+| banked salvage | 850 | 1496 | 1353 | 580 |
+
+- **The ramp is inverted in the hand.** Both crashes are on the Moon, body 1, flown stock and
+  *unarmed* — the weapon blueprint only arrives after a body has shot at you. Bodies 2, 3 and 4 cost
+  nothing at all.
+- **Mars took two minutes.** mars-5 was flown in **10 seconds**, landing with 129 of 138 fuel. That is
+  the body M28b just took off double drag, and it is now the fastest on the ladder.
+- **Half the session was menus.** The four supply stops took 65 s, 272 s, 461 s and 14 s — 13.5
+  minutes against 15.5 minutes of flying.
+
+### The payout was three to four times what M28 modelled
+
+M28 modelled a body clear at 300–711 salvage. Tom banked **850 / 1496 / 1353 / 580**, averaging
+1,070, because the model counted neither the kill bonus (34 a machine, and he killed 14) nor ore
+carried home. Against a cheapest rung of 260, one body clear bought three or four upgrades.
+
+His call: *"Receive 70% less salvage ... a level 3-4 upgrade should cost at least 5 good body runs in
+one expedition (since these upgrades are permanent)"*. Both halves shipped.
+
+**`SALVAGE_SCALE = 0.3`, applied once**, at the point every source has been summed — computed pay,
+ore carried home, kill bonus, objective. Four separate multipliers would have been four things to
+forget, and the results screen reads the same figure that is banked.
+
+| | before | after |
+| --- | ---: | ---: |
+| a good body clear | ~1,070 | **~321** |
+| L2 rung | 260–340 | unchanged — **~1 body clear** |
+| L3 rung | 640–800 | **1,650–1,750 · ~5 clears** |
+| L4 rung | 1,400–1,700 | **2,500–3,050 · ~8–9 clears** |
+
+Materials are untouched, per *"materials seem fine but on the salvage side"*. The M28 floor still
+holds — a run that dies at body 1 still buys one upgrade, at body 5 five, at body 10 six — so the
+tail got much longer without the loop deadlocking.
+
+### Six of the ten bodies were wearing another body's name
+
+This was the sharpest thing in the notes, and it is one field. `PlanetDefinition.world` picks a
+palette, and the palette carries **the name drawn over the mission**:
+
+| body | announced itself as |
+| --- | --- |
+| Mercury, Io, Venus | **MARS** |
+| Enceladus, Ganymede, Pluto | **EUROPA** |
+
+Which is exactly what he reported — *"when I click mercury, levels for mars come"*, *"when I click
+Pluto, levels for Europa come with visibility in light blue"*. The terrain underneath was always the
+right body's; the label and the paint were not. All six have their own world and accent now, and
+`route-tests.js` asserts no two bodies share either, and that **no body draws a name belonging to a
+different body** — not "the world name equals the display name", because the Moon is deliberately
+THE MOON on a world called LUNA.
+
+**And Enceladus "looks like the moon"** was the second half of the same note: it, Ganymede and Pluto
+are ice bodies that generated rock, flagged in `docs/ARCHITECTURE.md` since M20. They carry
+`terrainStyle: 'ice'` now, with friction to match — Ganymede 0.5, Pluto 0.25, against Europa's 0.07 —
+because ice that is not slippery is a texture rather than a hazard.
+
+### Radiation had no shape, so it could not be learned
+
+*"Radiation does 3x more damage and is not visible on the screen (radiation should only be in high
+altitude — around half of the top screen)"*. Three asks, one cause: the only expression of the hazard
+was a rising gauge, so nothing on screen said where it was or which way to go.
+
+- **Damage ×3**: `hullPerSecond` 2.5 → **7.5**. At 2.5 it was survivable by ignoring it, which made
+  both the terrain shadow and the Ray Shield optional.
+- **It lives in the sky**: exposure only accrues above `minAltitude` 420 px, ramping to full over 160
+  px. Measured, parked for 30 s: at 200/380/460 px altitude, 0% exposure and full hull; at 600 px and
+  above, 51% and 100 → **84.1 hull**. Getting low is now the answer, which makes the sweep a descent
+  problem rather than a number.
+- **It is drawn**: `drawRadiation` puts a glow and a moving dashed edge at the belt's lower boundary,
+  following the terrain contour, fading with the sweep's own envelope. The gradient is anchored on
+  the *edge* rather than the top of the screen — draw it from the top and the boundary is the
+  faintest part of it, and the boundary is the only thing the player needs.
+
+The `RADIATION.floor` still stands: it softens you, it never finishes you.
+
+### Titan had a sandstorm in its flavour text and none in its physics
+
+*"Visibility is still too high on planets like on titan with sandstorm / wind."* Titan's hazards were
+`['wind', 'glide']` and Venus's `['drag', 'acid', 'downdraft']` — **not one of those five has a
+builder**, so both bodies flew at a flat planet visibility with nothing moving. Both have a real dust
+front now.
+
+And the second half: *"there should be random phases with close to zero visibility for 3-5 seconds"*.
+The slow front is readable by design — you can watch it coming and wait it out — so the squall is a
+separate mechanic layered on it. One roll per 9 s slot, most slots empty, 3.5–6 s nominal with a
+half-second ramp at each end so the fully blind stretch lands on 3–5 s.
+
+It cannot use `Math.random()`: forces are pure functions of `(ship, level, t)`, which is what makes a
+seed reproduce a flight. It hashes the time slot instead — unpredictable to the player, identical on
+every replay, and salted per mission so two missions do not squall in lockstep. All asserted.
+
+| | blackouts / 180 s | length | blind |
+| --- | ---: | --- | ---: |
+| Titan | 3 | 3.1 / 3.4 / 5.0 s | 6% |
+| Venus | 5 | 3.0–4.3 s | 10% |
+
+**The first tuning was wrong and the measurement caught it**: Titan's front floor was set to 0.3, and
+`obscure` (v³) takes that to the 0.05 clamp — so the front *was* a blackout and the squall added
+nothing, at 43% blind. The front is a haze you can fly in (0.62) and the squall is the blackout.
+
+### Smaller notes
+
+- **The hangar shows salvage only.** *"Remove the display number for data"* — and cores went with it,
+  because they are the other thing that screen cannot spend, and showing them is what invites the
+  next question.
+- **"How do you unlock blueprints?"** Nothing said. The loadout screen now does: found, not bought —
+  clearing your first body hands one over, surviving a mission that shot at you hands over the
+  weapon, and a lost expedition never takes them back.
+- **"What do cores do?"** Nothing, still. Verified again: no component, skill or module costs one.
+  Left as a design decision rather than invented.
+- **Clearing all ten bodies awards a diamond.** Kept on death like the hangar, spent on nothing by
+  design — the hook for the ship cosmetics Tom wants later. The completion screen was the plainest in
+  the game for the rarest event in it; it has the stone, the ten bodies rolled out in their own
+  colours, and one way out.
+
+### What did not move
+
+**Both fixtures byte-identical.** The salvage scale, the palettes, the belt and the squalls are all
+either presentation or economy; the flight model is untouched. Every mission family still validates
+and every armed mission still keeps its sanctuary.
+
+### Left for Tom
+
+- **Mars is now the easiest body on the ladder**, two milestones after being the hardest. M28b took
+  the double drag off and this log is what that looks like in the hand. The fix is one authored
+  number, not code.
+- **The Moon is where the run dies**, because it is flown stock and unarmed. Whether the first body
+  should hand over a weapon earlier is a design call.
+- **Pluto's "darkness" renders as coloured fog**, because it is implemented as low `visibility` and
+  the renderer draws visibility as dust. It reads as haze rather than night.
+- **Cores.**

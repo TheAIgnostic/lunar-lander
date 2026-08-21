@@ -3,6 +3,7 @@ import { routeChoices, ladderTrail, planetCard, isCheckpoint, isExpeditionComple
 import { makeRng } from '../src/util.js';
 import { missionReward, addReward, settleHaul, bankHaul, freshHaul, CORE_PITY, DEBRIEF } from '../src/economy.js';
 import { PLANET_IDS, PLANETS } from '../src/planets.js';
+import { WORLDS } from '../src/levels.js';
 import { chapterFor } from '../src/missions.js';
 import { everyMaterial } from '../src/components.js';
 
@@ -149,6 +150,36 @@ check('but not before one is cleared', !isCheckpoint(0));
   // so it is measured here rather than gated. A number nobody watches rots.
   console.log('  ..  machines down the ladder: '
     + cards.map((c) => `${c.planet.slice(0, 3).toLowerCase()} ${c.machines}`).join(' · '));
+}
+
+// --- every body is its own body
+//
+// Six of the ten used to point `world` at another body's palette, so Mercury,
+// Io and Venus announced themselves as MARS and Enceladus, Ganymede and Pluto as
+// EUROPA - the name drawn over the mission and the entire colour scheme. Tom
+// found it on a full run: "when I click mercury, levels for mars come". The
+// terrain was always right; the label and the paint were not.
+{
+  const worlds = PLANET_ORDER.map((id) => PLANETS[id].world);
+  check('every body has a world of its own', new Set(worlds).size === PLANET_ORDER.length,
+    worlds.join(','));
+  check('...and it is its own id', PLANET_ORDER.every((id) => PLANETS[id].world === id));
+  check('every world exists in the palette table', PLANET_ORDER.every((id) => !!WORLDS[PLANETS[id].world]));
+  // Not "the world name equals the display name" - the Moon is THE MOON on a
+  // world called LUNA, deliberately. The property that matters is that no body
+  // draws a name belonging to a *different* body, which is the bug itself.
+  check('no body draws another body\'s name', PLANET_ORDER.every((id) => {
+    const drawn = WORLDS[PLANETS[id].world].name;
+    return !PLANET_ORDER.some((other) => other !== id
+      && (PLANETS[other].displayName === drawn || other === drawn));
+  }));
+  const accents = PLANET_ORDER.map((id) => WORLDS[PLANETS[id].world].accent);
+  check('no two bodies share an accent colour', new Set(accents).size === accents.length, accents.join(','));
+  // Ice that is not slippery is a texture; slippery ground that is not ice is a
+  // surprise. They travel together.
+  const icy = PLANET_ORDER.filter((id) => PLANETS[id].terrainStyle === 'ice');
+  check('the icy bodies are the slippery ones',
+    icy.every((id) => PLANETS[id].surfaceFriction < 1), icy.join(','));
 }
 
 // --- the M26 shuffle, re-checked at ten bodies

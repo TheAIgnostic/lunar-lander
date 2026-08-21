@@ -1,5 +1,5 @@
 // Unit tests for the force/status interface:  node test/forces-tests.js
-import { applyForces, forcesFor, freshStatus, freshEnv, STATUS_CHANNELS } from '../src/forces.js';
+import { applyForces, forcesFor, freshStatus, freshEnv, RADIATION, STATUS_CHANNELS } from '../src/forces.js';
 import { PLANETS, gravityFor, gravityPx } from '../src/planets.js';
 
 let pass = 0, fail = 0;
@@ -141,6 +141,69 @@ check('difficulty cannot reach gravity',
   check('hazard levels live under statusLevels', typeof s.statusLevels === 'object');
   check('status() returns the envelope flags',
     ['vy', 'vx', 'tilt'].every((k) => typeof s.status()[k] === 'boolean'));
+}
+
+// --- M29: the radiation belt has a floor you can drop below
+{
+  const lvl = { hazards: [{ type: 'radiation', period: 10, duty: 1, rate: 40 }], width: 3000 };
+  const terrain = { heightAt: () => 1000 };
+  const at = (alt, secs = 20) => {
+    const ship = {
+      env: freshEnv(), statusLevels: freshStatus(), loadout: {}, hull: 100, hullMax: 100,
+      x: 1500, y: 1000 - alt, damageOverTime(n) { this.hull -= n; },
+    };
+    for (let t = 0; t < secs; t += 0.05) applyForces(ship, lvl, t, 0.05, terrain);
+    return ship;
+  };
+  const low = at(RADIATION.minAltitude - 120);
+  const high = at(RADIATION.minAltitude + RADIATION.falloff + 200);
+  check('below the belt, radiation does not reach you', low.statusLevels.radiation === 0 && low.hull === 100);
+  check('above it, it does', high.statusLevels.radiation > 0 && high.hull < 100);
+  check('the belt edge is published for the renderer', high.env.radiationBand === RADIATION.minAltitude);
+  check('and how deep into it you are', high.env.radiationReach === 1 && low.env.radiationReach === 0);
+  // The floor is what stops it finishing you on its own (M18).
+  const parked = at(RADIATION.minAltitude + 400, 400);
+  check('radiation never takes you past its floor',
+    parked.hull >= 100 * RADIATION.floor - 0.01, parked.hull.toFixed(1));
+}
+
+// --- M29: dust squalls are random to the player and identical on replay
+{
+  const lvl = { id: 'squall-test', hazards: [{ type: 'dust', period: 14, minVisibility: 0.6, duty: 0.5 }] };
+  const fly = () => {
+    const ship = { env: freshEnv(), statusLevels: freshStatus(), loadout: {} };
+    const trace = [];
+    for (let t = 0; t < 180; t += 0.05) {
+      applyForces(ship, lvl, t, 0.05, null);
+      trace.push(ship.env.visibility);
+    }
+    return trace;
+  };
+  const a = fly();
+  const b = fly();
+  check('the same mission replays the same weather', JSON.stringify(a) === JSON.stringify(b));
+
+  // Spans at the visibility floor: these are the squalls.
+  const spans = [];
+  let start = -1;
+  a.forEach((v, i) => {
+    const blind = v <= 0.06;
+    if (blind && start < 0) start = i;
+    else if (!blind && start >= 0) { spans.push((i - start) * 0.05); start = -1; }
+  });
+  check('a storm body gets squalls at all', spans.length > 0, String(spans.length));
+  check('each one runs about 3-5 seconds',
+    spans.every((d) => d >= 2.5 && d <= 5.6), spans.map((d) => d.toFixed(1)).join(','));
+  const blindFrac = spans.reduce((n, d) => n + d, 0) / 180;
+  check('but they are the exception, not the weather',
+    blindFrac > 0.01 && blindFrac < 0.25, (blindFrac * 100).toFixed(0) + '%');
+
+  // A different mission must not storm in lockstep with this one.
+  const other = { id: 'squall-test-2', hazards: lvl.hazards };
+  const ship2 = { env: freshEnv(), statusLevels: freshStatus(), loadout: {} };
+  const t2 = [];
+  for (let t = 0; t < 180; t += 0.05) { applyForces(ship2, other, t, 0.05, null); t2.push(ship2.env.visibility); }
+  check('two missions do not squall in lockstep', JSON.stringify(a) !== JSON.stringify(t2));
 }
 
 console.log(`\n  ${pass} passed, ${fail} failed`);

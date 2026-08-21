@@ -565,3 +565,23 @@ table.stats-table .m-w { text-align: right; color: #7f9db0; font-size: 11px; }
   border-color: rgba(255, 207, 77, .7);
   background: rgba(255, 207, 77, .07);
 }
+
+/* The completion screen. Rare enough to be worth its own look: the stone above
+   the verdict, the ten bodies rolled out below it, and one way out. */
+.screen.complete .diamond {
+  font-size: 54px;
+  line-height: 1;
+  margin: 2px 0 6px;
+  color: #9fe8ff;
+  text-shadow: 0 0 26px #9fe8ff, 0 0 60px rgba(159, 232, 255, .5);
+  animation: diamond-turn 5s ease-in-out infinite;
+}
+@keyframes diamond-turn {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.08); }
+}
+.reduce-motion .screen.complete .diamond { animation: none; }
+.ladder.roll { margin: 10px 0 14px; }
+.ladder.roll .rung-name { color: var(--rung, #9fc0d4); }
+.ladder.roll .pip { color: var(--rung, #9fe8ff); }
+.screen.complete .body.dim { color: #7f9db0; font-size: 12px; }

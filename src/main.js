@@ -11,7 +11,7 @@ import { LANDING } from './landing.js';
 import * as Save from './save.js';
 import * as Log from './gamelog.js';
 import { worstVisibility } from './forces.js';
-import { missionReward, addReward, settleHaul, nodeWorth, haulOf } from './economy.js';
+import { missionReward, addReward, scaleSalvage, settleHaul, nodeWorth, haulOf } from './economy.js';
 
 import { isCheckpoint, isExpeditionComplete, PLANET_ORDER } from './route.js';
 import { deriveFull } from './components.js';
@@ -219,13 +219,22 @@ function finishExpedition() {
   const settled = settleAndBank();
   run.score = g.score;
   Save.saveRun(run);
-  g.lastRunSummary = { missions: run.missionsCleared, chapter: run.chapterId, settled, complete: true };
+  // The whole ladder, Moon to Venus. One diamond, kept for good - the first
+  // thing in the game that is neither spent nor lost, and what the ship
+  // cosmetics will be bought with when they arrive.
+  meta.diamonds = (meta.diamonds || 0) + 1;
+  g.lastRunSummary = {
+    missions: run.missionsCleared, chapter: run.chapterId, settled, complete: true,
+    bodies: (run.cleared || []).length, diamond: true, diamonds: meta.diamonds,
+  };
   if (!meta.gameCompleted) meta.gameCompleted = true;
   Save.saveMeta(meta);
   Save.clearRun();
   g.run = null;
   g.loadoutWindow = false;
-  Log.log('expedition-complete', { missions: run.missionsCleared, bodies: (run.cleared || []).length });
+  Log.log('expedition-complete', {
+    missions: run.missionsCleared, bodies: (run.cleared || []).length, diamonds: meta.diamonds,
+  });
   setState('expedition-complete');
 }
 
@@ -600,6 +609,11 @@ function onLand() {
       reward.data += objective.reward.data || 0;
       reward.cores += objective.reward.cores || 0;
     }
+    // **Every source is summed by now** - the computed pay, the ore carried
+    // home, the kill bonus and the objective - so the economy-wide scale goes
+    // on here, once, rather than on each of the four. The results screen reads
+    // `reward.salvage` too, so what is shown is what is banked.
+    reward.salvage = scaleSalvage(reward.salvage);
     g.run.haul = addReward(g.run.haul, reward);
     g.lastReward = reward;
     persistRun();
@@ -877,6 +891,9 @@ function draw() {
   // Wind, drawn between the ground and the ship so it reads as air moving
   // through the scene rather than as an overlay on top of it.
   if (g.level.wind || g.level.gust) R.drawWind(ctx, cam, W, H, g.level, ship.windNow, g.time, present);
+  // The radiation belt sits between the ground and the ship for the same reason
+  // the wind does: it is air, not an overlay.
+  R.drawRadiation(ctx, cam, W, H, g.terrain, ship, g.time);
   if (g.state === 'play' && ship.alive && !ship.landed) R.drawTrajectory(ctx, ship, g.level, g.terrain, cam);
   particles.draw(ctx);
   drawEnemies(ctx, g.field, ship, g.time, {
