@@ -315,11 +315,22 @@ const BUILDERS = { atmosphere, thermal, cryo, plumes, dust, windChannels, radiat
 export function forcesFor(level) {
   if (level.__forces) return level.__forces;
   const list = [];
-  if (level.wind || level.gust || level.drag) list.push(atmosphere(level));
+  // **One force per id.** A level that both carries wind/gust/drag *and* names
+  // `atmosphere` in its hazards used to get the force twice, and applying it
+  // twice per step is not a doubled reading - it is doubled physics. Four of
+  // the five authored Mars missions flew that way from M6 to M28, at roughly
+  // twice the drag their own numbers ask for.
+  //
+  // The redundant hazard strings are gone from the content too, but the guard
+  // is what stops it happening again: a hazard list is authored data, and
+  // "declaring the weather twice" should be harmless rather than a physics bug.
+  const seen = new Set();
+  const add = (f) => { if (f && !seen.has(f.id)) { seen.add(f.id); list.push(f); } };
+  if (level.wind || level.gust || level.drag) add(atmosphere(level));
   for (const h of level.hazards || []) {
     const spec = typeof h === 'string' ? { type: h } : h;
     const build = BUILDERS[spec.type];
-    if (build) list.push(build({ ...level, ...spec }));
+    if (build) add(build({ ...level, ...spec }));
   }
   Object.defineProperty(level, '__forces', { value: list, enumerable: false });
   return list;

@@ -47,7 +47,6 @@ export const store = {
 
 export const settings = { ...DEFAULT_SETTINGS, ...meta.settings };
 input.setBindings(settings.keys);
-input.setBindings(settings.keys);
 export function saveSettings() {
   meta.settings = { ...meta.settings, ...settings };
   Save.saveMeta(meta);

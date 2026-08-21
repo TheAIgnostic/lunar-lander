@@ -240,7 +240,14 @@ function resumeExpedition() {
   g.score = run.score;
   g.combo = run.combo;
   g.lives = run.shuttles;
-  g.forcedSeed = run.seed;
+  // **Not `g.forcedSeed = run.seed`.** That line was redundant and leaky:
+  // `startLevel` already prefers `g.run.seed` whenever a run is in flight, so it
+  // bought nothing - and `g.forcedSeed` is the *debug* pin (`?seed=`,
+  // `__setSeed`), which nothing ever clears. Resuming an expedition once
+  // therefore pinned every later run in the session to that run's seed, so the
+  // whole ladder replayed identical terrain until the page was reloaded. That is
+  // the M26 complaint - "the terrain does not feel random" - surviving
+  // underneath M26's fix.
   startLevel(run.missionIndex, false);
 }
 
@@ -566,7 +573,14 @@ function onLand() {
     const left = haulOf(g.terrain.materialLeft ? g.terrain.materialLeft() : []);
     const reward = missionReward({
       grade: q, padMultiplier: mult, fuelLeft: ship.fuel, maxFuel: ship.maxFuel,
-      rareMaterial: g.level.rareMaterial, firstClear: true, offPad,
+      rareMaterial: g.level.rareMaterial, offPad,
+      // A first clear pays 24 research against 10 for a repeat, and this was
+      // hardcoded `true`. Inside an expedition that is harmless - each mission
+      // is flown once - but mission select, which `meta.gameCompleted` unlocks,
+      // let the same mission pay first-clear research forever. `missionGrades`
+      // is the existing record of what has been landed, and `recordFlight`
+      // writes it *after* this, so it still reads the previous state here.
+      firstClear: !meta.stats.missionGrades[g.level.missionId || g.level.id],
       coreDrought: g.run.coreDrought || 0,
       padTier: pad ? pad.tier || 0 : 0,
       // The hold, and what was left lying out there - the results screen shows

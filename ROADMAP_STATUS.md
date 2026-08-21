@@ -750,6 +750,38 @@ scheduled until the MVP is stable — the spec says the same.
   - **both fixtures byte-identical**, full suite green
 
 
+- [x] **M28b — an external review, checked line by line** (this commit)
+  - Tom brought a review from another model with "do not take the findings for granted". Every claim
+    was verified against the code first; **four of them did not survive that check**, and those are
+    recorded alongside the real ones
+  - **every run after a resume flew identical terrain.** `resumeExpedition` set `g.forcedSeed`, which
+    is the *debug* pin and which nothing clears, so `beginExpedition` reused it forever after. The
+    line was also redundant - `startLevel` already prefers `g.run.seed` during a run. This is the M26
+    complaint surviving underneath M26's fix, and M27 made it bite harder
+  - **Mars flew at double drag** from M6 to now: `forcesFor` built `atmosphere` from the level's
+    wind/drag *and* again from the `'atmosphere'` hazard string. **Four** of five missions, not all
+    five - mars-2 declares `windChannels`. Removing it takes the autopilot from 17-19/20 to 20/20 on
+    those four, so the bug had been making the hardest body harder; **Tom's call, taken with the
+    number in front of him.** `forcesFor` dedupes by id now, so authored data cannot change physics
+    by repeating itself
+  - **the flight fixture moved and the shape of the move is the proof**: 12 differences, exactly the
+    four affected missions x 3 seeds, every other mission byte-identical. Physics fixture unchanged
+  - **abandoning was strictly better than dying, and the floor was farmable.** Abandon banked the
+    haul, paid the debrief and never wiped; five start-then-abandon cycles banked 300 salvage and 200
+    research for no risk. **Tom's ruling: ending a run is ending a run.** It wipes like a death now,
+    arms on the first press, and the run-lost screen speaks for both endings
+  - smaller, all verified and fixed: `settleHaul` rounded kept and lost independently (**live**, not
+    latent - `cargoRecovery` is a real skill rank and the comment saying otherwise was stale);
+    `firstClear: true` hardcoded, which made mission select a research farm; duplicated `saveMeta` /
+    `clearRun` / `setBindings`; a victory screen still offering ENDLESS; stale `power`/`utility` keys
+  - **the review caught an M28 error of mine**: `RECOMMENDED_TIER`'s comment quoted the *affordable*
+    curve as though it were the table
+  - where it was wrong: "all five Mars missions" (four); "Enceladus builds `plumes({})`" - it is
+    spelled `'plume'` against a `'plumes'` builder, so it is never built at all, which **M29 needs to
+    know**; and its income figures are roughly double the measured ones
+  - Tech Cores having no sink is real and **left alone** - pricing something in cores is a design call
+
+
 ## Decisions (Tom, 2026-08-16)
 
 1. **Gravity** — compressed mapping is the *baseline*, then a per-body hand-tuned offset so each

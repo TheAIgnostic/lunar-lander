@@ -2137,3 +2137,126 @@ node -e "Promise.all([import('./src/save.js'),import('./src/economy.js')]).then(
 ```bash
 node -e "Promise.all([import('./src/components.js'),import('./src/planets.js'),import('./src/route.js')]).then(([C,P,R])=>{const pos={};R.PLANET_ORDER.forEach((id,i)=>{pos[P.PLANETS[id].rareMaterial]=i+1;});for(const id of C.COMPONENT_IDS){const t=C.COMPONENTS[id];console.log(t.name.padEnd(20)+t.levels.slice(1).map(l=>'body '+Math.max(...Object.keys(l.cost.materials||{}).map(m=>pos[m]||99))).join('  '));}});"
 ```
+
+---
+
+## M28b — an external review, checked line by line (2026-08-21)
+
+Tom brought a code review from another model with the instruction not to take it on faith. Every
+claim below was verified against the code before anything was changed; the ones that did not survive
+that check are recorded too, because "which findings were wrong" is the useful half of reading a
+review.
+
+### The one that mattered most: every run after a resume flew identical terrain
+
+`resumeExpedition` set `g.forcedSeed = run.seed`. Nothing ever clears `g.forcedSeed` — it is the
+*debug* pin behind `?seed=` and `__setSeed` — and `beginExpedition` reads it when choosing a seed for
+a **new** run. So resuming an expedition once pinned every later run in the session to that run's
+seed. Measured live:
+
+```
+two fresh runs, no resume:        462877581 vs 322140684   different (correct)
+after resume-run: g.forcedSeed =  322140684
+three new runs after one resume:  322140684, 322140684, 322140684
+```
+
+This is the M26 complaint — *"terrain on moon does not feel random anymore"* — surviving underneath
+M26's own fix, and M27 made it bite harder by making the ladder ten fixed bodies. The line was also
+**redundant**: `startLevel` already prefers `g.run.seed` whenever a run is in flight, so it bought
+nothing and leaked everything. Deleted. Verified: three runs after a resume now draw three seeds.
+
+### Mars flew at double drag for twenty-two milestones
+
+`forcesFor` pushed `atmosphere` for `level.wind/gust/drag`, then pushed it **again** for the
+`'atmosphere'` string in the mission's hazard list. Both instances are built from the same config, so
+the force applied twice per step.
+
+Scope, measured rather than assumed — the review said "all five Mars missions", and it is **four**:
+
+| | forces built |
+| --- | --- |
+| mars-1, mars-3, mars-4, mars-5 | `atmosphere, atmosphere, dust` |
+| mars-2 | `atmosphere, windChannels` (declares `windChannels`, never doubled) |
+
+No other body, authored or generated, and no classic level. Flight impact of removing it, autopilot
+on the safe route over 20 seeds:
+
+| | before | after |
+| --- | ---: | ---: |
+| mars-1 | 19/20 | 20/20 |
+| mars-3 | 18/20 | 20/20 |
+| mars-4 | 19/20 | 20/20 |
+| mars-5 | 17/20 | 20/20 |
+| mars-2 | 15/20 | 15/20 (untouched) |
+
+So the bug had been making the hardest body harder, and fixing it is a real difficulty change on
+hand-authored content that was tuned while it was live. Tom's call, taken with the number in front of
+him. **If Mars wants its bite back, the honest way is raising the authored drag, not restoring the
+double-apply.**
+
+Both halves shipped: the redundant `'atmosphere'` strings are gone from the four missions, and
+`forcesFor` now **dedupes by force id** so that declaring the weather twice is harmless rather than a
+physics bug. The guard is the part that matters — a hazard list is authored data.
+
+**The flight fixture moved, and the shape of the move is the containment proof**: 12 differences,
+exactly the four affected missions × 3 seeds, with mars-2 and all 23 other missions byte-identical.
+Re-recorded. The **physics fixture did not move**, because the classic levels never had the
+duplication. The campaign-wide crossing measurement is unchanged at 167/240.
+
+### Abandoning a run was strictly better than losing one, and the floor was farmable
+
+`abandon-run` banked the haul, paid M13's debrief floor, and **never wiped** — where a death pays the
+floor and takes the skills, the resources and the opened map:
+
+| | salvage | research | skills |
+| --- | ---: | ---: | --- |
+| abandon | 560 | 340 | kept |
+| death | 60 | 40 | wiped |
+
+And because each run carries a fresh `banked[]` settlement list, the floor paid **every time**: five
+start-then-abandon cycles from a clean save banked 300 salvage and 200 research for no risk at all,
+and 40 research is the cheapest skill rank. This predates M28 — M28 neither caused it nor fixed it.
+
+Tom's ruling: *ending a run is ending a run*. Abandon goes through the same door as a death now,
+arms on the first press like NEW GAME does, and lands on the run-lost screen, which grew a second
+sentence for the case where the player called it rather than ran out of shuttles. Verified: 500
+salvage / 300 research / 1 skill → **60 / 40 / none**, and five cycles now read `60/40` flat instead
+of climbing.
+
+### Real, smaller, all verified and all fixed
+
+- **`settleHaul` rounded kept and lost independently**, so at a half-unit boundary both rounded up and
+  the two halves reported more cargo than the run carried (101 → 51 + 51). Kept is rounded, lost is
+  derived. Worth noting the review called this latent and it is **live**: `cargoRecovery: 0.25 * r` is
+  a real Technician rank, and economy.js's "zero until the Technician tree exists" comment was stale.
+- **`firstClear: true` was hardcoded** in the reward call. Harmless inside an expedition, where each
+  mission is flown once — but mission select, which `meta.gameCompleted` unlocks, paid first-clear
+  research forever. It reads `meta.stats.missionGrades` now, which `recordFlight` writes *after* the
+  reward is computed, so the previous state is still there to read.
+- `abandon-run` called `saveMeta` and `clearRun` twice each, and banked without syncing `g.score`, so
+  a career best could be missed.
+- `state.js` called `input.setBindings` twice.
+- The victory screen still offered **ENTER ENDLESS**, a mode M24 removed.
+- `defaultMeta` carried `power` and `utility` component keys that no component has ever used.
+- `RECOMMENDED_TIER`'s comment quoted the *affordable* curve (1, 3, 5) as though it were the table
+  (1, 2, 3). The table is right and deliberately conservative; the comment was wrong. **That one was
+  M28's own error**, found by the review.
+
+### Where the review was wrong, and why it is worth writing down
+
+- **"All five Mars missions"** — four. mars-2 declares `windChannels` and was never doubled.
+- **"Enceladus builds `plumes({})` with no vents: a no-op."** Right conclusion, wrong mechanism, and
+  the mechanism is the useful part: the hazard is spelled `'plume'` and the builder key is `'plumes'`,
+  so **it is never built at all**. M29 cannot switch Enceladus's plumes on by authoring vents alone —
+  the name has to match first.
+- **Its income figures** (90–210 salvage per mission, 10–14k per full run) disagree with M28's
+  measurement (~60–142 per mission, ~3–7k per run), and M28's has a reproducible script behind it.
+  The conclusion it drew from them — that the economy is sensibly tuned — happens to agree anyway.
+- **Tech Cores have no sink.** True, verified: nothing in `components.js`, `skills.js` or
+  `modules.js` costs a core. Left alone deliberately — pricing something in cores is a design
+  decision, not a bug fix.
+
+### What did not move
+
+The **physics fixture**, every non-Mars mission in the flight fixture, the sanctuary guarantee
+(20/20 everywhere) and the campaign crossing figure (167/240).

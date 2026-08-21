@@ -252,18 +252,39 @@ export function act(action) {
     return;
   }
   if (action === 'resume-run') { flow.resumeExpedition(); return; }
+  // **Ending a run is ending a run** - Tom, 2026-08-21. Abandoning used to bank
+  // the haul, pay M13's debrief floor and keep the skills, the resources and the
+  // opened map, where dying pays the floor and takes all three. That made
+  // abandoning strictly better than dying, and the floor farmable: start,
+  // abandon, repeat, and five cycles bank 300 salvage and 200 research for
+  // nothing. 40 research is the cheapest skill rank.
+  //
+  // It goes through the same door as a death now. The run is resumable, so
+  // abandoning is never how you stop playing - it is how you give up on a run.
   if (action === 'abandon-run') {
+    if (!g.confirmAbandon) {
+      g.confirmAbandon = true;
+      flow.toast('Ending the expedition costs the skills, the salvage and the research, exactly like losing it. Press again to confirm.');
+      flow.renderOverlay();
+      return;
+    }
+    g.confirmAbandon = false;
     if (g.run) {
+      // Score first: `bankRun` reads `run.score` for the career best, and the
+      // last `persistRun` may be several screens old by the time this fires.
+      g.run.score = g.score;
       const settled = settleHaul(g.run.haul, { completed: false });
+      g.lastRunSummary = { missions: g.run.missionsCleared, chapter: g.run.chapterId, settled, wiped: true, abandoned: true };
       setMeta(Save.bankRun(meta, g.run, { completed: false, settled, id: 'final' }));
       Save.saveRun(g.run);
+      Log.log('run-abandoned', { sector: g.run.sector, missions: g.run.missionsCleared });
+      setMeta(Save.wipeForDeath(meta, { debrief: settled.debrief }));
     }
     Save.saveMeta(meta);
     Save.clearRun();
-    Save.saveMeta(meta);
-    Save.clearRun();
     g.run = null; g.chapter = null; g.level = null; g.campaign = 'classic';
-    flow.setState('menu');
+    g.loadoutWindow = false;
+    flow.setState('expedition-over');
     return;
   }
   if (action.startsWith('set:')) {
@@ -320,6 +341,7 @@ export function act(action) {
       break;
     case 'settings':
       g.confirmWipe = false;
+      g.confirmAbandon = false;
       if (g.state !== 'keys') g.settingsFrom = g.state;
       g.rebinding = null;
       flow.setState('settings');
@@ -353,6 +375,7 @@ export function act(action) {
       flow.startLevel(g.levelIndex, !g.run);
       break;
     case 'menu':
+      g.confirmAbandon = false;
       // Bump the token: a landing or a crash may still have a settle timer in
       // flight, and it must not fire into a menu with no level under it.
       g.token++;

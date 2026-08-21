@@ -31,7 +31,10 @@ export function defaultMeta() {
     // "is god mode on?" has one answer with one owner. See `act('god')`.
     godMode: false,
     banked: { salvage: 0, data: 0, cores: 0, materials: {} },
-    componentLevels: { hull: 1, gear: 1, engine: 1, rcs: 1, power: 1, sensors: 1, utility: 1 },
+    // The five tracks in `COMPONENT_IDS`, and only those. `power` and `utility`
+    // were carried here for years and no component ever used them; an old save
+    // keeps whatever it has, because `coerceMeta` merges rather than replaces.
+    componentLevels: { gear: 1, engine: 1, rcs: 1, hull: 1, sensors: 1 },
     purchasedSkills: {},
     unlockedBlueprints: [],
     settings: { muted: false, steering: 'classic', invertRotation: false },

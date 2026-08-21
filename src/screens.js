@@ -104,7 +104,7 @@ export function screenHTML(s) {
           ${chapterName ? btn('resume-run', 'RESUME EXPEDITION', true, 'SPACE') : ''}
           ${btn('chapters', 'EXPEDITION', !chapterName, chapterName ? '' : 'SPACE')}
           ${chapterName || g.run || !meta.gameCompleted ? '' : btn('select', 'MISSIONS')}
-          ${chapterName || g.run ? btn('abandon-run', 'ABANDON EXPEDITION') : ''}
+          ${chapterName || g.run ? btn('abandon-run', g.confirmAbandon ? 'YES, END IT' : 'ABANDON EXPEDITION') : ''}
           ${btn('help', 'HOW TO FLY')}
           ${btn('hangar', 'HANGAR')}
           ${chapterName || g.run ? '' : btn('outfit', 'LOADOUT')}
@@ -245,9 +245,9 @@ export function screenHTML(s) {
         <div class="verdict" style="color:#4dff9f;text-shadow:0 0 30px #4dff9f">${g.chapter ? 'CHAPTER COMPLETE' : 'PROGRAM COMPLETE'}</div>
         <p class="body">${g.chapter
           ? `${chapterTitle(g.campaign)} is surveyed. Five landings, and the lander still flies.`
-          : 'All twelve missions flown. The unsurveyed sectors are open, and they do not end.'}</p>
+          : 'All twelve missions flown.'}</p>
         <div class="stats big"><span>SCORE</span><b>${formatScore(g.score)}</b></div>
-        <div class="btns">${btn('next', 'ENTER ENDLESS', true, 'SPACE')}${btn('menu', 'MENU')}</div>
+        <div class="btns">${btn('menu', 'MENU', true, 'SPACE')}</div>
       </div>`;
 
     case 'chapters': {
@@ -599,7 +599,7 @@ export function screenHTML(s) {
           <tr class="tot"><td>SHUTTLES</td><td>${g.lives} / ${run.maxShuttles}${full ? '' : ' · one back per body cleared'}</td></tr>
         </table>
         <div class="grid routes centred">${cards}</div>
-        <div class="btns">${btn('outfit', 'LOADOUT')}${btn('hangar', 'HANGAR')}${btn('abandon-run', 'END EXPEDITION')}</div>
+        <div class="btns">${btn('outfit', 'LOADOUT')}${btn('hangar', 'HANGAR')}${btn('abandon-run', g.confirmAbandon ? 'YES, END IT' : 'END EXPEDITION')}</div>
       </div>`;
     }
 
@@ -633,11 +633,16 @@ export function screenHTML(s) {
       // M13's floor, which M28 reconnected: paid *through* the wipe, so it is
       // the one number on this screen that is still in the player's pocket.
       const debrief = (g.lastRunSummary && g.lastRunSummary.settled && g.lastRunSummary.settled.debrief) || null;
+      // Two ways a run ends, one screen: the shuttles ran out, or the player
+      // called it. Since M28b they cost the same thing, so the only difference
+      // here is the sentence that says which happened.
+      const gaveUp = !!(g.lastRunSummary && g.lastRunSummary.abandoned);
       return `<div class="screen">
-        <div class="verdict bad">EXPEDITION LOST</div>
-        <p class="body">All three shuttles are gone. The skills, the salvage and the research go
-        with them, and the route closes back to the Moon. What the hangar has already bolted on
-        is yours for good.</p>
+        <div class="verdict bad">${gaveUp ? 'EXPEDITION ENDED' : 'EXPEDITION LOST'}</div>
+        <p class="body">${gaveUp
+          ? 'You called it. Ending a run costs what losing one costs: the skills, the salvage and the research go, and the route closes back to the Moon.'
+          : 'All three shuttles are gone. The skills, the salvage and the research go with them, and the route closes back to the Moon.'}
+        What the hangar has already bolted on is yours for good.</p>
         <table class="score">
           <tr><td>Missions cleared</td><td>${g.lastRunSummary ? g.lastRunSummary.missions : 0}</td></tr>
           <tr><td>Run score</td><td>${formatScore(g.score)}</td></tr>

@@ -147,8 +147,12 @@ export function addReward(haul, reward) {
 
 /**
  * What survives leaving the expedition. `recovered` is the fraction of physical
- * cargo a skill or module rescues from a crash - zero until the Technician tree
- * exists.
+ * cargo a skill rescues from a crash - the Technician tree's `cargoRecovery`
+ * pays 0.25 a rank, so this is genuinely fractional in play.
+ *
+ * **Kept is rounded and lost is derived from it**, never rounded separately: at
+ * a half-unit boundary two independent `Math.round`s both go up and the two
+ * halves report more cargo than the run was carrying.
  */
 export function settleHaul(haul, { completed, recovered = 0 }) {
   const keepCargo = completed ? 1 : recovered;
@@ -157,7 +161,8 @@ export function settleHaul(haul, { completed, recovered = 0 }) {
     const kept = Math.round(v * keepCargo);
     if (kept > 0) materials[k] = kept;
   }
-  const salvage = haul.salvageSafe + Math.round(haul.salvageCargo * keepCargo);
+  const keptCargo = Math.round(haul.salvageCargo * keepCargo);
+  const salvage = haul.salvageSafe + keptCargo;
   const data = haul.data;                              // transmitted, always kept
   // A lost expedition still files its debrief. Without this an early run can
   // end with nothing to spend and nothing to change, which is the one failure
@@ -173,7 +178,7 @@ export function settleHaul(haul, { completed, recovered = 0 }) {
     materials,
     debrief: debrief && (debrief.salvage || debrief.data) ? debrief : null,
     lost: {
-      salvage: Math.round(haul.salvageCargo * (1 - keepCargo)),
+      salvage: haul.salvageCargo - keptCargo,
       cores: completed ? 0 : haul.cores,
     },
   };

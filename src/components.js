@@ -169,11 +169,19 @@ export function purchaseCheck(componentId, componentLevels, banked) {
  * optional: the hangar offered five tracks and no opinion about which of them
  * the next body cared about. This is the opinion.
  *
- * The figures are **measured, not aspirational** - they sit just under what one
- * normal run can actually afford by that point (M28 modelled a five-mission
- * clear at each position against the re-cut costs: 1 upgrade after body 1, 3
- * after body 2, 5 after body 3). A recommendation the economy cannot fund is
- * worse than none, because it teaches the player to ignore it.
+ * The ramp is linear, and it sits **deliberately under** what the economy can
+ * fund rather than at it. M28 modelled a five-mission clear at each position
+ * against the re-cut costs and measured what a normal run can actually afford:
+ *
+ *     arriving at body   2    3    4    6
+ *     affordable         1    3    5    7
+ *     recommended        1    2    3    5
+ *
+ * A recommendation the economy cannot fund is worse than none, because it
+ * teaches the player to ignore it - so the figure is one a player who has been
+ * spending sensibly will already have met, not a target to chase. (An earlier
+ * version of this comment quoted the *affordable* row as though it were the
+ * table below, which it is not.)
  */
 export const RECOMMENDED_TIER = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 

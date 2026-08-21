@@ -22,7 +22,7 @@ Everything under `src/` is a plain ES module, loaded directly in the browser and
 | `src/planets.js` | 10 PlanetDefinitions, the gravity mapping, and what the ground is made of | M4/M5/M20 |
 | `src/planeticons.js` | one icon per body, for the route screen | M17 |
 | `src/missions.js` | authored Moon/Mars/Europa chapters, survey-chapter generator, `chapterFor` | M4-M9 |
-| `src/forces.js` | force/status interface: atmosphere, dust, wind channels, thermal, cryo, plumes, radiation | M5-M7 |
+| `src/forces.js` | force/status interface: atmosphere, dust, wind channels, thermal, cryo, plumes, radiation | M5-M7/M28b |
 | `src/save.js` | versioned MetaSave + RunState, legacy migration, corruption recovery | M8 |
 | `src/economy.js` | rewards, the carried haul, what a deposit is worth, the transmitted/cargo split, settlement and banking | M9/M15 |
 | `src/route.js` | the ten-body ladder, the next-body card, the progress trail, checkpoint rule | M9/M27 |
@@ -247,6 +247,20 @@ stacking an upgrade twice.
 Physics does not import UI. Landing evaluation consumes a touchdown snapshot and returns a result
 object. Hazards apply through the shared force interface, so a new body is data, not code.
 
+**One force per id.** `forcesFor` dedupes, because a level can declare the same weather twice and
+authored data must not be able to change the physics by repeating itself. It could: a mission with
+`wind`/`gust`/`drag` *and* `'atmosphere'` in its hazard list got the force pushed twice and applied
+twice per step, and four of the five authored Mars missions flew at roughly double their own drag
+from M6 until M28b. The redundant strings are gone from the content; the dedupe is what stops it
+recurring.
+
+**Ending a run and losing one cost the same thing.** `abandon-run` goes through `wipeForDeath` like a
+crash does, pays M13's debrief floor through it, and arms on the first press. Until M28b it banked
+and kept everything, which made abandoning strictly better than dying — and, because each run carries
+a fresh `banked[]` settlement list, made the floor farmable at 60 salvage and 40 research per
+start-and-quit cycle. A run is resumable, so abandoning is never how a player stops playing; it is
+how they give up on a run.
+
 ## Tests
 
 ```bash
@@ -288,7 +302,7 @@ game or the pilot changes. Improving the pilot should move the second and leave 
 | `__act('...')` | fire any UI action: `chapter:LUNA`, `buy:gear`, `skill:fuel-mix`, `route:0`, `equip:passive:ice-cleats` |
 | `__advance(dt)` | step the simulation without rendering |
 | `__draw()` | render one frame on demand |
-| `__setSeed(n)` or `?seed=N` | pin every mission for reproducible runs |
+| `__setSeed(n)` or `?seed=N` | pin every mission for reproducible runs. **`g.forcedSeed` is this pin and nothing else** — never set it from a run's own seed, which `resumeExpedition` used to do, silently pinning every later run in the session |
 | `__flyHeadless({padIndex, approach})` | fly the current mission instantly |
 | `__runAllHeadless(12)` | fly the whole classic campaign in ~450 ms |
 | `__preview(archetype, relief, detail)` | rebuild the current mission with another terrain shape |
