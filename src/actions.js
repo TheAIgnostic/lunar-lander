@@ -58,6 +58,12 @@ export function act(action) {
   }
   if (action === 'noop') return;
   if (action.startsWith('skill:')) {
+    // The lock the hidden menu button used to enforce by accident. Stated here,
+    // where the spending happens, exactly as the hangar states it for `buy:`.
+    if (!meta.godMode && g.run && !g.loadoutWindow) {
+      flow.toast('Research is spent between bodies, at the supply stop.');
+      return;
+    }
     const res = buySkill(action.slice(6), meta.purchasedSkills, meta.banked.data,
       { enemies: meta.stats.threatsSeen > 0 });
     if (res) {
@@ -71,6 +77,10 @@ export function act(action) {
     return;
   }
   if (action.startsWith('equip:')) {
+    if (!meta.godMode && g.run && !g.loadoutWindow) {
+      flow.toast('The loadout is fixed once an expedition is under way.');
+      return;
+    }
     const [, kind, id] = action.split(':');
     meta.equipped = { ...meta.equipped, [kind]: meta.equipped[kind] === id ? null : id };
     Save.saveMeta(meta);
@@ -335,8 +345,19 @@ export function act(action) {
     case 'hangar':
       flow.setState('hangar');
       break;
+    // **Readable always, spendable only in the window** - the same shape as the
+    // hangar above, and it was not. M24 un-hid the hangar and left the loadout
+    // hidden, so from then until M29d the skill tree simply vanished from the
+    // menu for the length of an expedition, along with the only place research
+    // data is shown at all (M29a took it off the hangar screen because the
+    // hangar cannot spend it). Tom went looking for the button.
+    //
+    // The lock has not moved: skills and modules still cannot be changed
+    // mid-expedition, which is M16's rule that a run is committed once begun.
+    // What changed is that the refusal is now *audible* and the screen can be
+    // read - a button that is simply absent is worse than one that says why,
+    // which is the other half of the same M16 rule.
     case 'outfit':
-      if (g.run && !g.loadoutWindow) { flow.toast('Loadout is locked until the next sector checkpoint.'); break; }
       flow.setState('outfit');
       break;
     case 'settings':

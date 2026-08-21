@@ -893,6 +893,23 @@ scheduled until the MVP is stable — the spec says the same.
     "unchanged" without ever running. NEW, MISSING and length mismatches are reported now - the M18
     `pipefail` fault in another costume
 
+- [x] **M29d — where the skill tree went** (this commit)
+  - Tom went looking for it mid-run and the menu button was gone. It lives on the **LOADOUT**
+    screen, and the menu hid that button whenever an expedition was in progress - **since M24**,
+    which un-hid HANGAR and left LOADOUT hidden. Not a regression from this session; an asymmetry
+    that had been live for five milestones
+  - the consequence was bigger than a missing button: for the length of a run there was nowhere to
+    read the skill tree, and **nowhere to see research data at all**, because M29a had taken it off
+    the hangar screen on the grounds that the hangar cannot spend it
+  - **the rule has not moved** - skills and modules are still only *changed* at a supply stop, which
+    is M16's "an expedition is committed once begun". What moved is where the refusal lives: off the
+    button and onto the `skill:` and `equip:` actions, which now toast a reason, exactly as the
+    hangar's `buy:` has since M24. God mode still holds the window open
+  - the screen says so itself rather than presenting tiles that quietly refuse, which is the other
+    half of the same M16 rule
+  - `settings-tests.js` asserts the two menu buttons are offered **on the same terms as each other**,
+    so the next divergence fails a test rather than waiting for someone to go looking
+
 
 ## Decisions (Tom, 2026-08-16)
 

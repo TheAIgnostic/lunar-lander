@@ -278,5 +278,44 @@ function makeInput() {
   }
 }
 
+// --- **The hangar and the loadout are reachable on the same terms** (M29d)
+//
+// Tom went looking for the skill tree mid-run and it was not there. It lives on
+// the LOADOUT screen, and the menu had hidden that button whenever an
+// expedition was in progress - since M24, which un-hid HANGAR and left LOADOUT
+// hidden. So for the length of a run there was nowhere to read the skill tree,
+// and nowhere to see research data at all, M29a having taken it off the hangar
+// screen because the hangar cannot spend it.
+//
+// The rule is unchanged - skills and modules are still only *changed* at a
+// supply stop - but the refusal belongs on the action, not on the button. A
+// button that is absent is worse than one that says why, which is the M16 rule
+// this fell foul of.
+{
+  const src = readFileSync(new URL('../src/screens.js', import.meta.url), 'utf8');
+  const menu = src.slice(src.indexOf("case 'menu':"), src.indexOf("case 'help':"));
+  const lineFor = (action) => (menu.split('\n').find((l) => l.includes(`btn('${action}'`)) || '');
+  const guarded = (action) => /\?\s*''\s*:|:\s*''/.test(lineFor(action));
+  check('the menu offers the hangar during a run', !guarded('hangar'), lineFor('hangar').trim());
+  check('the menu offers the loadout during a run', !guarded('outfit'), lineFor('outfit').trim());
+  check('...on the same terms as each other',
+    guarded('hangar') === guarded('outfit'),
+    `hangar ${guarded('hangar')} / outfit ${guarded('outfit')}`);
+
+  // And the lock moved rather than lapsed: both spend paths refuse in-run.
+  const actions = readFileSync(new URL('../src/actions.js', import.meta.url), 'utf8');
+  const handler = (name) => {
+    const i = actions.indexOf(`action.startsWith('${name}:')`);
+    return i < 0 ? '' : actions.slice(i, i + 400);
+  };
+  for (const name of ['skill', 'equip']) {
+    check(`${name}: refuses outside the loadout window`,
+      /g\.run && !g\.loadoutWindow/.test(handler(name)) && /flow\.toast/.test(handler(name)),
+      handler(name).split('\n').slice(0, 5).join(' ').trim().slice(0, 90));
+    check(`${name}: god mode still holds the window open`,
+      /!meta\.godMode/.test(handler(name)));
+  }
+}
+
 console.log(`\n  ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

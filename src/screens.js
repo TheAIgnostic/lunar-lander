@@ -107,7 +107,7 @@ export function screenHTML(s) {
           ${chapterName || g.run ? btn('abandon-run', g.confirmAbandon ? 'YES, END IT' : 'ABANDON EXPEDITION') : ''}
           ${btn('help', 'HOW TO FLY')}
           ${btn('hangar', 'HANGAR')}
-          ${chapterName || g.run ? '' : btn('outfit', 'LOADOUT')}
+          ${btn('outfit', 'LOADOUT')}
           ${btn('stats', 'LOGBOOK')}
           ${btn('settings', 'SETTINGS')}
         </div>
@@ -487,9 +487,17 @@ export function screenHTML(s) {
         </button>`;
       }).join('');
 
+      // **Readable during a run, spendable only between bodies.** The screen used
+      // to be unreachable mid-expedition - the menu button was hidden and the
+      // action refused - which meant the skill tree and the research total both
+      // disappeared for the length of a run. The lock is unchanged; it is stated
+      // instead of hidden, because a screen full of tiles that quietly refuse is
+      // the "button that silently does nothing" M16 ruled against.
+      const shut = !!g.run && !g.loadoutWindow && !meta.godMode;
       return `<div class="screen wide">
         <div class="eyebrow" style="color:#5ff5ff">LOADOUT</div>
         <h2>SKILLS AND MODULES</h2>
+        ${shut ? '<div class="notice">Read-only while an expedition is under way. Skills and modules are changed at the supply stop between bodies.</div>' : ''}
         <div class="stats"><span>RESEARCH DATA</span><b>${formatScore(data)}</b></div>
         <div class="trees">${trees}</div>
         <div class="setting">
