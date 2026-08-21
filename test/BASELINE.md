@@ -3571,3 +3571,26 @@ Both fixtures unchanged. Full suite green. `settings-tests.js` 178 → **188**, 
 `__padFrame(dt)` is a new dev hook, split out of `frame()` for the same reason `__advance` was:
 `requestAnimationFrame` does not fire in a hidden tab, so without it there is no way to exercise the
 pad without a visible window and a physical controller.
+
+---
+
+## M30d — the cursor stops belonging to the gamepad (2026-08-22)
+
+Tom: *"bind arrow keys to the cursor too."* One line of wiring and a rename.
+
+The arrow keys are flight controls in the air — thrust, hold and the two burners — and **inert on
+every overlay screen**, which is precisely the gap the cursor fills. So this costs the keyboard
+nothing it was using, and closes the half of M30c I had left as "a decision rather than a side
+effect".
+
+`g.padFocus` → `g.uiFocus`, `movePadFocus` → `moveUiFocus`, `.pad-focus` → `.ui-focus`. A cursor two
+devices drive should not be named for one of them; that is how the next reader learns the wrong thing
+about it.
+
+**One press, one step**, because `keydown` drops `e.repeat`. The pad repeats when held and the
+keyboard does not, and that asymmetry is right: the pad has no key-repeat of its own and needs one
+synthesised, while the keyboard's would fight the browser's.
+
+Verified in the browser: Down/Up/Right walk the cards, the ring shows, SPACE activates what the
+cursor is on. **In flight, ArrowUp still burns 9.0 fuel/s and no cursor appears** — the guard is
+`g.state !== 'play'`, the same one the stick uses.

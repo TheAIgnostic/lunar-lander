@@ -225,7 +225,10 @@ into `vx`/`vy`. Do not tidy that line.
 `advance`, and a sweep must not change its answer because somebody left a controller plugged into the
 machine running it.
 
-**The selection cursor walks geometry, not a list.** Until M30c neither a pad *nor the keyboard*
+**The selection cursor walks geometry, not a list, and belongs to no one device.** The gamepad's
+stick and d-pad drive it, and so do the arrow keys (M30d) — which are flight controls in the air and
+inert on every overlay screen, so the cursor costs the keyboard nothing it was using. Until M30c
+neither a pad *nor the keyboard*
 could pick an item out of a list — the menus are clickable HTML with one primary action on SPACE. The
 cursor knows nothing about cards: it walks `[data-action]` elements by their bounding boxes, so it
 follows whatever the CSS laid out and every screen gets it free. Off-axis distance is weighted ×2.5

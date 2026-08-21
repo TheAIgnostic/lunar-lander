@@ -1086,18 +1086,19 @@ function renderOverlay() {
   }
   overlay.innerHTML = (g.notice ? `<div class="toast">${g.notice}</div>` : '') + html;
   if (g.state === 'hangar') drawHangarPreview();
-  applyPadFocus();
+  applyUiFocus();
 }
 
-// ------------------------------------------------- the pad's selection cursor
+// ------------------------------------------------------ the selection cursor
 //
-// The menus are clickable HTML with one primary action on SPACE, so until now
+// The menus are clickable HTML with one primary action on SPACE, so until M30c
 // neither a pad *nor* the keyboard could pick an item out of a list - a body on
-// the ladder, a hangar rung, a route card. This is the cursor, driven by the
-// stick and the d-pad, and it is deliberately **general** rather than a special
-// case for the expedition screen: a cursor that knew about one screen would
-// need a second implementation for the next one, which is the fault this
-// project keeps paying for.
+// the ladder, a hangar rung, a route card. This is the cursor. It is
+// deliberately **general** in two directions: it is not a special case for the
+// expedition screen, and since M30d it is not the gamepad's - the stick, the
+// d-pad and the arrow keys all move the same one. A cursor that knew about one
+// screen, or belonged to one device, would need a second implementation for the
+// next one, which is the fault this project keeps paying for.
 //
 // It knows nothing about cards. It walks `[data-action]` elements by their
 // **geometry**, so it follows whatever a screen's CSS actually laid out - grid,
@@ -1109,22 +1110,22 @@ function renderOverlay() {
  * stale on every re-render - and the toast timer alone re-renders mid-screen.
  * An action survives that, and if it does not survive, it *should* be dropped.
  */
-function padFocusItems() {
+function uiFocusItems() {
   return [...overlay.querySelectorAll('[data-action]')]
     .filter((el) => !el.disabled && el.offsetParent !== null);
 }
 
-function applyPadFocus() {
-  for (const el of overlay.querySelectorAll('.pad-focus')) el.classList.remove('pad-focus');
-  if (!g.padFocus) return;
-  const el = padFocusItems().find((n) => n.dataset.action === g.padFocus);
-  if (el) el.classList.add('pad-focus');
-  else g.padFocus = null;   // the screen changed under it
+function applyUiFocus() {
+  for (const el of overlay.querySelectorAll('.ui-focus')) el.classList.remove('ui-focus');
+  if (!g.uiFocus) return;
+  const el = uiFocusItems().find((n) => n.dataset.action === g.uiFocus);
+  if (el) el.classList.add('ui-focus');
+  else g.uiFocus = null;   // the screen changed under it
 }
 
-function setPadFocus(el) {
-  g.padFocus = el ? el.dataset.action : null;
-  applyPadFocus();
+function setUiFocus(el) {
+  g.uiFocus = el ? el.dataset.action : null;
+  applyUiFocus();
   if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
 
@@ -1136,13 +1137,13 @@ function setPadFocus(el) {
  * line - pushing right on a ladder card should reach the card beside it, not
  * the one below and three columns over that is technically closer.
  */
-function movePadFocus(dx, dy) {
-  const items = padFocusItems();
+function moveUiFocus(dx, dy) {
+  const items = uiFocusItems();
   if (!items.length) return;
-  const cur = g.padFocus ? items.find((n) => n.dataset.action === g.padFocus) : null;
+  const cur = g.uiFocus ? items.find((n) => n.dataset.action === g.uiFocus) : null;
   // The first push lands the cursor rather than moving it, so a player never
   // has to guess where it started.
-  if (!cur) { setPadFocus(items[0]); return; }
+  if (!cur) { setUiFocus(items[0]); return; }
   const r0 = cur.getBoundingClientRect();
   const cx = r0.left + r0.width / 2;
   const cy = r0.top + r0.height / 2;
@@ -1161,7 +1162,7 @@ function movePadFocus(dx, dy) {
   }
   // Nothing that way: stay put rather than wrapping. Wrapping in a grid means
   // pushing right at the end of a row lands you somewhere unrelated.
-  if (best) setPadFocus(best);
+  if (best) setUiFocus(best);
 }
 
 /**
@@ -1177,15 +1178,15 @@ function padFrame(dt) {
   // The cursor only exists on the overlay screens. In flight the same stick is
   // the attitude control and must not be doing two jobs at once.
   if (g.state === 'play') return;
-  if (input.nav.x) movePadFocus(input.nav.x, 0);
-  if (input.nav.y) movePadFocus(0, input.nav.y);
+  if (input.nav.x) moveUiFocus(input.nav.x, 0);
+  if (input.nav.y) moveUiFocus(0, input.nav.y);
 }
 
 /** Fire whatever the cursor is on. Returns false if it is not on anything. */
-function activatePadFocus() {
-  if (!g.padFocus) return false;
-  const el = padFocusItems().find((n) => n.dataset.action === g.padFocus);
-  if (!el) { g.padFocus = null; return false; }
+function activateUiFocus() {
+  if (!g.uiFocus) return false;
+  const el = uiFocusItems().find((n) => n.dataset.action === g.uiFocus);
+  if (!el) { g.uiFocus = null; return false; }
   act(el.dataset.action);
   return true;
 }
@@ -1205,7 +1206,7 @@ input.bind(' ', () => {
   // A on the pad is SPACE, and when the selection cursor is on something it
   // means *that* rather than the screen's default action - which is the whole
   // point of having a cursor. In flight it is the booster and nothing else.
-  if (s !== 'play' && activatePadFocus()) return;
+  if (s !== 'play' && activateUiFocus()) return;
   if (s === 'menu') act(Save.loadRun() ? 'resume-run' : 'chapters');
   else if (s === 'brief') act('launch');
   else if (s === 'result' || s === 'victory') act('next');
@@ -1215,6 +1216,18 @@ input.bind(' ', () => {
   else if (s === 'help' || s === 'select' || s === 'chapters') act('back');
 });
 input.bind('enter', () => input.onPress.get(' ')());
+// The arrow keys drive the same selection cursor the stick does. They are
+// flight controls in the air - thrust, hold and the two burners - and inert on
+// every overlay screen, which is exactly the gap the cursor fills, so this
+// costs the keyboard nothing it was using.
+//
+// One press, one step: `keydown` drops `e.repeat`, so a held arrow does not run
+// away down the list the way a held stick deliberately does. That asymmetry is
+// the *pad* needing a repeat because it has no key-repeat of its own, not the
+// keyboard missing one.
+for (const [key, dx, dy] of [['arrowleft', -1, 0], ['arrowright', 1, 0], ['arrowup', 0, -1], ['arrowdown', 0, 1]]) {
+  input.bind(key, () => { if (g.state !== 'play') moveUiFocus(dx, dy); });
+}
 input.bind('r', () => {
   if (['play', 'paused', 'result', 'crash'].includes(g.state)) act('retry');
 });
@@ -1310,13 +1323,13 @@ window.__ship = ship;
 window.__act = act;
 window.__input = input;
 /** What the pad is doing right now, and which pad it is. */
-window.__padFrame = (dt = 1 / 60) => { padFrame(dt); return g.padFocus; };
+window.__padFrame = (dt = 1 / 60) => { padFrame(dt); return g.uiFocus; };
 window.__pad = () => ({
   connected: typeof navigator !== 'undefined' && navigator.getGamepads
     ? [...navigator.getGamepads()].filter(Boolean).map((g) => `${g.index}: ${g.id}`) : [],
   using: input.padIndex, name: input.padName,
   amounts: { ...input.pad }, pressing: input.padToken,
-  focus: g.padFocus, nav: { ...input.nav },
+  focus: g.uiFocus, nav: { ...input.nav },
 });
 window.__settings = settings;
 window.__debug = Debug;

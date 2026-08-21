@@ -1108,9 +1108,9 @@ its own), then the gamepad behind it (stages 2-5). Full measurement in `test/BAS
   selection cursor. A pad plays the game start to finish: stick or d-pad to move, A to confirm, B or
   START to go back, triggers and stick to fly. The cursor is general rather than per-screen, so the
   hangar, the route card and the outfit screen got it without knowing about it.
-  - **The keyboard still has no cursor.** It gained nothing here, and the same `movePadFocus` is one
-    binding away from serving the arrow keys. Left alone because it was not asked for and arrow keys
-    are flight controls — worth a decision rather than a side effect.
+  - ~~The keyboard still has no cursor.~~ **M30d** gave it the arrow keys, which are flight controls
+    in the air and inert on every overlay screen. `g.padFocus` became `g.uiFocus`: a cursor two
+    devices drive should not be named for one of them.
 - **The curve is reasoned, not tuned.** `PAD.curve` 1.5 is argued from where the hover point lands,
   which is arithmetic; whether it *feels* right is not. Four levers: `curve`, `deadzone`, `saturate`,
   `triggerFloor`.
