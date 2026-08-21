@@ -6,7 +6,7 @@ import { validateTerrain, validateEnemies, sanctuaryClear } from '../src/validat
 import { flyMission } from './pilot.js';
 import { LEVELS } from '../src/levels.js';
 import { ARCHETYPE_NAMES } from '../src/archetypes.js';
-import { MOON_LEVELS, MARS_LEVELS, EUROPA_LEVELS, generateChapter } from '../src/missions.js';
+import { CHAPTERS, generateChapter } from '../src/missions.js';
 import { PLANET_ORDER } from '../src/route.js';
 
 const SEEDS = +(process.argv[2] || 12);
@@ -114,19 +114,17 @@ for (const name of ['canyon', 'crater', 'basin']) {
   }, seedList);
 }
 
-console.log(`\nvalidating the Moon chapter\n`);
-for (const level of MOON_LEVELS) {
-  assess(`${level.id} ${level.title}`, level, seedList);
-}
-
-console.log(`\nvalidating the Mars chapter\n`);
-for (const level of MARS_LEVELS) {
-  assess(`${level.id} ${level.title}`, level, seedList);
-}
-
-console.log(`\nvalidating the Europa chapter\n`);
-for (const level of EUROPA_LEVELS) {
-  assess(`${level.id} ${level.title}`, level, seedList);
+// **Every authored chapter, in ladder order.** Three bodies were authored until
+// M29 and are now ten, so this walks `CHAPTERS` rather than three named
+// exports: a chapter added to the game is validated because it exists, not
+// because somebody remembered to add a line here.
+for (const pid of PLANET_ORDER) {
+  const chapter = Object.values(CHAPTERS).find((c) => c.planet === pid);
+  if (!chapter) continue;
+  console.log(`\nvalidating the ${chapter.title} chapter (ladder position ${PLANET_ORDER.indexOf(pid) + 1})\n`);
+  for (const level of chapter.levels) {
+    assess(`${level.id} ${level.title}`, level, seedList);
+  }
 }
 
 // M27 put all ten bodies on the ladder, so every survey chapter is now content
@@ -141,7 +139,14 @@ for (const level of EUROPA_LEVELS) {
 // Sector 1 is kept alongside as the floor: a body has to be sound at the
 // easiest setting it can be generated at, which is what a shortened ladder or a
 // future mission-select would produce.
-console.log(`\nvalidating generated survey chapters (every body, at its ladder position)\n`);
+// **Since M29 this block validates the fallback, not the content.** All ten
+// bodies are authored, so `chapterFor` never reaches `generateChapter` for
+// anything a player flies - the block above is the shipped ladder. The
+// generator is still what makes `chapterFor` total for a body added to
+// `PLANETS` without content, so it is still swept here: dead-but-kept code with
+// a passing test is a decision this project has made before (M25) and it only
+// stays honest while the test still runs.
+console.log(`\nvalidating the survey-chapter fallback (every body, at its ladder position)\n`);
 for (const pid of PLANET_ORDER) {
   const ladderSector = PLANET_ORDER.indexOf(pid) + 1;
   for (const sector of [...new Set([1, ladderSector])]) {
@@ -210,7 +215,14 @@ for (const pid of PLANET_ORDER) {
 // what a person meets. Read a fall here as "this got harder", never as "this
 // broke"; the thing that would be broken is the sanctuary line above it.
 console.log(`\nvalidating combat: every armed mission, flown with no weapon\n`);
-const ARMED = [...MOON_LEVELS, ...MARS_LEVELS, ...EUROPA_LEVELS].filter((l) => l.enemyBudget > 0);
+// Every armed mission on the ladder, all ten bodies since M29 - the sanctuary
+// promise is made by every mission that has a machine on it, so the proof has
+// to cover every mission that has a machine on it.
+const ARMED = PLANET_ORDER
+  .map((pid) => Object.values(CHAPTERS).find((c) => c.planet === pid))
+  .filter(Boolean)
+  .flatMap((c) => c.levels)
+  .filter((l) => l.enemyBudget > 0);
 let combatFail = 0;
 // Campaign-wide: how often the crossing to the safe pad kills an unarmed,
 // non-evading autopilot. M24 accepts this as difficulty rather than failure,

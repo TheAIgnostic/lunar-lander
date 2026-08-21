@@ -143,7 +143,7 @@ function startLevel(index, freshSeed = true) {
   // with the lander like any other cargo.
   g.carried = { material: 0, salvage: 0, nodes: 0 };
   g.gearCued = false;
-  g.warn = { low: false, crit: false, dry: false, heat: false, cold: false, radiation: false };
+  g.warn = { low: false, crit: false, dry: false, heat: false, cold: false, radiation: false, corrosion: false, charge: false };
   g.cam.x = sx;
   g.cam.y = sy;
   g.cam.scale = 0.8;
@@ -480,6 +480,8 @@ function effects(dt) {
     status('heat', st.heat || 0, 'ENGINE HEAT', '#ff3b5c');
     status('cold', st.cold || 0, 'COLD SOAK', '#5ff5ff');
     status('radiation', st.radiation || 0, 'RADIATION', '#ffb347');
+    status('corrosion', st.corrosion || 0, 'CORROSION', '#c8f04d');
+    status('charge', st.charge || 0, 'MAGNETIC FIELD', '#9db4ff');
   }
 
   audio.engines(ship.thrusting && !ship.landed, (ship.rcsLeft || ship.rcsRight) && !ship.landed);
@@ -557,7 +559,16 @@ function onLand() {
     fuelFrac: ship.maxFuel > 0 ? ship.fuel / ship.maxFuel : 0,
     hullLost: ship.hullMax > 0 ? (ship.hullMax - ship.hull) / ship.hullMax : 0,
     abilityUses: g.abilities ? g.abilities.used : 0,
+    // Every status channel, not just radiation. M29 authors objectives against
+    // heat, cold, corrosion and charge, and a channel that is not in this
+    // snapshot reads as 0 - which is an objective that is always met, the
+    // quietest way for content to be wrong.
     radiation: ship.statusLevels ? ship.statusLevels.radiation : 0,
+    heat: ship.statusLevels ? ship.statusLevels.heat : 0,
+    cold: ship.statusLevels ? ship.statusLevels.cold : 0,
+    corrosion: ship.statusLevels ? ship.statusLevels.corrosion : 0,
+    charge: ship.statusLevels ? ship.statusLevels.charge : 0,
+    elapsed: g.levelTime || 0,
     cargoTaken: g.terrain.cargoTaken,
   });
   g.lastObjective = objective;
@@ -636,7 +647,31 @@ function onLand() {
   if (g.field && !g.field.empty && g.field.summary().shotsFired > 0
       && !meta.unlockedBlueprints.includes(COMBAT_BLUEPRINT)) {
     meta.unlockedBlueprints = [...meta.unlockedBlueprints, COMBAT_BLUEPRINT];
-    particles.text(ship.x, ship.y - 128, 'WEAPON BLUEPRINT RECOVERED', '#5ff5ff', 20);
+    // **And it is fitted, not just filed** (M29, Tom's call).
+    //
+    // Both of his playtest crashes were on the Moon, body 1, flown stock and
+    // unarmed - bodies 2, 3 and 4 cost him nothing at all. The blueprint timing
+    // was not the problem: M16 already hands the weapon over the moment a
+    // mission shoots at you, which on the Moon is after moon-2. The *loadout*
+    // was. It is closed for the length of an expedition (M16) and opens only at
+    // a supply stop, so the weapon recovered on moon-2 could not be equipped
+    // until the Moon was already cleared - it arrived one whole body after the
+    // three missions it was for.
+    //
+    // Fitting it here closes that gap without reopening the loadout mid-run,
+    // which would undo M16's rule that an expedition is committed once begun.
+    // It only ever fills an **empty** slot: a player who chose an active module
+    // keeps the one they chose, because overwriting a deliberate choice with a
+    // helpful default is worse than the gap this fixes.
+    // It takes effect on the *next* mission, because `Abilities` is built once
+    // per mission from `meta.equipped` and this runs at touchdown. That is the
+    // right moment anyway - a lander does not grow a laser during a landing -
+    // and it is what makes moon-3 the first mission flown armed.
+    const fitted = !meta.equipped.active;
+    if (fitted) meta.equipped = { ...meta.equipped, active: COMBAT_BLUEPRINT };
+    Save.saveMeta(meta);
+    particles.text(ship.x, ship.y - 128,
+      fitted ? 'WEAPON RECOVERED AND FITTED' : 'WEAPON BLUEPRINT RECOVERED', '#5ff5ff', 20);
   }
   recordFlight(q);
   if (!g.run) Save.saveMeta(meta);
@@ -894,6 +929,10 @@ function draw() {
   // The radiation belt sits between the ground and the ship for the same reason
   // the wind does: it is air, not an overlay.
   R.drawRadiation(ctx, cam, W, H, g.terrain, ship, g.time);
+  // Vents, fountains, sinking air and magnetic anomalies. In the world with the
+  // wind and the belt, for the same reason: they are things in the air, not an
+  // overlay on it.
+  R.drawPlacedHazards(ctx, cam, W, H, g.terrain, ship, g.time);
   if (g.state === 'play' && ship.alive && !ship.landed) R.drawTrajectory(ctx, ship, g.level, g.terrain, cam);
   particles.draw(ctx);
   drawEnemies(ctx, g.field, ship, g.time, {
@@ -907,17 +946,27 @@ function draw() {
   particles.drawTexts(ctx);
   ctx.restore();
 
-  // Dust sits over the world but under the pad beacons and the HUD.
+  // Dust and darkness sit over the world but under the pad beacons and the HUD.
+  // Two channels, deliberately: dust tints toward the body's own dust colour
+  // and darkness subtracts toward black, so a body can be hazy, dark, both or
+  // neither. Pluto was the case that forced them apart - it was drawn as fog
+  // because low visibility was the only way to say "you cannot see".
   const vis = ship.env ? ship.env.visibility : 1;
-  if (vis < 0.985) {
+  const dark = ship.env ? (ship.env.darkness || 0) : 0;
+  const onScreen = {
+    x: W / 2 + (ship.x - cam.x) * cam.scale,
+    y: H / 2 + (ship.y - cam.y) * cam.scale,
+  };
+  if (dark > 0.02) R.drawDarkness(ctx, W, H, g.level, dark, g.time, onScreen);
+  if (vis < 0.985 || dark > 0.02) {
     // The storm closes in around the lander, so it needs to know where the
     // lander is on screen rather than assuming the middle of the viewport.
-    R.drawDust(ctx, W, H, g.level, vis, g.time, {
-      x: W / 2 + (ship.x - cam.x) * cam.scale,
-      y: H / 2 + (ship.y - cam.y) * cam.scale,
-    });
-    R.drawPadBeacons(ctx, cam, W, H, g.terrain, g.level, g.time, 1 - vis, present);
-    R.drawMaterialBeacons(ctx, cam, W, H, g.terrain, g.time, 1 - vis, present);
+    if (vis < 0.985) R.drawDust(ctx, W, H, g.level, vis, g.time, onScreen);
+    // The beacons answer to whichever is hiding more of the world, so a dark
+    // body gets the same "you always have a target" guarantee a stormy one has.
+    const hidden = Math.max(1 - vis, dark);
+    R.drawPadBeacons(ctx, cam, W, H, g.terrain, g.level, g.time, hidden, present);
+    R.drawMaterialBeacons(ctx, cam, W, H, g.terrain, g.time, hidden, present);
   }
 
   if (g.state === 'play' || g.state === 'paused') {

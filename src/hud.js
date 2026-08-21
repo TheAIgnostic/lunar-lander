@@ -54,9 +54,28 @@ export function drawHUD(ctx, W, H, g) {
   const gap = 26 * s;
   // Radiation scrambles the instruments long before it does anything else -
   // a consequence the player can read without a damage model.
-  const fuzz = (v, d = 1) => (noise > 0.25
-    ? (v + (Math.random() - 0.5) * noise * (d === 0 ? 14 : 4)).toFixed(d)
-    : v.toFixed(d));
+  //
+  // **Ganymede lies differently, and the difference is the point.** Radiation
+  // *jitters*: the number buzzes, and a buzzing needle reads as a broken
+  // instrument you should ignore. `falseRadar` *drifts*: the number is wrong by
+  // a smooth, slowly swimming amount, and a drifting needle reads as an
+  // instrument that is confidently wrong - which is the thing you have to fly
+  // around. `ship.env.instrumentError` is signed and swims, so it is added
+  // rather than jittered.
+  //
+  // Neither touches the simulation. The lander flies true and only the readout
+  // moves, which is the accessibility rule taken from the other side: there,
+  // presentation may never reach the simulation; here, a hazard may never leave
+  // presentation. It also means no autopilot in this project can measure it,
+  // the same blind spot visibility has had since M24.
+  const lie = (ship.env && ship.env.instrumentError) || 0;
+  const drift = lie * ((ship.loadout && ship.loadout.noiseResist) || 1);
+  const fuzz = (v, d = 1) => {
+    const shown = v + drift * (d === 0 ? 26 : 3.2);
+    return (noise > 0.25
+      ? (shown + (Math.random() - 0.5) * noise * (d === 0 ? 14 : 4)).toFixed(d)
+      : shown.toFixed(d));
+  };
   readout(ctx, 'ALT', `${fuzz(alt, 0)}m`, px + 14, rowY, s, '#dff6ff');
   readout(ctx, 'V-SPD', `${fuzz(Math.abs(ship.vy / 6))}`, px + 14, rowY + gap, s, st.vy ? GREEN : RED,
     ship.vy < 0 ? '↑' : '↓');
@@ -449,8 +468,53 @@ function drawHazardStack(ctx, W, H, g, s, py, rad) {
   }
   const heat = ship.statusLevels ? ship.statusLevels.heat : 0;
   const cold = ship.statusLevels ? ship.statusLevels.cold : 0;
-  if (heat > 2) entries.push({ id: 'heat', label: 'ENGINE HEAT', urgency: heat / 100, level: heat / 100, color: heat > 60 ? RED : AMBER });
-  if (cold > 2) entries.push({ id: 'cold', label: 'COLD SOAK', urgency: cold / 100, level: cold / 100, color: cold > 60 ? RED : CYAN });
+  // Heat and cold have consequences since M29 - heat derates the engine, cold
+  // stiffens the thrusters - so the label says what is being lost once it bites
+  // rather than only how full the gauge is. Until M29 neither was ever raised
+  // by anything: `'heat'` and `'cold'` were spelled against builders named
+  // `thermal` and `cryo`, so these two lines had never once drawn.
+  if (heat > 2) {
+    entries.push({
+      id: 'heat', label: heat > 60 ? 'ENGINE HEAT · THRUST DOWN' : 'ENGINE HEAT',
+      urgency: heat / 100 + (heat > 60 ? 0.25 : 0), level: heat / 100, color: heat > 60 ? RED : AMBER,
+    });
+  }
+  if (cold > 2) {
+    entries.push({
+      id: 'cold', label: cold > 55 ? 'COLD SOAK · THRUSTERS SLOW' : 'COLD SOAK',
+      urgency: cold / 100 + (cold > 55 ? 0.25 : 0), level: cold / 100, color: cold > 60 ? RED : CYAN,
+    });
+  }
+  const corrosion = ship.statusLevels ? ship.statusLevels.corrosion : 0;
+  const charge = ship.statusLevels ? ship.statusLevels.charge : 0;
+  if (corrosion > 2) {
+    entries.push({
+      id: 'acid', label: corrosion > 45 ? 'CORROSION · HULL' : 'CORROSION',
+      urgency: corrosion / 100 + (corrosion > 45 ? 0.3 : 0), level: corrosion / 100,
+      color: corrosion > 45 ? RED : AMBER,
+    });
+  }
+  if (charge > 2) {
+    entries.push({
+      id: 'charge', label: charge > 50 ? 'MAGNETIC · PULLING DOWN' : 'MAGNETIC FIELD',
+      urgency: charge / 100 + (charge > 50 ? 0.25 : 0), level: charge / 100,
+      color: charge > 50 ? RED : '#9db4ff',
+    });
+  }
+  // The two that are places rather than levels. They warn while you are *in*
+  // them, which is the only time the warning is actionable.
+  if (ship.env && ship.env.downdraft > 0.05) {
+    entries.push({
+      id: 'downdraft', label: 'SINKING AIR', urgency: 0.4 + ship.env.downdraft * 0.6,
+      level: ship.env.downdraft, color: RED,
+    });
+  }
+  if (ship.env && Math.abs(ship.env.instrumentError) > 0.25) {
+    entries.push({
+      id: 'radar', label: 'INSTRUMENTS UNRELIABLE', urgency: 0.5,
+      level: Math.min(1, Math.abs(ship.env.instrumentError)), color: '#9db4ff',
+    });
+  }
 
   if (!entries.length) return;
   entries.sort((a, b) => b.urgency - a.urgency);

@@ -707,6 +707,176 @@ export function drawDust(ctx, W, H, level, visibility, time, focus = null) {
 }
 
 /**
+ * **Night, which is not fog.**
+ *
+ * Pluto's darkness was `visibility: 0.45`, and `drawDust` is what draws
+ * visibility - so the darkest body in the game rendered as pale blue haze,
+ * which is what Tom found walking the ladder. The two are separate channels
+ * since M29 and this is the other one.
+ *
+ * The difference that matters is *colour*: dust adds the body's dust tint and
+ * lightens toward it, and darkness subtracts toward black. So the same 0.7 on
+ * each channel reads as "there is something in the air" or "there is no light
+ * here", and a body can have either, both or neither.
+ *
+ * It follows dust's structure otherwise, because that structure was measured
+ * and works: a flat term plus a sight radius around the lander, with the pad
+ * beacons and ore crates drawn *above* it. Blind is difficulty; targetless is a
+ * coin toss (M18), and that line does not move because the cause changed.
+ */
+export function drawDarkness(ctx, W, H, level, darkness, time, focus = null) {
+  const d = clamp(darkness, 0, 0.95);
+  if (d <= 0.02) return;
+
+  // The flat term. Kept well under the sight radius' peak so that the sky and
+  // the far ground go deep while the lander's own surroundings stay readable.
+  ctx.fillStyle = `rgba(2,4,10,${(d * 0.52).toFixed(3)})`;
+  ctx.fillRect(0, 0, W, H);
+
+  // The sight radius: what the lander's own lights reach. Anchored on the ship,
+  // not the viewport, for the same reason the storm is.
+  const cx = focus ? focus.x : W / 2;
+  const cy = focus ? focus.y : H / 2;
+  const reach = Math.hypot(W, H);
+  const clear = reach * (0.34 - 0.26 * d);
+  const gone = reach * (0.86 - 0.34 * d);
+  const night = ctx.createRadialGradient(cx, cy, Math.max(40, clear), cx, cy, Math.max(90, gone));
+  const peak = Math.min(0.95, d * 1.05);
+  night.addColorStop(0, 'rgba(2,4,10,0)');
+  night.addColorStop(0.5, `rgba(2,4,10,${(peak * 0.6).toFixed(3)})`);
+  night.addColorStop(1, `rgba(2,4,10,${peak.toFixed(3)})`);
+  ctx.fillStyle = night;
+  ctx.fillRect(0, 0, W, H);
+
+  // A cold cast over the lit part, so the near ground reads as lit rather than
+  // as merely less dark. No streaks: still air, and nothing in it.
+  ctx.save();
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.fillStyle = `rgba(150,175,220,${(1 - d * 0.30).toFixed(3)})`;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
+/**
+ * **The hazards that live somewhere**: vents, fountains, sinking air and
+ * magnetic anomalies.
+ *
+ * M29a's rule, from radiation: *if a hazard has a boundary, draw the boundary*.
+ * These four are the first hazards in the game with a **place** rather than a
+ * global level, so the boundary is a position on the map, and all four publish
+ * theirs on `ship.env` for exactly this.
+ *
+ * A fountain draws its telegraph before it fires, which is the M12 rule for
+ * guns applied to weather - a hazard that arrives without warning is a dice
+ * roll, not a difficulty.
+ */
+export function drawPlacedHazards(ctx, cam, W, H, terrain, ship, time) {
+  const env = ship && ship.env;
+  if (!env) return;
+  const half = W / 2 / cam.scale + 240;
+  const visible = (x) => x > cam.x - half && x < cam.x + half;
+  const groundAt = (x) => terrain.heightAt(x);
+
+  // --- Enceladus: vapour vents. They lift, so they are drawn rising.
+  for (const v of env.plumes || []) {
+    if (!visible(v.x) || v.strength <= 0.01) continue;
+    const gy = groundAt(v.x);
+    const h = 220 + 520 * v.strength;
+    const g = ctx.createLinearGradient(0, gy, 0, gy - h);
+    g.addColorStop(0, `rgba(190,235,255,${(0.34 * v.strength).toFixed(3)})`);
+    g.addColorStop(0.5, `rgba(190,235,255,${(0.16 * v.strength).toFixed(3)})`);
+    g.addColorStop(1, 'rgba(190,235,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(v.x - v.radius * 0.30, gy);
+    ctx.lineTo(v.x - v.radius * 0.80, gy - h);
+    ctx.lineTo(v.x + v.radius * 0.80, gy - h);
+    ctx.lineTo(v.x + v.radius * 0.30, gy);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // --- Io: lava fountains, with the swell before the throw.
+  for (const e of env.eruptions || []) {
+    if (!visible(e.x)) continue;
+    const gy = groundAt(e.x);
+    if (e.firing > 0.01) {
+      const h = e.reach * e.firing;
+      const g = ctx.createLinearGradient(0, gy, 0, gy - h);
+      g.addColorStop(0, `rgba(255,214,120,${(0.85 * e.firing).toFixed(3)})`);
+      g.addColorStop(0.45, `rgba(255,120,50,${(0.5 * e.firing).toFixed(3)})`);
+      g.addColorStop(1, 'rgba(255,80,40,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(e.x - e.radius * 0.4, gy);
+      ctx.lineTo(e.x - e.radius * 0.75, gy - h);
+      ctx.lineTo(e.x + e.radius * 0.75, gy - h);
+      ctx.lineTo(e.x + e.radius * 0.4, gy);
+      ctx.closePath();
+      ctx.fill();
+    } else if (e.warn > 0.02) {
+      // The telegraph: the vent mouth glows and swells before it throws.
+      const r = e.radius * (0.35 + 0.3 * e.warn);
+      ctx.save();
+      ctx.globalAlpha = 0.30 + 0.5 * e.warn;
+      ctx.strokeStyle = '#ff8a3c';
+      ctx.shadowColor = '#ff8a3c';
+      ctx.shadowBlur = 20 * e.warn;
+      ctx.lineWidth = 3 / cam.scale + 1;
+      ctx.beginPath();
+      ctx.ellipse(e.x, gy - 4, r, r * 0.30, 0, Math.PI, 0);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // --- Venus: sinking air. Drawn falling, which is the whole warning.
+  for (const c of env.downColumns || []) {
+    if (!visible(c.x)) continue;
+    const r = c.radius || 190;
+    const gy = groundAt(c.x);
+    const top = gy - 1000;
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = 'rgba(215,190,140,0.5)';
+    ctx.lineWidth = 2 / cam.scale + 0.6;
+    for (let i = -2; i <= 2; i++) {
+      const x = c.x + (i / 2) * r * 0.8;
+      // Chevrons falling down the column, so the direction is unmistakable.
+      const drop = ((time * 210 + i * 90) % 300);
+      for (let k = 0; k < 4; k++) {
+        const y = top + ((k * 300 + drop) % 1000);
+        if (y > gy - 20) continue;
+        ctx.beginPath();
+        ctx.moveTo(x - 13, y - 9);
+        ctx.lineTo(x, y);
+        ctx.lineTo(x + 13, y - 9);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  // --- Ganymede: the field. A ring on the ground where the anomaly sits, so
+  // the instruments lying has a *location* the player can learn.
+  for (const a of env.anomalies || []) {
+    if (!visible(a.x)) continue;
+    const gy = groundAt(a.x);
+    const pulse = 0.5 + 0.5 * Math.sin(time * 1.6 + a.x * 0.002);
+    ctx.save();
+    ctx.globalAlpha = 0.16 + 0.14 * pulse;
+    ctx.strokeStyle = '#9db4ff';
+    ctx.lineWidth = 2 / cam.scale + 0.8;
+    for (let k = 1; k <= 3; k++) {
+      ctx.beginPath();
+      ctx.ellipse(a.x, gy - 10, a.radius * (k / 3), a.radius * (k / 3) * 0.22, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+/**
  * The radiation belt, drawn where it actually is.
  *
  * Tom: *"radiation ... is not visible on the screen (radiation should only be in

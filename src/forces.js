@@ -1,4 +1,5 @@
 import { clamp } from './util.js';
+import { sanctuaryPad } from './enemies.js';
 
 // Environmental forces and status effects (roadmap section 14: "hazards should
 // apply explicit forces/status effects through a shared interface").
@@ -55,6 +56,45 @@ export const RADIATION = {
   /** How far above `minAltitude` the sweep reaches full strength. */
   falloff: 160,
 };
+
+/**
+ * **Engine heat, and why it is not radiation with a different label.**
+ *
+ * Radiation eats hull; heat takes *thrust*. Mercury's own summary has said
+ * "engine heat is the real fuel gauge" since M5, and a gauge that only goes up
+ * is the thing M29a's radiation note was about. Past `bite` the engine derates,
+ * so a long burn is a decision with a price and the answer is pacing rather
+ * than armour. It recovers the moment you stop burning, so it is never a
+ * one-way trip to a crash.
+ */
+export const HEAT = { bite: 60, minThrust: 0.55 };
+
+/**
+ * Cold soak. The third consequence, deliberately different again: heat costs
+ * power and radiation costs hull, so cold costs **control** - the attitude
+ * thrusters stiffen and the lander answers late. It builds while you coast and
+ * is held off by burning, which makes a slow, fuel-saving descent the expensive
+ * one on Pluto and a committed one cheap.
+ */
+export const COLD = { bite: 55, minRcs: 0.45 };
+
+/**
+ * Venus' air. Corrosion is the mirror of radiation and that is the whole point
+ * of putting it on the other end of the ladder: radiation lives high and comes
+ * in sweeps, so you get low and wait it out; acid is **thickest at the deck**
+ * and never stops, so on Venus loitering low is what kills you. Two bodies,
+ * opposite instincts, one status channel each.
+ */
+export const ACID = { bite: 45, hullPerSecond: 6, floor: 0.5, thickBelow: 300 };
+
+/**
+ * Ganymede's field. It raises `charge`, and charge does two things a player can
+ * feel: it puts a slow torque into the hull, and past `bite` it drags the
+ * lander toward the ground it is anchored in. The instruments lying is the
+ * other half of the body and is a separate force, because one is physics and
+ * one is presentation and they must never be the same code.
+ */
+export const MAGNETIC = { bite: 50, pull: 12, torque: 0.9 };
 
 /** Status channels a hazard can raise. */
 export const STATUS_CHANNELS = ['heat', 'cold', 'corrosion', 'radiation', 'charge'];
@@ -122,7 +162,15 @@ export function worstVisibility(level) {
 
 /** Environment readings a force can write and the renderer/HUD can read. */
 export function freshEnv() {
-  return { visibility: 1, dust: 0, radiationSweep: 0, radiationBand: 0, radiationReach: 0, shielded: false };
+  return {
+    visibility: 1, dust: 0, darkness: 0,
+    radiationSweep: 0, radiationBand: 0, radiationReach: 0, shielded: false,
+    // M29 channels. Each is written by one force and read by the renderer or
+    // the HUD; none of them is read back by the simulation, except `magnetic`,
+    // which `falseRadar` reads to decide where the lie is worst.
+    lift: 0, acid: 0, downdraft: 0, magnetic: 0, instrumentError: 0,
+    plumes: null, eruptions: null, anomalies: null, downColumns: null,
+  };
 }
 
 /**
@@ -163,41 +211,370 @@ function atmosphere(cfg) {
   };
 }
 
-/** Engine heat: rises while burning, falls otherwise. Mercury and Io read this. */
+/**
+ * Engine heat: rises while burning, falls otherwise, and **derates the engine**
+ * past `HEAT.bite`. Mercury and Io read this.
+ *
+ * Built in M5 and, until M29, produced by nothing at all: both bodies declare
+ * the hazard as `'heat'` and the builder is keyed `thermal`, so it was the
+ * `plume`/`plumes` fault a second and third time. Mercury and Io had no working
+ * hazard whatsoever. The alias is in `BUILDERS`; the derate is what stops the
+ * fix being a gauge that goes up and costs nothing.
+ */
 function thermal(cfg) {
   const rise = cfg.heatRise != null ? cfg.heatRise : 14;
   const fall = cfg.heatFall != null ? cfg.heatFall : 9;
+  const bite = cfg.heatBite != null ? cfg.heatBite : HEAT.bite;
+  const minThrust = cfg.minThrust != null ? cfg.minThrust : HEAT.minThrust;
   return {
     id: 'thermal',
     apply(ship, level, t, dt) {
       const s = ship.statusLevels;
       const res = hazardScale(ship, 'heat');
       s.heat = Math.max(0, Math.min(100, s.heat + (ship.thrusting ? rise * res : -fall) * dt));
+      const over = clamp01((s.heat - bite) / (100 - bite));
+      ship.thermalDerate = 1 - (1 - minThrust) * over;
     },
   };
 }
 
-/** Ambient cold: builds continuously, slowed by burning. Pluto reads this. */
+/**
+ * Ambient cold: builds continuously, slowed by burning, and **stiffens the
+ * attitude thrusters** past `COLD.bite`. Pluto reads this.
+ *
+ * Same history as `thermal` - Pluto declares `'cold'`, the builder is keyed
+ * `cryo`, and so cold soak had never once been applied to a lander.
+ */
 function cryo(cfg) {
   const rate = cfg.coldRate != null ? cfg.coldRate : 6;
+  const bite = cfg.coldBite != null ? cfg.coldBite : COLD.bite;
+  const minRcs = cfg.minRcs != null ? cfg.minRcs : COLD.minRcs;
   return {
     id: 'cryo',
     apply(ship, level, t, dt) {
       const s = ship.statusLevels;
       const res = hazardScale(ship, 'cold');
       s.cold = Math.max(0, Math.min(100, s.cold + (ship.thrusting ? rate * 0.3 : rate) * res * dt));
+      const over = clamp01((s.cold - bite) / (100 - bite));
+      ship.rcsStiffness = 1 - (1 - minRcs) * over;
     },
   };
 }
 
-/** Periodic vapour jets that push the lander. Enceladus reads this. */
-function plumes(cfg) {
+/**
+ * **Body lift.** Titan is thick air at a seventh of a g, and its own summary has
+ * promised "you glide, and you overshoot" since M5 while the hazard behind it
+ * (`'glide'`) had no builder. This is the builder: horizontal speed makes lift,
+ * so crossing fast floats you, and the way down is to slow down first.
+ *
+ * Quadratic in speed and capped, because lift that grows without limit turns a
+ * fast crossing into a launch. The cap is the interesting part of the mechanic
+ * anyway - it is a terminal glide slope, not an ejection seat.
+ */
+function glide(cfg) {
+  const lift = cfg.lift != null ? cfg.lift : 0.00055;
+  const cap = cfg.liftCap != null ? cfg.liftCap : 26;
+  return {
+    id: 'glide',
+    apply(ship, level, t, dt) {
+      const damp = (ship.loadout && ship.loadout.disturbanceResist) || 1;
+      const up = Math.min(cap, lift * ship.vx * ship.vx) * damp;
+      ship.vy -= up * dt;
+      ship.env.lift = up;
+    },
+  };
+}
+
+/**
+ * **Acid haze.** Corrosion builds everywhere in Venus' air and builds fastest at
+ * the deck, then eats hull past `ACID.bite` down to a floor - the same shape as
+ * radiation and deliberately the opposite geometry, so the two bodies teach
+ * opposite instincts. Radiation: get low. Acid: do not loiter low.
+ *
+ * The floor is the M18 rule and it is not negotiable: a hazard that can finish
+ * you on its own turns a route the map is built to tempt you down into the
+ * route that kills you however well it was flown.
+ */
+function acid(cfg) {
+  const rate = cfg.acidRate != null ? cfg.acidRate : 9;
+  const bite = cfg.acidBite != null ? cfg.acidBite : ACID.bite;
+  const thickBelow = cfg.thickBelow != null ? cfg.thickBelow : ACID.thickBelow;
+  const perSecond = cfg.acidHull != null ? cfg.acidHull : ACID.hullPerSecond;
+  return {
+    id: 'acid',
+    apply(ship, level, t, dt, terrain) {
+      const alt = terrain ? Math.max(0, terrain.heightAt(ship.x) - ship.y) : thickBelow;
+      // Twice as aggressive on the deck as it is well above it.
+      const thickness = 1 + (1 - clamp01(alt / thickBelow));
+      const res = hazardScale(ship, 'corrosion');
+      const s = ship.statusLevels;
+      s.corrosion = Math.min(100, s.corrosion + rate * thickness * res * dt);
+      ship.env.acid = clamp01(s.corrosion / 100);
+      if (s.corrosion > bite && ship.damageOverTime) {
+        const floor = ship.hullMax * ACID.floor;
+        const room = ship.hull - floor;
+        if (room > 0) {
+          const over = (s.corrosion - bite) / (100 - bite);
+          ship.damageOverTime(Math.min(room, perSecond * over * dt), 'acid');
+        }
+      }
+    },
+  };
+}
+
+/**
+ * **Downdrafts.** Columns of sinking air at fixed places on the map, on a cycle.
+ * Venus' other hollow hazard, and the one that makes its dense air a *place*
+ * rather than a global number: the map has spots you must not be slow over.
+ *
+ * Positions are fractions of the map width so a mission authors them without
+ * knowing how wide the terrain came out, and they are published on `env` so the
+ * renderer can draw the column. Drawing it is the M29a rule - if a hazard has a
+ * boundary, the player gets to see the boundary.
+ */
+function downdraft(cfg) {
+  const columns = cfg.columns || [];
+  const width = cfg.width || 3000;
+  const force = cfg.downForce != null ? cfg.downForce : 62;
+  const radius = cfg.downRadius != null ? cfg.downRadius : 190;
+  const period = cfg.downPeriod != null ? cfg.downPeriod : 11;
+  const duty = cfg.downDuty != null ? cfg.downDuty : 0.5;
+  const spec = columns.map((c, i) => (typeof c === 'number'
+    ? { x: c * width, offset: i / Math.max(1, columns.length) }
+    : { x: (c.atX != null ? c.atX * width : c.x), offset: c.offset != null ? c.offset : i / Math.max(1, columns.length),
+        force: c.force, radius: c.radius }));
+  return {
+    id: 'downdraft',
+    apply(ship, level, t, dt, terrain) {
+      let strongest = 0;
+      const live = [];
+      for (const c of spec) {
+        if (!offSanctuary(terrain, c.x, c.radius || radius)) continue;
+        live.push(c);
+        const phase = (t / period + c.offset) % 1;
+        if (phase > duty) continue;
+        const dx = ship.x - c.x;
+        const r = c.radius || radius;
+        if (Math.abs(dx) > r) continue;
+        // Smooth in the cycle and across the column, so the edge of one is a
+        // shove rather than a wall.
+        const swell = Math.sin((phase / duty) * Math.PI);
+        const across = 1 - Math.abs(dx) / r;
+        const damp = (ship.loadout && ship.loadout.disturbanceResist) || 1;
+        const f = (c.force || force) * swell * across * damp;
+        ship.vy += f * dt;
+        // Sinking air drags sideways toward the core as well as down.
+        ship.vx -= Math.sign(dx || 1) * f * 0.18 * dt;
+        strongest = Math.max(strongest, swell * across);
+      }
+      ship.env.downdraft = strongest;
+      ship.env.downColumns = live;
+      ship.env.downPeriod = period;
+      ship.env.downDuty = duty;
+    },
+  };
+}
+
+/**
+ * **Io's fountains.** Lava thrown from fixed vents on a cycle: it lifts, and it
+ * burns anything standing in it. Structurally a plume with teeth, and kept a
+ * separate force because the two bodies want opposite things from it -
+ * Enceladus' vents are a *ride* you can use, Io's are a thing to time.
+ *
+ * The telegraph is the design: `env.eruptions` publishes each vent's phase, so
+ * the renderer shows a vent swelling before it fires. A hazard that arrives
+ * without warning is a dice roll, which is the M12 telegraph rule applied to
+ * weather instead of to a gun.
+ */
+function eruption(cfg) {
   const vents = cfg.vents || [];
+  const width = cfg.width || 3000;
+  const period = cfg.eruptPeriod != null ? cfg.eruptPeriod : 9;
+  const duty = cfg.eruptDuty != null ? cfg.eruptDuty : 0.28;
+  const reach = cfg.eruptReach != null ? cfg.eruptReach : 520;
+  const force = cfg.eruptForce != null ? cfg.eruptForce : 96;
+  const hull = cfg.eruptHull != null ? cfg.eruptHull : 14;
+  const spec = vents.map((v, i) => (typeof v === 'number'
+    ? { x: v * width, offset: i / Math.max(1, vents.length), radius: 120 }
+    : { x: (v.atX != null ? v.atX * width : v.x), offset: v.offset != null ? v.offset : i / Math.max(1, vents.length),
+        radius: v.radius || 120, reach: v.reach || reach }));
+  return {
+    id: 'eruption',
+    apply(ship, level, t, dt, terrain) {
+      const live = [];
+      for (const v of spec) {
+        if (!offSanctuary(terrain, v.x, v.radius)) continue;
+        const phase = (t / period + v.offset) % 1;
+        // 0 while quiet, climbing through the telegraph, 1 at full fountain.
+        const firing = phase < duty ? Math.sin((phase / duty) * Math.PI) : 0;
+        const warn = phase >= duty && phase < duty + 0.12 ? 0 : clamp01((0.12 - Math.min(0.12, 1 - phase)) / 0.12);
+        live.push({ x: v.x, radius: v.radius, reach: v.reach || reach, firing, warn });
+        if (firing <= 0.02) continue;
+        const dx = ship.x - v.x;
+        if (Math.abs(dx) > v.radius) continue;
+        const ground = terrain ? terrain.heightAt(v.x) : ship.y;
+        const alt = ground - ship.y;
+        if (alt < 0 || alt > (v.reach || reach) * firing) continue;
+        const across = 1 - Math.abs(dx) / v.radius;
+        const damp = (ship.loadout && ship.loadout.disturbanceResist) || 1;
+        ship.vy -= force * firing * across * damp * dt;
+        ship.statusLevels.heat = Math.min(100, ship.statusLevels.heat + 24 * firing * across * dt);
+        if (ship.damageOverTime) {
+          ship.damageOverTime(hull * firing * across * hazardScale(ship, 'heat') * dt, 'eruption');
+        }
+      }
+      ship.env.eruptions = live;
+    },
+  };
+}
+
+/**
+ * **Ganymede's field.** Raises `charge`, puts a slow torque into the hull, and
+ * past `MAGNETIC.bite` pulls the lander down toward the ground it is anchored
+ * in. The pull is what makes the body a *weight* problem rather than a noise
+ * problem, and the torque is what you spend attitude fuel answering.
+ *
+ * Charge decays out of the field's reach, so the anomalies are places on the
+ * map, not a global tax.
+ */
+function magnetic(cfg) {
+  const anomalies = cfg.anomalies || [];
+  const width = cfg.width || 3000;
+  const radius = cfg.magRadius != null ? cfg.magRadius : 420;
+  const rate = cfg.magRate != null ? cfg.magRate : 22;
+  const bite = cfg.magBite != null ? cfg.magBite : MAGNETIC.bite;
+  const spec = anomalies.map((a) => (typeof a === 'number'
+    ? { x: a * width, radius }
+    : { x: (a.atX != null ? a.atX * width : a.x), radius: a.radius || radius }));
+  return {
+    id: 'magnetic',
+    apply(ship, level, t, dt) {
+      let near = 0;
+      for (const a of spec) {
+        const dx = Math.abs(ship.x - a.x);
+        if (dx > a.radius) continue;
+        near = Math.max(near, 1 - dx / a.radius);
+      }
+      const res = hazardScale(ship, 'charge');
+      const s = ship.statusLevels;
+      s.charge = Math.max(0, Math.min(100, s.charge + (near ? rate * near * res : -rate * 0.8) * dt));
+      ship.env.magnetic = near;
+      ship.env.anomalies = spec;
+      if (near > 0) {
+        // A steady torque, signed by which side of the anomaly you are on, so
+        // crossing one rolls you the other way and has to be flown through.
+        ship.spin += Math.sign(ship.x - (spec.find((a) => Math.abs(ship.x - a.x) <= a.radius) || spec[0]).x || 1)
+          * MAGNETIC.torque * near * dt;
+      }
+      const over = clamp01((s.charge - bite) / (100 - bite));
+      if (over > 0) ship.vy += MAGNETIC.pull * over * dt;
+    },
+  };
+}
+
+/**
+ * **The instruments lie.** Ganymede's other hollow hazard, and the one rule it
+ * must obey: it writes an error onto `env` and **changes nothing in the
+ * simulation**. The lander flies true; the readout does not. That is the same
+ * line the accessibility settings live on, taken from the other side - there,
+ * presentation may never reach the simulation; here, a hazard may never leave
+ * presentation.
+ *
+ * It follows that no autopilot in this project can measure it, exactly as no
+ * automated test here can measure visibility (M24). Recorded, not asserted.
+ *
+ * The error swims rather than jitters, because a needle that buzzes reads as a
+ * broken game and a needle that drifts reads as a lying one.
+ */
+function falseRadar(cfg) {
+  const amount = cfg.radarError != null ? cfg.radarError : 1;
+  const period = cfg.radarPeriod != null ? cfg.radarPeriod : 7;
+  return {
+    id: 'falseRadar',
+    apply(ship, level, t) {
+      const swim = Math.sin(t / period * Math.PI * 2) * 0.6 + Math.sin(t / (period * 0.37) + 2.1) * 0.4;
+      // Worst where the field is, so the lie has a location like everything
+      // else on this body. Bare `falseRadar` with no anomalies lies everywhere.
+      const where = ship.env.magnetic != null ? Math.max(0.35, ship.env.magnetic) : 1;
+      ship.env.instrumentError = swim * amount * where;
+    },
+  };
+}
+
+/**
+ * **The sanctuary rule, extended from machines to weather.**
+ *
+ * M12 promises that a mission's lowest-tier landing zone - the one you can
+ * always get home to on the starting tank - is outside every machine's reach,
+ * and `validate.js` proves it as geometry. M29 put hazards *in places* for the
+ * first time (vents, fountains, sinking air), and the first tuning pass had an
+ * Enceladus vent sitting over the safe pad: the way home fell to 11/20 while
+ * the deep route stayed at 19/20 on every setting tried. Sweeping the vent's
+ * force from 15 down to 8 barely moved it, which is what said the problem was
+ * *where* it was and not how hard it blew.
+ *
+ * So a placed hazard keeps off the safe zone, for the same reason a turret
+ * does: the near pad is a promise about geometry, and weather standing on it
+ * breaks that promise exactly as a gun would. The deep zone is fair game, which
+ * is why the prize route never moved in that sweep.
+ *
+ * It reads `sanctuaryPad` from `enemies.js` rather than reimplementing "the
+ * nearest zone" - one rule, one implementation, which is the lesson `__settleNow`
+ * cost M27 an hour to relearn. The result is cached per terrain because this is
+ * asked 120 times a second per vent.
+ */
+export const HAZARD_PAD_GUARD = 240;
+
+function sanctuaryOf(terrain) {
+  if (!terrain || !terrain.pads || !terrain.pads.length) return null;
+  if (terrain.__sanctuary === undefined) {
+    Object.defineProperty(terrain, '__sanctuary', { value: sanctuaryPad(terrain), enumerable: false });
+  }
+  return terrain.__sanctuary;
+}
+
+/** True when a hazard centred at `x` with this reach is clear of the safe pad. */
+function offSanctuary(terrain, x, reach) {
+  const safe = sanctuaryOf(terrain);
+  if (!safe) return true;
+  const guard = HAZARD_PAD_GUARD + reach;
+  return x < safe.x1 - guard || x > safe.x2 + guard;
+}
+
+/**
+ * Periodic vapour jets that push the lander. Enceladus reads this.
+ *
+ * Built in M5 and **never once applied**: Enceladus declares the hazard as
+ * `'plume'` and this builder is keyed `plumes`, so the lookup missed and the
+ * body's only hazard was a word on a route card. Caught by an external review
+ * in M28b, which flagged it as "builds with no vents, a no-op" - right about the
+ * outcome, wrong about the mechanism, and the mechanism was the half that
+ * mattered, because authoring vents alone would have fixed nothing.
+ *
+ * A vent authors its position as `atX`, a fraction of the map width, so content
+ * does not have to know how wide the terrain came out. Absolute `x` still works.
+ * Vents are published on `env` so the renderer can draw them - they are a hazard
+ * with a place, and M29a's rule is that those get drawn.
+ */
+function plumes(cfg) {
+  const width = cfg.width || 3000;
+  const vents = (cfg.vents || []).map((v, i) => ({
+    x: v.atX != null ? v.atX * width : v.x,
+    period: v.period || 8,
+    offset: v.offset != null ? v.offset : i / Math.max(1, (cfg.vents || []).length),
+    duty: v.duty != null ? v.duty : 0.4,
+    radius: v.radius || 200,
+    force: v.force || 42,
+  }));
   return {
     id: 'plumes',
-    apply(ship, level, t, dt) {
+    apply(ship, level, t, dt, terrain) {
+      const live = [];
       for (const v of vents) {
+        if (!offSanctuary(terrain, v.x, v.radius)) continue;   // never over the way home
         const phase = (t / v.period + v.offset) % 1;
+        const strength = phase < v.duty ? Math.sin((phase / v.duty) * Math.PI) : 0;
+        live.push({ x: v.x, radius: v.radius, strength });
         if (phase > v.duty) continue;                  // vent is quiet
         const dx = ship.x - v.x;
         if (Math.abs(dx) > v.radius) continue;
@@ -206,6 +583,33 @@ function plumes(cfg) {
         ship.vy -= v.force * falloff * damp * dt;
         ship.vx += Math.sign(dx || 1) * v.force * 0.25 * falloff * damp * dt;
       }
+      ship.env.plumes = live;
+    },
+  };
+}
+
+/**
+ * **Night.** Pluto's `darkness` was implemented as `visibility: 0.45`, and the
+ * renderer draws visibility as *dust* - so the darkest body in the game came out
+ * as pale blue fog, which is what Tom found on the ladder. Darkness is its own
+ * channel now: it dims the world and closes a sight radius around the lander,
+ * while dust stays a coloured haze in the air. A body can have either, both, or
+ * neither, and they no longer have to lie about each other.
+ *
+ * Like dust it leaves the beacons and the ore crates drawn above it (M18/M22),
+ * so the player always has a target. Blind is difficulty; targetless is a coin
+ * toss, and this project has decided that distinction twice already.
+ */
+function darkness(cfg) {
+  const level0 = cfg.darkness != null ? cfg.darkness : 0.7;
+  const period = cfg.darkPeriod || 0;
+  const swing = cfg.darkSwing != null ? cfg.darkSwing : 0;
+  return {
+    id: 'darkness',
+    apply(ship, level, t) {
+      // A static night by default; a body may breathe it if it wants weather.
+      const pulse = period ? Math.sin((t / period) * Math.PI * 2) * swing : 0;
+      ship.env.darkness = clamp(level0 + pulse, 0, 0.92);
     },
   };
 }
@@ -390,7 +794,60 @@ function radiation(cfg) {
   };
 }
 
-const BUILDERS = { atmosphere, thermal, cryo, plumes, dust, windChannels, radiation };
+/**
+ * **The hazard name a mission writes is the key that is looked up here, and for
+ * four bodies it had never matched anything.**
+ *
+ * This table is the single most expensive line in the project's history for its
+ * size. `PlanetDefinition.hazards` is authored prose-ish data - `'heat'`,
+ * `'plume'`, `'cold'` - and the builders were named for what they model -
+ * `thermal`, `plumes`, `cryo`. A miss is silent: `BUILDERS[spec.type]` comes
+ * back undefined, `add()` is never called, and the body flies with no hazard at
+ * all while its route card, its summary and its briefing all describe one.
+ *
+ * Audited in M29 across every planet and every authored mission. What it found:
+ *
+ * | declared | builder it wanted | state before M29 |
+ * | --- | --- | --- |
+ * | `heat` (Mercury, Io) | `thermal` | **never built** |
+ * | `cold` (Pluto) | `cryo` | **never built** |
+ * | `plume` (Enceladus) | `plumes` | **never built** |
+ * | `wind` (Mars, Titan) | `atmosphere` | built anyway, via wind/gust/drag |
+ * | `drag` (Venus) | `atmosphere` | built anyway, via wind/gust/drag |
+ * | `ice` (Europa) | none - `surfaceFriction` | correct, not a force |
+ *
+ * So **Mercury, Io, Enceladus and Ganymede had no working hazard whatsoever**,
+ * halfway down a ladder every run walks. M28b caught the Enceladus case from a
+ * review; the other two spellings had never been noticed, and neither
+ * `ROADMAP_STATUS.md` nor `docs/ARCHITECTURE.md` listed `heat` or `cold` among
+ * the hollow ones - both documents believed they worked.
+ *
+ * The aliases below are the fix, and `forces-tests.js` now asserts the property
+ * rather than the list: **every hazard string any planet or mission declares
+ * must resolve to a builder**, so a new body cannot ship a hazard that does
+ * nothing without failing a test. `ice` and `darkness` are the two deliberate
+ * exceptions and `darkness` stopped being one in M29 - it is a real force now.
+ */
+const BUILDERS = {
+  atmosphere, thermal, cryo, plumes, dust, windChannels, radiation,
+  // M29 builders, one per hazard that was previously a string with nothing
+  // behind it.
+  glide, acid, downdraft, eruption, magnetic, falseRadar, darkness,
+  // Aliases: the name content writes, pointing at the model that implements it.
+  heat: thermal,
+  cold: cryo,
+  plume: plumes,
+  wind: atmosphere,
+  drag: atmosphere,
+};
+
+/**
+ * Hazards that are deliberately not forces: they are implemented by a
+ * `PlanetDefinition` field the generator or the collision code reads, so having
+ * no builder is correct rather than a hole. Exported so the test that proves
+ * "every declared hazard resolves" can state its own exceptions.
+ */
+export const NON_FORCE_HAZARDS = ['ice'];
 
 /**
  * Force list for a level, built once and cached on it. Legacy levels declare
@@ -427,6 +884,19 @@ export function applyForces(ship, level, t, dt, terrain) {
   if (!ship.statusLevels) ship.statusLevels = freshStatus();
   ship.env.visibility = obscure(level.visibility != null ? level.visibility : 1);
   ship.env.dust = 0;
+  // **Every channel a force writes is reset before the forces run**, including
+  // the two the ship itself reads back. A force that is not on this level must
+  // leave no trace of the last one that was: `thermalDerate` and `rcsStiffness`
+  // multiply thrust and attitude authority, so a stale value from a previous
+  // mission would be a hazard that followed the lander to another body.
+  ship.env.darkness = 0;
+  ship.env.lift = 0;
+  ship.env.acid = 0;
+  ship.env.downdraft = 0;
+  ship.env.magnetic = 0;
+  ship.env.instrumentError = 0;
+  ship.thermalDerate = 1;
+  ship.rcsStiffness = 1;
   if (!list.length) { ship.windNow = 0; return; }
   for (const f of list) f.apply(ship, level, t, dt, terrain);
 }

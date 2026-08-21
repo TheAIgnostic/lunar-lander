@@ -2408,3 +2408,255 @@ and every armed mission still keeps its sanctuary.
 - **Pluto's "darkness" renders as coloured fog**, because it is implemented as low `visibility` and
   the renderer draws visibility as dust. It reads as haze rather than night.
 - **Cores.**
+
+---
+
+## M29 — the survey bodies become content (2026-08-21)
+
+Seven bodies were systemically complete and narratively empty: 35 missions sharing five names and
+five briefs, all 35 with `optionalObjective: null`, no set pieces, and a list of hazards that were
+words. This is the milestone that authored them — plus the four design calls Tom answered from his
+M29a playtest.
+
+**The audit came first, and it found more than the brief listed.**
+
+### Four bodies had no working hazard at all
+
+`forcesFor` looks a hazard's name up in `BUILDERS`, and a miss is completely silent: the force is
+never built and the body flies with nothing, while its route card, its summary and its briefing all
+describe weather. Audited across every planet and every authored mission:
+
+| declared | wanted | state before M29 |
+| --- | --- | --- |
+| `heat` (Mercury, Io) | `thermal` | **never built** |
+| `cold` (Pluto) | `cryo` | **never built** |
+| `plume` (Enceladus) | `plumes` | **never built** |
+| `magnetic`, `falseRadar` (Ganymede) | — | no builder existed |
+| `acid`, `downdraft` (Venus) | — | no builder existed |
+| `eruption` (Io) | — | no builder existed |
+| `glide` (Titan) | — | no builder existed |
+| `wind` (Mars, Titan), `drag` (Venus) | `atmosphere` | built anyway, via the wind/gust/drag fields |
+| `ice` (Europa) | none — `surfaceFriction` | correct; not a force |
+
+So **Mercury, Io, Enceladus and Ganymede had no hazard whatsoever**, at positions 5 to 8 of a ladder
+every run walks. M28b caught the `plume` spelling from an external review. **`heat` and `cold` had
+never been noticed, and both `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md` listed them as working** —
+the "a document is an instrument too, and it drifts" lesson, for the third time.
+
+The fix is aliases in `BUILDERS`, but the durable part is the test: `forces-tests.js` now asserts
+that **every hazard string any planet or mission declares resolves to a builder**, with `ice` as the
+one declared exception. A property, not a list of known-good names.
+
+### Heat, cold, acid and charge: a consequence each, deliberately different
+
+Three status channels existed and did nothing but fill a gauge, which is the fault M29a named on
+radiation. Each now costs something different, so they are not one hazard in three costumes:
+
+| channel | body | what it costs |
+| --- | --- | --- |
+| heat | Mercury, Io | **thrust** — the engine derates past 60%, and recovers when you stop burning |
+| cold | Pluto | **control** — the attitude thrusters stiffen to 45% authority past 55% |
+| corrosion | Venus | **hull**, thickest at the deck, with the M18 floor at 50% |
+| charge | Ganymede | a torque, and a downward pull past 50% |
+
+Radiation eats hull *high* and in sweeps; acid eats hull *low* and never stops. The two sit at
+opposite ends of the ladder on purpose, and they teach opposite instincts.
+
+### The first tuning reproduced M18's radiation fault exactly
+
+Measured before shipping, and it was wrong:
+
+```
+mercury-1  heat reaches 55% at 3.2s
+mercury-5  heat reaches 55% at 2.5s
+pluto-4    cold reaches 55% at 6.9s
+```
+
+M18 slowed radiation for this precise reason — *"it went clean to saturated in three seconds, which
+left no room to reach a shadow"* — and the first pass at four new hazards walked straight back into
+it. Retuned against mission length (25–45 s), and asserted, so it cannot drift back:
+
+| | bites at | at 90 s |
+| --- | ---: | ---: |
+| mercury-1 | never | 36% |
+| mercury-5 | 19 s | 96% |
+| io-5 | 27 s | 96% |
+| pluto-1 | 44 s | 100% |
+| pluto-5 | 28 s | 100% |
+| venus-1 | 41 s | 99% |
+| venus-5 | 25 s | 100% |
+
+Mission 1 of a body barely bites; mission 5 bites mid-crossing. `forces-tests.js` asserts a 10 s
+floor on every authored mission that declares heat, cold or acid.
+
+### The sanctuary rule now covers weather, and measuring is what found it
+
+M29 put hazards in **places** for the first time — vents, fountains, sinking air, anomalies. The
+first Enceladus tuning had a vent sitting over the safe pad:
+
+| vent force | radius | way home | prize route |
+| ---: | ---: | ---: | ---: |
+| 15 | 200 | 11/20 | 19/20 |
+| 12 | 200 | 13/20 | 19/20 |
+| 8 | 200 | 13/20 | 19/20 |
+| 12 | 110 | 16/20 | 19/20 |
+
+**Force barely moved it and the prize route never moved at all**, which is what said the problem was
+*where* the vent was, not how hard it blew. A machine may not reach the safe pad; neither may the
+weather, for the same reason and by the same rule. `plumes`, `downdraft` and `eruption` all call
+`offSanctuary`, which reads `sanctuaryPad` from `enemies.js` rather than reimplementing "the nearest
+zone" — one rule, one implementation. Enceladus 2 went **11/20 → 20/20**.
+
+### Enceladus: the count did not matter, the type decided everything
+
+The body has 7.3 px/s² of gravity, so a lander cannot decelerate, and it had `eligibleEnemySets: []`
+— nothing hostile at all, at position 5. Drones were the obvious answer. Measured unarmed over 20
+seeds on the way home:
+
+| machines | drones only | turrets only | mixed |
+| ---: | ---: | ---: | ---: |
+| 2 | 2–5/20 | 17–20/20 | 17–20/20 |
+| 3 | 2–5/20 | 17–20/20 | 15–16/20 |
+| 4 | 0–4/20 | 17–20/20 | 8–13/20 |
+
+M21's *"a turret is something you fly around, a drone follows you and rams"* in its sharpest form.
+Enceladus is a turret body that meets its first drone on mission 4. The chapter now reads
+**20/20 · 20/20 · 19/20 · 15/20 · 14/20** under fire, with a peak budget of 4.
+
+### Mars: the authored drag, and a second path nobody had in mind
+
+Tom's call — Mars was the easiest body on the ladder two milestones after being the hardest.
+Measured over 5 missions × 20 seeds before choosing:
+
+| drag | way home | prize route | fuel left |
+| ---: | ---: | ---: | ---: |
+| 0.15 (was) | 95/100 | 76/100 | 58.8 |
+| 0.20 | 95/100 | 71/100 | 56.6 |
+| **0.24** | **94/100** | **62/100** | **53.9** |
+| 0.28 | 93/100 | 61/100 | 49.3 |
+| 0.32 | 92/100 | 49/100 | 45.7 |
+
+The way home is nearly free and the prize route carries the whole cost — the shape M19 and M20 both
+found for a difficulty knob. **0.24 and not 0.30**: 0.30 is what the double-apply was worth, and Mars
+sits at position 4 of 10, so restoring the accidental figure would re-invert the ramp M27 sorted the
+ladder to fix.
+
+**And it caught a second-path bug on the way.** `mars-2 THE CANYON` fell **15/20 → 8/20**, and it is
+the one Mars mission that does *not* use the `atmosphere` force — it declares `windChannels`, which
+is why M28b's double-drag fix left it alone. But `windChannels` reads `level.drag` for how hard a
+band couples to the hull, so raising the *planet's* drag reached it anyway. That is the same shape as
+the double-apply itself: an authored number arriving at the physics by a route the author was not
+thinking about. `mars-2` pins `drag: 0.15` and is back to exactly 15/20 and 13/20.
+
+**The flight fixture's move is the containment proof**: 12 differences, exactly mars-1/-3/-4/-5 × 3
+seeds — the four missions that use `atmosphere` — with mars-2 and all 22 other pre-existing missions
+byte-identical, plus 35 new entries. **The physics fixture did not move.**
+
+### The other three design calls
+
+**The weapon is fitted, not just filed.** Both of Tom's crashes were on body 1, flown unarmed. The
+blueprint timing was never the problem — M16 hands the weapon over the moment a mission shoots at
+you, which on the Moon is after moon-2. The **loadout** was: it is closed for the length of an
+expedition, so the weapon recovered on moon-2 could not be equipped until the Moon was already
+cleared. It now fills an **empty** active slot on recovery, so moon-3 is the first mission flown
+armed. It never overwrites a module the player chose.
+
+**Tech Cores buy the L3 and L4 rungs.** A core drops on a PERFECT landing on a small pad and nowhere
+else, so salvage measures how much you flew, materials measure where you went, and a core measures
+how well you put the lander down. Cores wipe on death, so M28's affordability rule applies unchanged
+— measured over the full ladder, cores banked by ladder position:
+
+| profile | body 3 | body 6 | body 8 | body 10 |
+| --- | ---: | ---: | ---: | ---: |
+| sloppy | 1 | 3 | 4 | 5 |
+| normal | 3.5 | 8 | 11.5 | 16 |
+| clean | 10 | 20 | 29 | 40 |
+
+L3 gates from body 3 and costs 3; L4 gates from body 6 and costs 6. L2 costs no cores, so M28's
+income floor is untouched. Cores are back on the hangar screen — M29a took them off *because* they
+could not be spent, and that reason is gone.
+
+**Darkness is not fog.** Pluto was `visibility: 0.45`, and the renderer draws visibility as dust, so
+the darkest body in the game rendered as pale blue haze. Darkness is its own channel: dust tints
+toward the body's dust colour and lightens, darkness subtracts toward black and closes a sight
+radius. Pluto's air is now perfectly clear (`visibility: 1`) and its night ramps 0.62 → 0.72 → 0.86
+across the chapter. Beacons and ore still draw above both, so blind is never targetless (M18).
+
+### What the ladder looks like now
+
+```
+machines down the ladder:  lun 4 · eur 3 · tit 3 · mar 5 · enc 4 · gan 5 · io 5 · mer 5 · plu 4 · ven 5
+                  (M27):   lun 4 · eur 3 · tit 3 · mar 5 · enc 0 · gan 3 · io 3 · mer 3 · plu 3 · ven 3
+```
+
+| body | forces actually built | set piece |
+| --- | --- | --- |
+| Titan | atmosphere, glide, dust | `titan-5` THE LONG GLIDE — a crossing you cannot afford to power |
+| Enceladus | plumes | `enceladus-5` THE GEYSER FIELD — five vents, the cheapest way to move |
+| Ganymede | magnetic, falseRadar | `ganymede-5` THE BLIND CROSSING — one wide anomaly over the middle |
+| Io | thermal, eruption | `io-5` THE FOUNTAIN — four telegraphed vents on different clocks |
+| Mercury | thermal | `mercury-5` THE TERMINATOR — heat as geography |
+| Pluto | cryo, darkness | `pluto-4` UNDER THE PLAIN — the only cave outside Europa |
+| Venus | atmosphere, acid, dust, downdraft | `venus-5` THE DESCENT — three sinking columns and acid |
+
+50 authored missions, 50 distinct names, 50 distinct briefs, **zero `optionalObjective: null`**, and
+26 objectives all of which are used by content.
+
+### Chapter variety, and what the M26 test caught
+
+The seven new chapters first dealt **4 layouts over 40 seeds** — the palettes are three shapes deep,
+and one pinned shape leaves a pool of two. `route-tests.js` asserts a floor of ten and failed, which
+is exactly the "the Moon stopped feeling random" complaint waiting on seven more bodies. Palettes
+widened to six, and `pinShape` re-cut to the M26 rule — pin only where the *name* would lie:
+
+```
+chapter layouts over 40 seeds:
+  lun 20 · eur 18 · tit 34 · mar 20 · enc 36 · gan 32 · io 34 · mer 32 · plu 34 · ven 34
+```
+
+### The full sweep
+
+| | |
+| --- | --- |
+| structural, all 50 authored missions × 20 seeds | **valid on every seed** |
+| sanctuary, every armed mission | **20/20 everywhere** |
+| placement fill | 90–100% of every budget |
+| machines that can engage at once | 0: 62.3% · 1: 26.1% · 2: 10.1% · 3: 1.5% · 4: 0.1% (was 62.0/26.5/10.2/1.2/0.1) |
+| unarmed crossing, campaign-wide | **643/800 (80%)**, against M24's 167/240 (70%) on 12 missions |
+| physics fixture | **unchanged** |
+| flight fixture | 12 deliberate Mars differences + 35 new missions, re-recorded |
+
+The crossing figure rose because the new bodies are mostly turret bodies, which are more survivable
+than drone bodies — read it as a wider sample, not as the game getting easier. It is still a floor
+measured by a pilot with no evasive logic.
+
+### Flight warnings worth knowing
+
+- **`pluto-4 UNDER THE PLAIN` lands 16/20 on the way home**, and it is in family rather than broken:
+  the two caves that have shipped since M7 and M20 measure 18/20 (`europa-2`) and 17/20 (`europa-4`)
+  at the same seed count. Knob sweeps moved it not at all — clearance, cave mouth, hazards and +20
+  fuel all returned 16/20 — which says it is the single-pad cave geometry against a pilot with no
+  terrain lookahead, the weakness recorded since M19.
+- **`venus-3 THE SINK` is the weakest new mission at 16/20 home.** Venus is the wall and was already
+  the outlier before M29 (86/100 home as a survey chapter).
+- **`titan-5 THE LONG GLIDE` takes the prize on 0–2/20.** It is authored to be flown on the air and
+  the test pilot has no glide planning at all, so this measures the instrument. Its way home is 20/20.
+
+### What no test here can measure
+
+`falseRadar` moves the **readout and nothing else** — asserted by flying the same 30 seconds with and
+without it and comparing position, velocity and spin to six decimal places. That is the
+accessibility rule taken from the other side: there, presentation may never reach the simulation;
+here, a hazard may never leave it. It also means **no autopilot in this project can measure whether
+Ganymede is any good**, the same blind spot visibility has had since M24. Darkness is in the same
+position. Both shipped on screenshots and numbers.
+
+### How to re-measure
+
+```bash
+node -e "Promise.all([import('./src/planets.js'),import('./src/missions.js'),import('./src/forces.js')]).then(([P,M,F])=>{for(const id of P.PLANET_IDS){const ch=Object.values(M.CHAPTERS).find(c=>c.planet===id);const fs=new Set();for(const l of ch.levels)for(const f of F.forcesFor(l))fs.add(f.id);console.log(id.padEnd(10)+([...fs].join(', ')||'(none - the Moon, deliberately)'));}});"
+```
+
+```bash
+node -e "Promise.all([import('./src/missions.js'),import('./src/route.js')]).then(([M,R])=>console.log(R.PLANET_ORDER.map((id,i)=>id.slice(0,3).toLowerCase()+' '+M.peakMachines(id,i+1)).join(' · ')));"
+```

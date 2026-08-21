@@ -174,6 +174,17 @@ export const MARS_MISSIONS = [
     brief: 'The wind here stacks in layers, and each layer runs the other way. Drop through them one at a time. Go straight down and it will throw you into a wall.',
     width: 3100, relief: 300, detail: 1.4, rough: 200, fuel: 132,
     pinShape: true,   // THE CANYON is named for its shape
+    // **Pinned to the drag this mission was balanced at.** THE CANYON is the one
+    // Mars mission that does not use the `atmosphere` force - it declares
+    // `windChannels` - which is why M28b's double-drag fix left it alone at
+    // 15/20 while the other four went to 20/20. But `windChannels` reads
+    // `level.drag` for how hard a band couples to the hull, so M29 raising the
+    // *planet's* drag reached it anyway, by a second path nobody had in mind,
+    // and took it 15/20 to 8/20. That is the same shape of fault as the
+    // double-apply itself: an authored number arriving at the physics through a
+    // route the author was not thinking about. Declaring it here keeps the
+    // mission exactly where it was measured, and makes the dependency visible.
+    drag: 0.15,
     terrain: { archetype: 'canyon' },
     pads: [{ mult: 3, width: 130 }],
     hazards: [{ type: 'windChannels', bandHeight: 190, strength: 44 }],
@@ -285,6 +296,539 @@ export const EUROPA_MISSIONS = [
 ];
 
 export const EUROPA_LEVELS = EUROPA_MISSIONS.map(missionToLevel);
+
+/* ============================================================================
+ * M29 - the survey bodies become content.
+ *
+ * Seven bodies flew a generated chapter that dealt the same five names and the
+ * same five briefs to every one of them: FIRST LOOK, LOW PASS, DEEP FIELD, THE
+ * SHELF, LAST LIGHT, on Titan and on Venus alike. All 35 carried
+ * `optionalObjective: null`, so M14's objectives system was dead on seven
+ * tenths of a ladder that every run walks. None had a set piece. And four of
+ * the bodies had no working hazard at all, because the hazard name they
+ * declared did not match any builder (see `BUILDERS` in `forces.js`).
+ *
+ * These are those 35 missions, authored.
+ *
+ * **The numbers start from the generator, not from taste.** `generateChapter`'s
+ * fuel formula, pad widths and the depth ramp were set from measured sweeps in
+ * M9, M21 and M27, and throwing that away to hand-pick 35 fuel budgets would
+ * have been the "started from an assumption" failure this file records twice.
+ * Each chapter below was seeded with what the generator produces for that body
+ * at **its own ladder position**, then hand-tuned where the content asks for
+ * something the formula cannot know - a set piece, a longer crossing, a body
+ * whose hazard makes hovering expensive.
+ *
+ * **A body is visited once per run and always at the same rung**, because the
+ * ladder order is fixed (Tom, 2026-08-20). So the sector/depth term the
+ * generator carried is not needed here: the difficulty is authored at the rung
+ * the body actually occupies, which is strictly better than a formula guessing
+ * at it.
+ *
+ * **Every mission declares its full hazard list.** `missionToLevel` does
+ * `mission.hazards || planet.hazards` - a mission's list *replaces* its body's
+ * rather than adding to it - so a mission that tunes one hazard has to restate
+ * the others or silently drop them. That is the per-mission hazard tuning
+ * `docs/PROGRESSION.md` recorded as missing, and it is also a trap; it is
+ * called out here because the failure is invisible.
+ * ==========================================================================*/
+
+export const TITAN_MISSIONS = [
+  {
+    id: 'titan-1', planet: 'TITAN', index: 1, name: 'THE SHORE',
+    brief: 'Thick air and hardly any gravity. Speed up and the air holds you like a wing, so you will float past the pad rather than fall short of it. Come in slow.',
+    width: 2950, relief: 210, detail: 0.9, rough: 160, fuel: 168,
+    terrain: { archetype: 'basin' },
+    pads: [{ mult: 3, width: 130 }, { mult: 2, width: 226 }],
+    hazards: ['wind', { type: 'glide', lift: 0.00025, liftCap: 15 },
+      { type: 'dust', period: 20, minVisibility: 0.7, duty: 0.35 }],
+    optionalObjective: { id: 'fuel-40', text: 'Land with at least 40% fuel', reward: { salvage: 45 } },
+    enemyBudget: 0,
+  },
+  {
+    id: 'titan-2', planet: 'TITAN', index: 2, name: 'THE DUNES',
+    brief: 'Long sand ridges, and the wind runs along them. The pad is in a hollow between two of them. Get down into the still air early and the last part is easy.',
+    width: 3050, relief: 236, detail: 1.1, rough: 178, fuel: 163,
+        // Named for its shape (the M26 rule), so its shape does not move.
+    pinShape: true,
+    terrain: { archetype: 'dunes' },
+    pads: [{ mult: 4, width: 111 }, { mult: 3, width: 199 }],
+    hazards: ['wind', { type: 'glide', lift: 0.00025, liftCap: 15 },
+      { type: 'dust', period: 17, minVisibility: 0.62, duty: 0.5 }],
+    optionalObjective: { id: 'lake-sample', text: 'Recover a sample from the methane shore', reward: { data: 35 } },
+    enemyBudget: 2,
+  },
+  {
+    id: 'titan-3', planet: 'TITAN', index: 3, name: 'THE HAZE',
+    brief: 'The storm here comes in slow and you can watch it arrive. What you cannot watch is the squall inside it. If the ground goes, stop moving and wait.',
+    width: 3150, relief: 262, detail: 1.3, rough: 196, fuel: 158,
+    terrain: { archetype: 'canyon' },
+    pads: [{ mult: 4, width: 92 }, { mult: 3, width: 171 }],
+    hazards: ['wind', { type: 'glide', lift: 0.00025, liftCap: 15 },
+      { type: 'dust', period: 14, minVisibility: 0.5, duty: 0.55, squallChance: 0.4 }],
+    optionalObjective: { id: 'hull-10', text: 'Keep hull damage below 10%', reward: { data: 40 } },
+    enemyBudget: 3, fuelCells: 2,
+  },
+  {
+    id: 'titan-4', planet: 'TITAN', index: 4, name: 'THE OUTFLOW',
+    brief: 'A channel cut by liquid methane, with the pad on the bank. Drones patrol the length of it. There is nowhere up here to sit still and think.',
+    width: 3250, relief: 288, detail: 1.5, rough: 214, fuel: 153,
+    terrain: { archetype: 'basin' },
+    pads: [{ mult: 6, width: 83 }, { mult: 2, width: 174 }],
+    hazards: ['wind', { type: 'glide', lift: 0.00025, liftCap: 15 },
+      { type: 'dust', period: 16, minVisibility: 0.58, duty: 0.5 }],
+    optionalObjective: { id: 'no-hull', text: 'Bring the lander home undamaged', reward: { salvage: 70 } },
+    enemyBudget: 3, fuelCells: 2,
+  },
+  {
+    id: 'titan-5', planet: 'TITAN', index: 5, name: 'THE LONG GLIDE',
+    brief: 'The widest crossing on the ladder, and not enough fuel to fly it. Build up speed once, let the air carry you, and spend what is left on stopping. This is what Titan has been teaching you.',
+    // **Titan's set piece.** The body's whole mechanic is that horizontal speed
+    // makes lift, so the exam is a crossing you cannot afford to power across
+    // and can afford to glide across. Width and fuel are hand-set against each
+    // other here rather than taken from the ramp: the generator has no way to
+    // know that a mission is meant to be flown on the air.
+    width: 4000, relief: 300, detail: 1.4, rough: 232, fuel: 138,
+    terrain: { archetype: 'dunes' },
+    pads: [{ mult: 6, width: 78 }, { mult: 2, width: 190 }],
+    hazards: ['wind', { type: 'glide', lift: 0.00032, liftCap: 18 },
+      { type: 'dust', period: 15, minVisibility: 0.55, duty: 0.45 }],
+    optionalObjective: { id: 'quick', text: 'Cross and land in under a minute', reward: { cores: 1 } },
+    enemyBudget: 3, fuelCells: 3,
+  },
+];
+
+export const ENCELADUS_MISSIONS = [
+  {
+    id: 'enceladus-1', planet: 'ENCELADUS', index: 1, name: 'FIRST FOOTING',
+    brief: 'Almost no gravity at all. Every push you make lasts until you cancel it, and nothing here will cancel it for you. Fly in small amounts.',
+    width: 3100, relief: 210, detail: 0.9, rough: 160, fuel: 86,
+    terrain: { archetype: 'crater' },
+    pads: [{ mult: 3, width: 120 }, { mult: 2, width: 212 }],
+    hazards: [{ type: 'plume', vents: [{ atX: 0.62, period: 10, duty: 0.28, radius: 190, force: 13 }] }],
+    optionalObjective: { id: 'fuel-40', text: 'Land with at least 40% fuel', reward: { salvage: 45 } },
+    enemyBudget: 0,
+  },
+  {
+    id: 'enceladus-2', planet: 'ENCELADUS', index: 2, name: 'THE TIGER STRIPES',
+    brief: 'Long warm cracks in the ice, and vapour coming out of them on a cycle. A vent will lift you if you are over it. Watch one work before you cross it.',
+    width: 3200, relief: 236, detail: 1.1, rough: 178, fuel: 81,
+        // Named for its shape (the M26 rule), so its shape does not move.
+    pinShape: true,
+    terrain: { archetype: 'canyon' },
+    pads: [{ mult: 4, width: 102 }, { mult: 3, width: 185 }],
+    hazards: [{ type: 'plume', vents: [
+      { atX: 0.34, period: 9, duty: 0.34, radius: 200, force: 15 },
+      { atX: 0.68, period: 7.5, duty: 0.36, radius: 190, force: 16 },
+    ] }],
+    optionalObjective: { id: 'vent-sensor', text: 'Recover the sensor dropped beside a vent', reward: { data: 40 } },
+    // Turrets only: the body's first machines are ones you can fly around.
+    enemyBudget: 2, enemySets: ['sentry-turret'],
+  },
+  {
+    id: 'enceladus-3', planet: 'ENCELADUS', index: 3, name: 'COLD START',
+    brief: 'A ridge line with the pad on the far side of it. The ice gives you nothing to stop against, so arrive straight and arrive slow, and expect to still be moving after you touch.',
+    width: 3300, relief: 262, detail: 1.3, rough: 196, fuel: 76,
+    terrain: { archetype: 'ridge' },
+    pads: [{ mult: 4, width: 82 }, { mult: 3, width: 157 }],
+    hazards: [{ type: 'plume', vents: [
+      { atX: 0.28, period: 8, duty: 0.32, radius: 180, force: 14 },
+      { atX: 0.72, period: 10, duty: 0.30, radius: 210, force: 14 },
+    ] }],
+    optionalObjective: { id: 'centre', text: 'Come to rest inside the central bonus area', reward: { data: 40 } },
+    enemyBudget: 3, enemySets: ['sentry-turret'], fuelCells: 2,
+  },
+  {
+    id: 'enceladus-4', planet: 'ENCELADUS', index: 4, name: 'SOUTH POLAR',
+    brief: 'The pad sits between two of the biggest vents on the moon. Both of them are on a clock. Neither clock is the same.',
+    width: 3400, relief: 288, detail: 1.5, rough: 214, fuel: 71,
+    terrain: { archetype: 'crater' },
+    pads: [{ mult: 6, width: 72 }, { mult: 2, width: 160 }],
+    hazards: [{ type: 'plume', vents: [
+      { atX: 0.44, period: 8.5, duty: 0.40, radius: 230, force: 17 },
+      { atX: 0.60, period: 11.5, duty: 0.38, radius: 230, force: 17 },
+    ] }],
+    optionalObjective: { id: 'perfect', text: 'Set down at PERFECT with the vents running', reward: { cores: 1 } },
+    // The first drone on the body, and the reason the budget stops at three.
+    enemyBudget: 3, enemySets: ['sentry-turret', 'seeker-drone'], fuelCells: 2,
+  },
+  {
+    id: 'enceladus-5', planet: 'ENCELADUS', index: 5, name: 'THE GEYSER FIELD',
+    brief: 'Five vents and one landing zone, and the vents are the only thing here with any force in them. Ride them across. Fighting them costs fuel you do not have.',
+    // **Enceladus' set piece.** Its gravity is 7.3 px/s^2, the weakest in the
+    // game, so a vent is not an obstacle here the way Io's fountain is - it is
+    // the strongest force on the map and the cheapest way to move. A field of
+    // them makes the body's own mechanic the route.
+    width: 3500, relief: 300, detail: 1.5, rough: 232, fuel: 66,
+    terrain: { archetype: 'canyon' },
+    pads: [{ mult: 6, width: 64 }, { mult: 2, width: 132 }],
+    hazards: [{ type: 'plume', vents: [
+      { atX: 0.22, period: 7, duty: 0.42, radius: 200, force: 16 },
+      { atX: 0.39, period: 9, duty: 0.40, radius: 200, force: 17 },
+      { atX: 0.55, period: 6.5, duty: 0.44, radius: 190, force: 15 },
+      { atX: 0.71, period: 10.5, duty: 0.38, radius: 210, force: 18 },
+      { atX: 0.87, period: 8, duty: 0.40, radius: 200, force: 16 },
+    ] }],
+    optionalObjective: { id: 'fuel-25', text: 'Land with at least 25% fuel left', reward: { cores: 1 } },
+    enemyBudget: 4, enemySets: ['sentry-turret', 'seeker-drone'], fuelCells: 3,
+  },
+];
+
+export const GANYMEDE_MISSIONS = [
+  {
+    id: 'ganymede-1', planet: 'GANYMEDE', index: 1, name: 'THE GROOVES',
+    brief: 'Old parallel ridges running the length of the map. There is a magnetic field here and it pulls on the hull, so expect the lander to lean without being asked.',
+    width: 3100, relief: 210, detail: 0.9, rough: 160, fuel: 108,
+    terrain: { archetype: 'ridge' },
+    pads: [{ mult: 3, width: 120 }, { mult: 2, width: 212 }],
+    hazards: [{ type: 'magnetic', anomalies: [{ atX: 0.55, radius: 380 }], magRate: 6 }],
+    optionalObjective: { id: 'low-charge', text: 'Land with charge under 40%', reward: { salvage: 45 } },
+    enemyBudget: 0,
+  },
+  {
+    id: 'ganymede-2', planet: 'GANYMEDE', index: 2, name: 'BAD READING',
+    brief: 'Your altitude and speed readouts drift here. They are wrong by a little, all the time, and they are worst near the anomalies. Fly the window you can see instead.',
+    width: 3200, relief: 236, detail: 1.1, rough: 178, fuel: 103,
+    terrain: { archetype: 'canyon' },
+    pads: [{ mult: 4, width: 102 }, { mult: 3, width: 185 }],
+    hazards: [
+      { type: 'magnetic', anomalies: [{ atX: 0.4, radius: 400 }, { atX: 0.75, radius: 380 }], magRate: 8 },
+      { type: 'falseRadar', radarError: 1 },
+    ],
+    optionalObjective: { id: 'beacon-dark', text: 'Recover the beacon that stopped reporting', reward: { data: 40 } },
+    enemyBudget: 3,
+  },
+  {
+    id: 'ganymede-3', planet: 'GANYMEDE', index: 3, name: 'THE CRATER CHAIN',
+    brief: 'A line of old craters, guns on two of them, and a field strong enough to drag you low over the last stretch. Being heavy here is not your imagination.',
+    width: 3300, relief: 262, detail: 1.3, rough: 196, fuel: 98,
+        // Named for its shape (the M26 rule), so its shape does not move.
+    pinShape: true,
+    terrain: { archetype: 'crater' },
+    pads: [{ mult: 4, width: 82 }, { mult: 3, width: 157 }],
+    hazards: [
+      { type: 'magnetic', anomalies: [{ atX: 0.35, radius: 400 }, { atX: 0.68, radius: 420 }], magRate: 9 },
+      { type: 'falseRadar', radarError: 0.8 },
+    ],
+    optionalObjective: { id: 'hull-10', text: 'Keep hull damage below 10%', reward: { data: 45 } },
+    enemyBudget: 4, fuelCells: 2,
+  },
+  {
+    id: 'ganymede-4', planet: 'GANYMEDE', index: 4, name: 'THE DARK SIDE OF THE FIELD',
+    brief: 'Machines in the air and on the ground, and instruments you cannot trust while you deal with them. Everything you need to know is out of the window.',
+    width: 3400, relief: 288, detail: 1.5, rough: 214, fuel: 93,
+    terrain: { archetype: 'canyon' },
+    pads: [{ mult: 6, width: 72 }, { mult: 2, width: 160 }],
+    hazards: [
+      { type: 'magnetic', anomalies: [{ atX: 0.3, radius: 380 }, { atX: 0.58, radius: 400 }, { atX: 0.84, radius: 380 }], magRate: 10 },
+      { type: 'falseRadar', radarError: 1.1 },
+    ],
+    optionalObjective: { id: 'no-ability', text: 'Complete without using the active module', reward: { cores: 1 } },
+    enemyBudget: 4, fuelCells: 2,
+  },
+  {
+    id: 'ganymede-5', planet: 'GANYMEDE', index: 5, name: 'THE BLIND CROSSING',
+    brief: 'The strongest field on the moon sits over the middle of the crossing, and the pad is on the far side of it. Nothing you read on the way through will be true. Pick your line before you enter it.',
+    // **Ganymede's set piece**, and the one that makes the body's two hazards
+    // one idea: a single wide anomaly straddling the crossing, so the lie and
+    // the pull arrive together and the answer to both is to have decided
+    // already. `magnetic` is physics and `falseRadar` is presentation, and this
+    // is the mission that makes the difference legible.
+    width: 3500, relief: 300, detail: 1.5, rough: 232, fuel: 88,
+    terrain: { archetype: 'ridge' },
+    pads: [{ mult: 6, width: 64 }, { mult: 2, width: 132 }],
+    hazards: [
+      { type: 'magnetic', anomalies: [{ atX: 0.5, radius: 760 }], magRate: 12 },
+      { type: 'falseRadar', radarError: 1.4 },
+    ],
+    optionalObjective: { id: 'low-charge', text: 'Cross the anomaly and land under 40% charge', reward: { cores: 1 } },
+    enemyBudget: 5, fuelCells: 3,
+  },
+];
+
+export const IO_MISSIONS = [
+  {
+    id: 'io-1', planet: 'IO', index: 1, name: 'THE CALDERA',
+    brief: 'A sulphur plain inside an old crater. The engine runs hot here and heat costs you thrust, so short burns and long coasts. Nothing is shooting yet.',
+    width: 3100, relief: 210, detail: 0.9, rough: 160, fuel: 111,
+        // Named for its shape (the M26 rule), so its shape does not move.
+    pinShape: true,
+    terrain: { archetype: 'caldera' },
+    pads: [{ mult: 3, width: 120 }, { mult: 2, width: 212 }],
+    hazards: [{ type: 'heat', heatRise: 7, heatFall: 5 }],
+    optionalObjective: { id: 'low-heat', text: 'Land with engine heat under 45%', reward: { salvage: 45 } },
+    enemyBudget: 0,
+  },
+  {
+    id: 'io-2', planet: 'IO', index: 2, name: 'THE VENTS',
+    brief: 'Two lava fountains on the crossing. Each one swells before it fires, so it will tell you it is coming. Being above one when it does is the worst place on the map.',
+    width: 3200, relief: 236, detail: 1.1, rough: 178, fuel: 106,
+    terrain: { archetype: 'canyon' },
+    pads: [{ mult: 4, width: 102 }, { mult: 3, width: 185 }],
+    hazards: [
+      { type: 'heat', heatRise: 7, heatFall: 5 },
+      { type: 'eruption', vents: [{ atX: 0.4 }, { atX: 0.72 }], eruptPeriod: 10 },
+    ],
+    optionalObjective: { id: 'basalt-core', text: 'Recover a fresh basalt core', reward: { data: 40 } },
+    enemyBudget: 2,
+  },
+  {
+    id: 'io-3', planet: 'IO', index: 3, name: 'SULPHUR FLATS',
+    brief: 'Wide open ground, which sounds easy until you count the guns standing on it. There is no cover out here and the engine will not let you hurry.',
+    width: 3300, relief: 262, detail: 1.3, rough: 196, fuel: 101,
+    terrain: { archetype: 'mesa' },
+    pads: [{ mult: 4, width: 82 }, { mult: 3, width: 157 }],
+    hazards: [
+      { type: 'heat', heatRise: 8, heatFall: 5 },
+      { type: 'eruption', vents: [{ atX: 0.58 }], eruptPeriod: 11 },
+    ],
+    optionalObjective: { id: 'low-heat', text: 'Land with engine heat under 45%', reward: { data: 45 } },
+    enemyBudget: 4, fuelCells: 2,
+  },
+  {
+    id: 'io-4', planet: 'IO', index: 4, name: 'FRESH GROUND',
+    brief: 'This was flat a week ago. Now there is new rock over half of it and three fountains still building it. The safe pad has not moved. Everything around it has.',
+    width: 3400, relief: 288, detail: 1.5, rough: 214, fuel: 96,
+    terrain: { archetype: 'caldera' },
+    pads: [{ mult: 6, width: 72 }, { mult: 2, width: 160 }],
+    hazards: [
+      { type: 'heat', heatRise: 8, heatFall: 4.5 },
+      { type: 'eruption', vents: [{ atX: 0.33 }, { atX: 0.56 }, { atX: 0.8 }], eruptPeriod: 9 },
+    ],
+    optionalObjective: { id: 'no-hull', text: 'Bring the lander home undamaged', reward: { salvage: 75 } },
+    enemyBudget: 4, fuelCells: 2,
+  },
+  {
+    id: 'io-5', planet: 'IO', index: 5, name: 'THE FOUNTAIN',
+    brief: 'The pad is a shelf inside the biggest vent field on the moon, and four fountains ring it. They fire on different clocks. Learn all four before you go down, because you only get to be wrong once.',
+    // **Io's set piece.** The roadmap wants a moving platform here and pads are
+    // static geometry (still deferred, see ROADMAP_STATUS "Known findings"), so
+    // the moving part is the *hazard* instead: four telegraphed fountains on
+    // different periods around one pad. The timing problem is the same shape,
+    // and it needs nothing structural.
+    width: 3500, relief: 320, detail: 1.5, rough: 232, fuel: 91,
+    terrain: { archetype: 'caldera' },
+    pads: [{ mult: 6, width: 64 }, { mult: 2, width: 132 }],
+    hazards: [
+      { type: 'heat', heatRise: 9, heatFall: 4.5 },
+      { type: 'eruption', eruptPeriod: 8, eruptDuty: 0.3, vents: [
+        { atX: 0.28, offset: 0.0 }, { atX: 0.46, offset: 0.31 },
+        { atX: 0.64, offset: 0.55 }, { atX: 0.82, offset: 0.78 },
+      ] },
+    ],
+    optionalObjective: { id: 'perfect', text: 'Set down on the shelf at PERFECT', reward: { cores: 2 } },
+    enemyBudget: 5, fuelCells: 3,
+  },
+];
+
+export const MERCURY_MISSIONS = [
+  {
+    id: 'mercury-1', planet: 'MERCURY', index: 1, name: 'THE HOT SIDE',
+    brief: 'No air, real weight, and sunlight with nothing between it and you. The engine soaks up heat faster than it sheds it, and hot means weak. Burn in short pushes.',
+    width: 3100, relief: 210, detail: 0.9, rough: 160, fuel: 117,
+    terrain: { archetype: 'crater' },
+    pads: [{ mult: 3, width: 120 }, { mult: 2, width: 212 }],
+    hazards: [{ type: 'heat', heatRise: 7, heatFall: 5 }],
+    optionalObjective: { id: 'low-heat', text: 'Land with engine heat under 45%', reward: { salvage: 45 } },
+    enemyBudget: 0,
+  },
+  {
+    id: 'mercury-2', planet: 'MERCURY', index: 2, name: 'THE SCARP',
+    brief: 'A cliff that runs the whole length of the map, with the pad on a bench cut into it. The heavy part of the flight is the last hundred metres, and by then you will be hot.',
+    width: 3200, relief: 236, detail: 1.1, rough: 178, fuel: 112,
+        // Named for its shape (the M26 rule), so its shape does not move.
+    pinShape: true,
+    terrain: { archetype: 'ridge' },
+    pads: [{ mult: 4, width: 102 }, { mult: 3, width: 185 }],
+    hazards: [{ type: 'heat', heatRise: 8, heatFall: 5 }],
+    optionalObjective: { id: 'sun-panel', text: 'Recover the array panel off the far bench', reward: { data: 40 } },
+    enemyBudget: 3,
+  },
+  {
+    id: 'mercury-3', planet: 'MERCURY', index: 3, name: 'COLD TRAP',
+    brief: 'A crater floor the sun has never reached. It is the one place here where the engine cools properly, and there are guns on the rim watching the way in.',
+    width: 3300, relief: 262, detail: 1.3, rough: 196, fuel: 107,
+    terrain: { archetype: 'crater' },
+    pads: [{ mult: 4, width: 82 }, { mult: 3, width: 157 }],
+    hazards: [{ type: 'heat', heatRise: 7, heatFall: 7 }],
+    optionalObjective: { id: 'fuel-25', text: 'Land with at least 25% fuel', reward: { data: 45 } },
+    enemyBudget: 4, fuelCells: 2,
+  },
+  {
+    id: 'mercury-4', planet: 'MERCURY', index: 4, name: 'THE RAMPARTS',
+    brief: 'Old defensive ground, still occupied. Weight, heat and guns, and no weather to hide behind. Everything about this one is out in the open.',
+    width: 3400, relief: 288, detail: 1.5, rough: 214, fuel: 102,
+    terrain: { archetype: 'caldera' },
+    pads: [{ mult: 6, width: 72 }, { mult: 2, width: 160 }],
+    hazards: [{ type: 'heat', heatRise: 9, heatFall: 4.5 }],
+    optionalObjective: { id: 'hull-10', text: 'Keep hull damage below 10%', reward: { cores: 1 } },
+    enemyBudget: 4, fuelCells: 2,
+  },
+  {
+    id: 'mercury-5', planet: 'MERCURY', index: 5, name: 'THE TERMINATOR',
+    brief: 'The line between day and night runs across this map. Burn on the sunward half and the engine is finished before you arrive. The shadowed half is the long way round and it is the only way there is.',
+    // **Mercury's set piece.** Heat is the body's whole idea, so the exam makes
+    // it geography: a hot rise (`heatRise` 22 against 15-18) with a fall rate
+    // low enough that continuous thrust cannot be afforded across the crossing.
+    // The lander has to be paced rather than flown, which is what "engine heat
+    // is the real fuel gauge" has claimed since M5 and could not mean until the
+    // `thermal` builder had a producer.
+    width: 3500, relief: 300, detail: 1.5, rough: 232, fuel: 97,
+    terrain: { archetype: 'ridge' },
+    pads: [{ mult: 6, width: 64 }, { mult: 2, width: 132 }],
+    hazards: [{ type: 'heat', heatRise: 11, heatFall: 4, heatBite: 55 }],
+    optionalObjective: { id: 'low-heat', text: 'Reach the pad with engine heat under 45%', reward: { cores: 2 } },
+    enemyBudget: 5, fuelCells: 3,
+  },
+];
+
+export const PLUTO_MISSIONS = [
+  {
+    id: 'pluto-1', planet: 'PLUTO', index: 1, name: 'NIGHT SIDE',
+    brief: 'It is dark out here and the sun is a bright star. You can see the pad lights and not much else. The cold gets into the attitude thrusters, so they answer late once it has.',
+    width: 3100, relief: 210, detail: 0.9, rough: 160, fuel: 101,
+    terrain: { archetype: 'basin' },
+    pads: [{ mult: 3, width: 120 }, { mult: 2, width: 212 }],
+    hazards: [{ type: 'cold', coldRate: 1.6 }, { type: 'darkness', darkness: 0.62 }],
+    optionalObjective: { id: 'cold-hands', text: 'Land with cold soak under 55%', reward: { salvage: 45 } },
+    enemyBudget: 0,
+  },
+  {
+    id: 'pluto-2', planet: 'PLUTO', index: 2, name: 'THE NITROGEN PLAIN',
+    brief: 'Flat, frozen and enormous. The ice takes almost nothing off your speed, so pick your stopping point early. Burning warms the lander, which is the one good reason to spend fuel here.',
+    width: 3200, relief: 236, detail: 1.1, rough: 178, fuel: 96,
+    terrain: { archetype: 'basin' },
+    pads: [{ mult: 4, width: 102 }, { mult: 3, width: 185 }],
+    hazards: [{ type: 'cold', coldRate: 1.8 }, { type: 'darkness', darkness: 0.68 }],
+    optionalObjective: { id: 'ice-drill', text: 'Recover the drill left out on the plain', reward: { data: 40 } },
+    enemyBudget: 3,
+  },
+  {
+    id: 'pluto-3', planet: 'PLUTO', index: 3, name: 'THE BLADES',
+    brief: 'Standing ridges of methane ice, taller than the lander and sharp at the top. In this light you will see them late. Fly high across, then come down where you know the ground is flat.',
+    width: 3300, relief: 280, detail: 1.3, rough: 196, fuel: 91,
+    terrain: { archetype: 'ridge' },
+    pads: [{ mult: 4, width: 82 }, { mult: 3, width: 157 }],
+    hazards: [{ type: 'cold', coldRate: 2.0 }, { type: 'darkness', darkness: 0.72 }],
+    optionalObjective: { id: 'no-hull', text: 'Bring the lander home undamaged', reward: { data: 50 } },
+    enemyBudget: 4, fuelCells: 2,
+  },
+  {
+    id: 'pluto-4', planet: 'PLUTO', index: 4, name: 'UNDER THE PLAIN',
+    brief: 'A tube in the ice with the pad at the bottom of it. The mouth is open sky and the roof is closed by the time you are over the pad. Cold, dark and one way in.',
+    // **Pluto's set piece**, and the only cave outside Europa. It is a
+    // deliberate pairing: M19b's per-mission mouth plus M29's darkness make a
+    // corridor you fly into and then cannot see out of, which no other body can
+    // produce. The budget is **2**, not the ramp's 4, for the structural reason
+    // M21 measured on `europa-2` and `europa-4`: a single-pad cave has one way
+    // in, so the sanctuary *is* the prize and there is no route around a
+    // machine. That measurement is why this mission is not simply "a cave with
+    // the usual number of guns in it".
+    width: 3400, relief: 300, detail: 1.4, rough: 214, fuel: 90,
+    terrain: { archetype: 'canyon' }, cave: true, clearance: 300,
+    caveMouth: 0.16, caveShut: 0.62,
+    pads: [{ mult: 6, width: 96 }],
+    hazards: [{ type: 'cold', coldRate: 2.2 }, { type: 'darkness', darkness: 0.8 }],
+    optionalObjective: { id: 'cold-hands', text: 'Come back up with cold soak under 55%', reward: { cores: 1 } },
+    enemyBudget: 2, fuelCells: 2,
+  },
+  {
+    id: 'pluto-5', planet: 'PLUTO', index: 5, name: 'THE LAST LIGHT',
+    brief: 'The darkest ground in the system, and the pad is a terrace on the far side of it. By the time you get there the thrusters will be slow and so will you. Commit early, while the lander is still warm.',
+    width: 3500, relief: 300, detail: 1.5, rough: 232, fuel: 86,
+    terrain: { archetype: 'mesa' },
+    pads: [{ mult: 6, width: 64 }, { mult: 2, width: 132 }],
+    hazards: [{ type: 'cold', coldRate: 2.5 }, { type: 'darkness', darkness: 0.86 }],
+    optionalObjective: { id: 'quick', text: 'Cross and land in under a minute', reward: { cores: 2 } },
+    enemyBudget: 4, fuelCells: 3,
+  },
+];
+
+export const VENUS_MISSIONS = [
+  {
+    id: 'venus-1', planet: 'VENUS', index: 1, name: 'THE DEEP AIR',
+    brief: 'The heaviest gravity and the thickest air in the game, at the same time. Everything you ask for arrives late and then keeps happening. Start each correction earlier than feels right.',
+    width: 3100, relief: 210, detail: 0.9, rough: 160, fuel: 218,
+    terrain: { archetype: 'mesa' },
+    pads: [{ mult: 3, width: 120 }, { mult: 2, width: 212 }],
+    hazards: ['drag', { type: 'acid', acidRate: 1.1 },
+      { type: 'dust', period: 14, minVisibility: 0.6, duty: 0.5 }],
+    optionalObjective: { id: 'low-acid', text: 'Land with corrosion under 50%', reward: { salvage: 50 } },
+    enemyBudget: 0,
+  },
+  {
+    id: 'venus-2', planet: 'VENUS', index: 2, name: 'THE SOUR LOW',
+    brief: 'The air near the ground eats the hull, and it is twice as bad on the deck as it is up high. Stay high while you cross and spend as little time low as the landing allows.',
+    width: 3200, relief: 236, detail: 1.1, rough: 178, fuel: 213,
+    terrain: { archetype: 'canyon' },
+    pads: [{ mult: 4, width: 102 }, { mult: 3, width: 185 }],
+    hazards: ['drag', { type: 'acid', acidRate: 1.5 },
+      { type: 'dust', period: 12, minVisibility: 0.5, duty: 0.55 }],
+    optionalObjective: { id: 'crush-probe', text: 'Recover the probe that stopped transmitting', reward: { data: 45 } },
+    enemyBudget: 3,
+  },
+  {
+    id: 'venus-3', planet: 'VENUS', index: 3, name: 'THE SINK',
+    brief: 'Columns of falling air over the middle of the crossing. They come and go on a cycle and they will push you into the ground if you are slow underneath one. Cross between them.',
+    width: 3300, relief: 262, detail: 1.3, rough: 196, fuel: 208,
+    terrain: { archetype: 'ridge' },
+    pads: [{ mult: 4, width: 82 }, { mult: 3, width: 157 }],
+    hazards: ['drag', { type: 'acid', acidRate: 1.3 },
+      { type: 'downdraft', columns: [0.42, 0.66], downForce: 58 },
+      { type: 'dust', period: 13, minVisibility: 0.52, duty: 0.5 }],
+    optionalObjective: { id: 'hull-10', text: 'Keep hull damage below 10%', reward: { data: 50 } },
+    enemyBudget: 4, fuelCells: 2,
+  },
+  {
+    id: 'venus-4', planet: 'VENUS', index: 4, name: 'THE HIGHLANDS',
+    brief: 'High ground, which is the only mercy this planet offers, and guns on it because it is the only mercy this planet offers. Thick storms in between.',
+    width: 3400, relief: 288, detail: 1.5, rough: 214, fuel: 203,
+        // Named for its shape (the M26 rule), so its shape does not move.
+    pinShape: true,
+    terrain: { archetype: 'mesa' },
+    pads: [{ mult: 6, width: 72 }, { mult: 2, width: 160 }],
+    hazards: ['drag', { type: 'acid', acidRate: 1.5 },
+      { type: 'downdraft', columns: [0.36, 0.72], downForce: 60 },
+      { type: 'dust', period: 11, minVisibility: 0.42, duty: 0.55 }],
+    optionalObjective: { id: 'low-acid', text: 'Land with corrosion under 50%', reward: { cores: 1 } },
+    enemyBudget: 5, fuelCells: 2,
+  },
+  {
+    id: 'venus-5', planet: 'VENUS', index: 5, name: 'THE DESCENT',
+    brief: 'Three sinking columns between you and the last pad in the system, and acid in the air the whole way down. There is no clever line through this one. There is only flying it well.',
+    // **Venus' set piece, and the last mission of the ladder.** Its three
+    // hazards finally exist and this is where they are asked for together:
+    // three downdraft columns on staggered clocks over the approach, corrosion
+    // that punishes the low, slow answer to them, and the deepest storm on the
+    // body. The columns are on `offset`s that do not divide evenly, so there is
+    // no beat to memorise - the same reasoning as the dust squall's hashed slot.
+    width: 3500, relief: 320, detail: 1.5, rough: 232, fuel: 198,
+    terrain: { archetype: 'canyon' },
+    pads: [{ mult: 6, width: 64 }, { mult: 2, width: 132 }],
+    hazards: ['drag', { type: 'acid', acidRate: 1.8 },
+      { type: 'downdraft', downForce: 64, downPeriod: 10, columns: [
+        { atX: 0.34, offset: 0.0 }, { atX: 0.56, offset: 0.37 }, { atX: 0.78, offset: 0.69 },
+      ] },
+      { type: 'dust', period: 11, minVisibility: 0.34, duty: 0.6, squallChance: 0.35 }],
+    optionalObjective: { id: 'perfect', text: 'Set down at PERFECT on the last pad in the system', reward: { cores: 3 } },
+    enemyBudget: 5, fuelCells: 3,
+  },
+];
+
+export const TITAN_LEVELS = TITAN_MISSIONS.map(missionToLevel);
+export const ENCELADUS_LEVELS = ENCELADUS_MISSIONS.map(missionToLevel);
+export const GANYMEDE_LEVELS = GANYMEDE_MISSIONS.map(missionToLevel);
+export const IO_LEVELS = IO_MISSIONS.map(missionToLevel);
+export const MERCURY_LEVELS = MERCURY_MISSIONS.map(missionToLevel);
+export const PLUTO_LEVELS = PLUTO_MISSIONS.map(missionToLevel);
+export const VENUS_LEVELS = VENUS_MISSIONS.map(missionToLevel);
+
+/** Every authored chapter's missions, in ladder order. */
+export const AUTHORED_MISSIONS = {
+  LUNA: MOON_MISSIONS, EUROPA: EUROPA_MISSIONS, TITAN: TITAN_MISSIONS,
+  MARS: MARS_MISSIONS, ENCELADUS: ENCELADUS_MISSIONS, GANYMEDE: GANYMEDE_MISSIONS,
+  IO: IO_MISSIONS, MERCURY: MERCURY_MISSIONS, PLUTO: PLUTO_MISSIONS, VENUS: VENUS_MISSIONS,
+};
 
 const SURVEY_NAMES = [
   ['FIRST LOOK', 'Nobody has landed here. The map always costs less than the ground does.'],
@@ -504,8 +1048,29 @@ export function chapterTitle(planetId) {
   return PLANETS[id] ? PLANETS[id].displayName : id;
 }
 
+/**
+ * Every chapter, keyed by the short id older saves and links use.
+ *
+ * **All ten bodies are authored since M29.** `generateChapter` is therefore no
+ * longer reached by anything a player flies - `chapterFor` finds an authored
+ * chapter for every id in `PLANETS`. It is kept rather than deleted because it
+ * is what makes `chapterFor` total: a body added to `PLANETS` without content
+ * still produces a playable, validated chapter instead of throwing, which is
+ * the property that let the ladder grow from three bodies to ten in the first
+ * place. It stays covered by `objectives-tests.js` and by the survey block in
+ * `validate-missions.js`, so it cannot rot into something that would fail if it
+ * were ever needed. Whether that is worth keeping is Tom's call, and it is
+ * flagged rather than taken.
+ */
 export const CHAPTERS = {
   moon: { id: 'moon', planet: 'LUNA', title: 'THE MOON', levels: MOON_LEVELS, missions: MOON_MISSIONS },
-  mars: { id: 'mars', planet: 'MARS', title: 'MARS', levels: MARS_LEVELS, missions: MARS_MISSIONS },
   europa: { id: 'europa', planet: 'EUROPA', title: 'EUROPA', levels: EUROPA_LEVELS, missions: EUROPA_MISSIONS },
+  titan: { id: 'titan', planet: 'TITAN', title: 'TITAN', levels: TITAN_LEVELS, missions: TITAN_MISSIONS },
+  mars: { id: 'mars', planet: 'MARS', title: 'MARS', levels: MARS_LEVELS, missions: MARS_MISSIONS },
+  enceladus: { id: 'enceladus', planet: 'ENCELADUS', title: 'ENCELADUS', levels: ENCELADUS_LEVELS, missions: ENCELADUS_MISSIONS },
+  ganymede: { id: 'ganymede', planet: 'GANYMEDE', title: 'GANYMEDE', levels: GANYMEDE_LEVELS, missions: GANYMEDE_MISSIONS },
+  io: { id: 'io', planet: 'IO', title: 'IO', levels: IO_LEVELS, missions: IO_MISSIONS },
+  mercury: { id: 'mercury', planet: 'MERCURY', title: 'MERCURY', levels: MERCURY_LEVELS, missions: MERCURY_MISSIONS },
+  pluto: { id: 'pluto', planet: 'PLUTO', title: 'PLUTO', levels: PLUTO_LEVELS, missions: PLUTO_MISSIONS },
+  venus: { id: 'venus', planet: 'VENUS', title: 'VENUS', levels: VENUS_LEVELS, missions: VENUS_MISSIONS },
 };

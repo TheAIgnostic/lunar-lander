@@ -90,6 +90,14 @@ export class Ship {
     this.alive = true;
     this.landed = false;
     this.thrusting = false;
+    // **Hazard multipliers on the ship's own authority**, both written by
+    // forces and both reset by `applyForces` every step, so a body without the
+    // hazard cannot inherit one. Heat derates the engine; cold stiffens the
+    // attitude thrusters. They are read here rather than folded into `spec`
+    // because `spec` is the *derived loadout* and must not move under a hazard -
+    // that is the M10 rule that stops a reloaded save stacking an upgrade.
+    this.thermalDerate = 1;
+    this.rcsStiffness = 1;
     this.rcsLeft = false;
     this.rcsRight = false;
     this.holding = false;
@@ -226,11 +234,19 @@ export class Ship {
     if (this.holding && !this.direct) burn += this.spec.burnHold;
     this.fuel = Math.max(0, this.fuel - burn * dt);
 
+    // Cold soak stiffens attitude control and heat derates the engine. Both are
+    // 1 unless a force on this level says otherwise, and both lag the force by
+    // one substep (1/120 s) because forces are applied at the end of the step -
+    // deterministic, and far below anything a player or a fixture can see.
+    const rcsAuth = this.spec.rcsAccel * this.rcsStiffness;
+    const sideAuth = this.spec.sideThrust * this.rcsStiffness;
+    const mainThrust = this.spec.thrust * this.thermalDerate;
+
     if (this.direct) {
       // DIRECT mode: the side thrusters translate instead of rotating, and the
       // hull holds itself upright. Left means left, with no attitude to fly.
-      if (this.rcsLeft) this.vx -= this.spec.sideThrust * dt;
-      if (this.rcsRight) this.vx += this.spec.sideThrust * dt;
+      if (this.rcsLeft) this.vx -= sideAuth * dt;
+      if (this.rcsRight) this.vx += sideAuth * dt;
       this.spin *= Math.pow(0.86, dt * 60);
       this.angle += this.spin * dt;
       this.angle -= this.angle * Math.min(1, dt * 7);   // ease back to level
@@ -238,8 +254,8 @@ export class Ship {
     } else {
       // CLASSIC mode: side burners are attitude control.
       const dir = settings.invertRotation ? -1 : 1;
-      if (this.rcsLeft) this.spin -= this.spec.rcsAccel * dir * dt;
-      if (this.rcsRight) this.spin += this.spec.rcsAccel * dir * dt;
+      if (this.rcsLeft) this.spin -= rcsAuth * dir * dt;
+      if (this.rcsRight) this.spin += rcsAuth * dir * dt;
       if (this.holding) {
         const damp = Math.sign(this.spin) * Math.min(Math.abs(this.spin), 6 * dt);
         this.spin -= damp;
@@ -253,8 +269,8 @@ export class Ship {
     const throttleTarget = this.thrusting ? 1 : 0;
     this.throttle += (throttleTarget - this.throttle) * Math.min(1, dt * 14);
     if (this.thrusting) {
-      this.vx += this.noseX * this.spec.thrust * dt;
-      this.vy += this.noseY * this.spec.thrust * dt;
+      this.vx += this.noseX * mainThrust * dt;
+      this.vy += this.noseY * mainThrust * dt;
     }
     this.vy += level.gravity * dt;
 
@@ -375,11 +391,11 @@ export class Ship {
       this.fuel = Math.max(0, this.fuel - burn * dt);
       this.throttle += ((this.thrusting ? 1 : 0) - this.throttle) * Math.min(1, dt * 14);
       if (this.thrusting) {
-        this.vx += this.noseX * this.spec.thrust * dt;
-        this.vy += this.noseY * this.spec.thrust * dt;
+        this.vx += this.noseX * this.spec.thrust * this.thermalDerate * dt;
+        this.vy += this.noseY * this.spec.thrust * this.thermalDerate * dt;
       }
-      if (this.rcsLeft) this.spin -= this.spec.rcsAccel * 0.5 * dt;
-      if (this.rcsRight) this.spin += this.spec.rcsAccel * 0.5 * dt;
+      if (this.rcsLeft) this.spin -= this.spec.rcsAccel * this.rcsStiffness * 0.5 * dt;
+      if (this.rcsRight) this.spin += this.spec.rcsAccel * this.rcsStiffness * 0.5 * dt;
     }
 
     this.vy += level.gravity * dt;

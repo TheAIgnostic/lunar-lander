@@ -1,6 +1,7 @@
 // Unit tests for the force/status interface:  node test/forces-tests.js
-import { applyForces, forcesFor, freshStatus, freshEnv, RADIATION, STATUS_CHANNELS } from '../src/forces.js';
-import { PLANETS, gravityFor, gravityPx } from '../src/planets.js';
+import { applyForces, forcesFor, freshStatus, freshEnv, RADIATION, STATUS_CHANNELS, NON_FORCE_HAZARDS, HEAT, COLD, ACID, MAGNETIC } from '../src/forces.js';
+import { PLANETS, PLANET_IDS, gravityFor, gravityPx } from '../src/planets.js';
+import { CHAPTERS } from '../src/missions.js';
 
 let pass = 0, fail = 0;
 const check = (name, cond, extra = '') => {
@@ -204,6 +205,171 @@ check('difficulty cannot reach gravity',
   const t2 = [];
   for (let t = 0; t < 180; t += 0.05) { applyForces(ship2, other, t, 0.05, null); t2.push(ship2.env.visibility); }
   check('two missions do not squall in lockstep', JSON.stringify(a) !== JSON.stringify(t2));
+}
+
+// --- **Every declared hazard must resolve to a builder.**
+//
+// This is the single most valuable assertion in the file and it is here because
+// of what M29 found. `forcesFor` looks a hazard's name up in `BUILDERS`, and a
+// miss is completely silent: the force is never built, and the body flies with
+// nothing while its route card, its summary and its brief all describe weather.
+//
+// Audited across every planet and every authored mission, four bodies were in
+// that state - **Mercury, Io, Enceladus and Ganymede had no working hazard at
+// all**, halfway down a ladder every run walks. Three were spelling: `'heat'`
+// against a builder named `thermal`, `'cold'` against `cryo`, `'plume'` against
+// `plumes`. M28b's review caught the `plume` one; `heat` and `cold` had never
+// been noticed, and both `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md` listed
+// them as working.
+//
+// So the test asserts the *property* rather than a list of known-good names,
+// which is the lesson M24 and M28 both recorded about assertions that encode a
+// decision instead of a rule.
+{
+  const declared = new Map();
+  const note = (h, where) => {
+    const t = typeof h === 'string' ? h : h.type;
+    if (!declared.has(t)) declared.set(t, new Set());
+    declared.get(t).add(where);
+  };
+  for (const id of PLANET_IDS) for (const h of PLANETS[id].hazards || []) note(h, id);
+  for (const c of Object.values(CHAPTERS)) {
+    for (const m of c.missions) for (const h of m.hazards || []) note(h, m.id);
+  }
+  const hollow = [...declared.keys()].filter((t) => !NON_FORCE_HAZARDS.includes(t));
+  for (const t of hollow) {
+    // A hazard resolves if declaring it alone builds at least one force.
+    const built = forcesFor({ id: `probe-${t}`, width: 3000, hazards: [t] });
+    check(`the hazard '${t}' builds a force`, built.length > 0,
+      `declared by ${[...declared.get(t)].slice(0, 3).join(', ')}`);
+  }
+  check('every hazard name in the game was checked', declared.size >= 12, String(declared.size));
+}
+
+// --- **Every body on the ladder has weather that does something.**
+// The count above proves a *name* resolves; this proves each body ends up with
+// forces. Luna is the deliberate exception: airless, hazardless, and the place
+// the player learns to fly.
+{
+  for (const id of PLANET_IDS) {
+    const built = forcesFor({ ...PLANETS[id], id: `body-${id}`, width: 3000 });
+    if (id === 'LUNA') check('the Moon is deliberately empty', built.length === 0, built.map((f) => f.id).join(','));
+    else check(`${id} builds at least one force`, built.length > 0);
+  }
+}
+
+// --- Heat, cold, acid and charge: a consequence, and a rate a player can act on
+//
+// Both halves matter. A status that only fills a gauge is the fault M29a named
+// on radiation ("it had no shape"), and a status that saturates in three
+// seconds is the fault M18 fixed on radiation ("no time to reach a shadow").
+// The first tuning of these four reproduced the second fault exactly - Mercury
+// went clean to derated in 3.2 s - so the timing is asserted, not just the
+// effect.
+{
+  const terrain = { heightAt: () => 1100 };
+  const run = (level, duty, seconds) => {
+    const ship = mkShip({ x: 1500, y: 800, hull: 100, hullMax: 100, damageOverTime() {}, loadout: {} });
+    for (let i = 0; i < seconds * 60; i++) {
+      ship.thrusting = (i % 100) < duty * 100;
+      applyForces(ship, level, i / 60, 1 / 60, terrain);
+    }
+    return ship;
+  };
+  // Long enough to pass HEAT.bite at this rise rate - 11/s from clean needs
+  // more than 5 s to reach 60, which is the point of the rate rule below.
+  const heat = run({ id: 'h', width: 3000, hazards: [{ type: 'heat', heatRise: 11, heatFall: 4 }] }, 1, 12);
+  check('heat derates the engine once it bites', heat.thermalDerate < 1 && heat.thermalDerate >= HEAT.minThrust - 1e-9,
+    heat.thermalDerate.toFixed(2));
+  const cool = run({ id: 'h2', width: 3000, hazards: [{ type: 'heat', heatRise: 11, heatFall: 4 }] }, 0, 30);
+  check('and lets go again when you stop burning', cool.thermalDerate === 1);
+
+  const cold = run({ id: 'c', width: 3000, hazards: [{ type: 'cold', coldRate: 2.5 }] }, 0, 60);
+  check('cold stiffens the thrusters', cold.rcsStiffness < 1 && cold.rcsStiffness >= COLD.minRcs - 1e-9,
+    cold.rcsStiffness.toFixed(2));
+
+  // The rate rule: nothing may go from clean to bitten inside a few seconds.
+  const bitesAt = (level, duty, read) => {
+    const ship = mkShip({ x: 1500, y: 800, hull: 100, hullMax: 100, damageOverTime() {}, loadout: {} });
+    for (let i = 0; i < 120 * 60; i++) {
+      ship.thrusting = (i % 100) < duty * 100;
+      applyForces(ship, level, i / 60, 1 / 60, terrain);
+      if (read(ship) >= 55) return i / 60;
+    }
+    return Infinity;
+  };
+  for (const c of Object.values(CHAPTERS)) {
+    for (const lvl of c.levels) {
+      const kinds = (lvl.hazards || []).map((h) => (typeof h === 'string' ? h : h.type));
+      if (kinds.includes('heat')) {
+        const t = bitesAt(lvl, 0.5, (s) => s.statusLevels.heat);
+        check(`${lvl.id}: heat takes more than 10 s to bite`, t > 10, `${t.toFixed(1)}s`);
+      }
+      if (kinds.includes('cold')) {
+        const t = bitesAt(lvl, 0.3, (s) => s.statusLevels.cold);
+        check(`${lvl.id}: cold takes more than 10 s to bite`, t > 10, `${t.toFixed(1)}s`);
+      }
+      if (kinds.includes('acid')) {
+        const t = bitesAt(lvl, 0.4, (s) => s.statusLevels.corrosion);
+        check(`${lvl.id}: corrosion takes more than 10 s to bite`, t > 10, `${t.toFixed(1)}s`);
+      }
+    }
+  }
+
+  // Acid eats hull, and stops. The floor is the M18 rule: a hazard softens you
+  // up, it never finishes you.
+  const sour = { id: 'a', width: 3000, hazards: [{ type: 'acid', acidRate: 30 }] };
+  const ship = mkShip({ x: 1500, y: 1090, hull: 100, hullMax: 100, loadout: {} });
+  ship.damageOverTime = (n) => { ship.hull = Math.max(0, ship.hull - n); };
+  for (let i = 0; i < 300 * 60; i++) applyForces(ship, sour, i / 60, 1 / 60, terrain);
+  check('corrosion costs hull', ship.hull < 100, ship.hull.toFixed(1));
+  check('and never takes the last of it', ship.hull >= 100 * ACID.floor - 0.5, ship.hull.toFixed(1));
+}
+
+// --- `falseRadar` may never touch the simulation
+//
+// The rule this hazard lives or dies by, and the inverse of the accessibility
+// rule: there, presentation may never reach the simulation; here, a hazard may
+// never leave presentation. Flown twice from the same state, with and without
+// the lie, the lander must end in exactly the same place.
+{
+  const terrain = { heightAt: () => 1400 };
+  const fly = (hazards) => {
+    const ship = mkShip({ x: 1500, y: 900, vx: 40, vy: -10, spin: 0, loadout: {} });
+    const lvl = { id: 'radar-test', width: 3000, gravity: 26, hazards };
+    for (let i = 0; i < 60 * 30; i++) applyForces(ship, lvl, i / 60, 1 / 60, terrain);
+    return `${ship.x.toFixed(6)}/${ship.y.toFixed(6)}/${ship.vx.toFixed(6)}/${ship.vy.toFixed(6)}/${ship.spin.toFixed(6)}`;
+  };
+  check('a lying instrument does not move the lander',
+    fly([]) === fly([{ type: 'falseRadar', radarError: 2 }]), `${fly([])} vs ${fly([{ type: 'falseRadar', radarError: 2 }])}`);
+  const lying = mkShip({ x: 1500, y: 900, loadout: {} });
+  applyForces(lying, { id: 'r2', width: 3000, hazards: [{ type: 'falseRadar', radarError: 1 }] }, 3.1, 1 / 60, terrain);
+  check('...but it does move the readout', Math.abs(lying.env.instrumentError) > 0.01,
+    String(lying.env.instrumentError));
+}
+
+// --- The sanctuary rule covers placed weather too
+//
+// M29 put hazards in *places* for the first time, and the first tuning had an
+// Enceladus vent over the safe pad: the way home fell to 11/20 while the deep
+// route held at 19/20 on every force setting tried. A machine may not reach the
+// safe pad and neither may the weather, for exactly the same reason.
+{
+  const pads = [
+    { x1: 400, x2: 560, tier: 0, mult: 2 },
+    { x1: 2400, x2: 2500, tier: 2, mult: 5 },
+  ];
+  const terrain = { pads, heightAt: () => 1100 };
+  const at = (x) => {
+    const ship = mkShip({ x, y: 700, hull: 100, hullMax: 100, damageOverTime() {}, loadout: {} });
+    const lvl = { id: 'sanct', width: 3000, hazards: [{ type: 'plume', vents: [{ x, period: 8, duty: 0.9, radius: 200, force: 60 }] }] };
+    let moved = 0;
+    for (let i = 0; i < 60 * 4; i++) { const before = ship.vy; applyForces(ship, lvl, i / 60, 1 / 60, terrain); moved += Math.abs(ship.vy - before); }
+    return moved;
+  };
+  check('a vent over the safe pad does nothing', at(480) < 1e-9, String(at(480)));
+  check('a vent over the prize pad works normally', at(2450) > 0.1, String(at(2450)));
+  check('and a vent out on the crossing works normally', at(1500) > 0.1, String(at(1500)));
 }
 
 console.log(`\n  ${pass} passed, ${fail} failed`);

@@ -536,7 +536,7 @@ export function screenHTML(s) {
               ${next ? `<tr class="tot"><td>Next</td><td>${next.describe}</td></tr>` : '<tr class="tot"><td>Next</td><td>—</td></tr>'}
             </table>
             ${next ? `<div class="cost">
-              <span>COST</span> ${next.cost.salvage} salvage${Object.entries(next.cost.materials || {}).map(([m, v]) => ` · ${v} ${m}`).join('')}
+              <span>COST</span> ${next.cost.salvage} salvage${next.cost.cores ? ` · ${next.cost.cores} tech cores` : ''}${Object.entries(next.cost.materials || {}).map(([m, v]) => ` · ${v} ${m}`).join('')}
             </div>` : ''}
             ${check.ok
               ? btn(`buy:${sel}`, 'INSTALL', true)
@@ -544,10 +544,14 @@ export function screenHTML(s) {
           </div>
         </div>
         <div class="grid comps">${tabs}</div>
-        <!-- Salvage and materials only. Research buys skills and Tech Cores buy
-             nothing yet; showing either here invites the question Tom asked -
-             "what do cores do?" - on the one screen that cannot answer it. -->
-        <div class="stats"><span>BANKED</span><b>${formatScore(b.salvage)} salvage</b></div>
+        <!-- Salvage, cores and materials. Research is still absent because it
+             buys *skills* and this screen cannot spend it - that is the M29a
+             rule and it stands. Cores came off this screen for the same reason
+             and go back on in M29, because they now buy the L3 and L4 rungs:
+             the answer to "what do cores do?" is on the screen that spends
+             them, which is the only place an answer is any use. -->
+        <div class="stats"><span>BANKED</span><b>${formatScore(b.salvage)} salvage</b><b>${formatScore(b.cores || 0)} tech cores</b></div>
+        <div class="mats"><span><i>Tech cores come from a PERFECT landing on a small pad, and buy the top two levels of any track.</i></span></div>
         ${mats.length ? `<div class="mats">${mats.map(([m, v]) => `<span>${v} <i>${m}</i></span>`).join('')}</div>` : ''}
         <div class="btns">${btn('back', 'LEAVE HANGAR', true, 'SPACE')}</div>
       </div>`;
@@ -588,7 +592,8 @@ export function screenHTML(s) {
         ? `<tr><td>Salvage banked at this stop</td><td>${formatScore(settled ? settled.salvage : 0)}</td></tr>
            <tr><td>Research banked at this stop</td><td>${formatScore(settled ? settled.data : 0)}</td></tr>
            <tr><td>Salvage on hand</td><td>${formatScore(meta.banked.salvage)}</td></tr>
-           <tr><td>Research on hand</td><td>${formatScore(meta.banked.data)}</td></tr>`
+           <tr><td>Research on hand</td><td>${formatScore(meta.banked.data)}</td></tr>
+           <tr><td>Tech cores on hand</td><td>${formatScore(meta.banked.cores || 0)}</td></tr>`
         : `<tr><td>Transmitted salvage</td><td>${formatScore(h.salvageSafe)}</td></tr>
            <tr><td>Physical cargo (at risk until the next checkpoint)</td><td>${formatScore(h.salvageCargo)}</td></tr>
            <tr><td>Research data</td><td>${formatScore(h.data)}</td></tr>`;

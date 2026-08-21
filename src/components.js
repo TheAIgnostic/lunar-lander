@@ -17,10 +17,10 @@ export const COMPONENTS = {
       { cost: { salvage: 320, materials: { 'Ilmenite alloy stock': 30 } },
         effect: { gearTier: 1.12, restitution: 0.20 },
         describe: '+12% landing envelope, softer rebound' },
-      { cost: { salvage: 1700, materials: { 'Conductive ice salts': 25, 'Hydrocarbon composite': 30 } },
+      { cost: { salvage: 1700, cores: 3, materials: { 'Conductive ice salts': 25, 'Hydrocarbon composite': 30 } },
         effect: { gearTier: 1.25, restitution: 0.17, slopeGrip: 1.2 },
         describe: '+25% envelope, better hold on a slope' },
-      { cost: { salvage: 2900, materials: { 'Iron-oxide ceramic': 40, 'Magnetite conductor': 35 } },
+      { cost: { salvage: 2900, cores: 6, materials: { 'Iron-oxide ceramic': 40, 'Magnetite conductor': 35 } },
         effect: { gearTier: 1.40, restitution: 0.14, slopeGrip: 1.4 },
         describe: '+40% envelope, near-total shock absorption' },
     ],
@@ -34,10 +34,10 @@ export const COMPONENTS = {
       { cost: { salvage: 300, materials: { 'Ilmenite alloy stock': 35 } },
         effect: { fuelCapacity: 1.15 },
         describe: '+15% fuel capacity' },
-      { cost: { salvage: 1650, materials: { 'Iron-oxide ceramic': 40 } },
+      { cost: { salvage: 1650, cores: 3, materials: { 'Iron-oxide ceramic': 40 } },
         effect: { fuelCapacity: 1.25, burnMain: 0.92 },
         describe: '+25% capacity, 8% less burn per second' },
-      { cost: { salvage: 2700, materials: { 'Iron-oxide ceramic': 35, 'Nickel-iron / tungsten stock': 45 } },
+      { cost: { salvage: 2700, cores: 6, materials: { 'Iron-oxide ceramic': 35, 'Nickel-iron / tungsten stock': 45 } },
         effect: { fuelCapacity: 1.35, burnMain: 0.86, thrust: 1.06 },
         describe: '+35% capacity, 14% less burn, 6% more thrust' },
     ],
@@ -51,10 +51,10 @@ export const COMPONENTS = {
       { cost: { salvage: 260, materials: { 'Conductive ice salts': 30 } },
         effect: { rcsAccel: 1.08 },
         describe: '+8% lateral authority' },
-      { cost: { salvage: 1650, materials: { 'Hydrocarbon composite': 40 } },
+      { cost: { salvage: 1650, cores: 3, materials: { 'Hydrocarbon composite': 40 } },
         effect: { rcsAccel: 1.15, burnRcs: 0.85 },
         describe: '+15% authority, 15% less fuel' },
-      { cost: { salvage: 2500, materials: { 'Hydrocarbon composite': 45, 'Sulfur-basalt ceramic': 40 } },
+      { cost: { salvage: 2500, cores: 6, materials: { 'Hydrocarbon composite': 45, 'Sulfur-basalt ceramic': 40 } },
         effect: { rcsAccel: 1.22, burnRcs: 0.75, sideThrust: 1.15 },
         describe: '+22% authority, adaptive output' },
     ],
@@ -68,10 +68,10 @@ export const COMPONENTS = {
       { cost: { salvage: 340, materials: { 'Hydrocarbon composite': 35 } },
         effect: { hullMax: 1.12 },
         describe: '+12% integrity' },
-      { cost: { salvage: 1750, materials: { 'Iron-oxide ceramic': 45 } },
+      { cost: { salvage: 1750, cores: 3, materials: { 'Iron-oxide ceramic': 45 } },
         effect: { hullMax: 1.25, impactResist: 0.85 },
         describe: '+25% integrity, 15% less impact damage' },
-      { cost: { salvage: 3050, materials: { 'Sulfur-resistant ceramic': 50, 'Sulfur-basalt ceramic': 40 } },
+      { cost: { salvage: 3050, cores: 6, materials: { 'Sulfur-resistant ceramic': 50, 'Sulfur-basalt ceramic': 40 } },
         effect: { hullMax: 1.40, impactResist: 0.7 },
         describe: '+40% integrity, 30% less impact damage' },
     ],
@@ -85,10 +85,10 @@ export const COMPONENTS = {
       { cost: { salvage: 280, materials: { 'Ilmenite alloy stock': 25, 'Conductive ice salts': 25 } },
         effect: { predict: 1.4, beacon: 1.3 },
         describe: 'Longer trajectory prediction, stronger pad beacon' },
-      { cost: { salvage: 1650, materials: { 'Silica nanograins': 40 } },
+      { cost: { salvage: 1650, cores: 3, materials: { 'Silica nanograins': 40 } },
         effect: { predict: 1.9, beacon: 1.6, hazardLead: 1.4 },
         describe: 'Hazard trajectory prediction' },
-      { cost: { salvage: 2700, materials: { 'Magnetite conductor': 45, 'Tholin cryocomposite': 40 } },
+      { cost: { salvage: 2700, cores: 6, materials: { 'Magnetite conductor': 45, 'Tholin cryocomposite': 40 } },
         effect: { predict: 2.4, beacon: 2.0, hazardLead: 1.8, noiseResist: 0.35 },
         describe: 'Resists dust, darkness and false returns' },
     ],
@@ -151,6 +151,26 @@ export function purchaseCheck(componentId, componentLevels, banked) {
   const missing = [];
   if ((banked.salvage || 0) < next.cost.salvage) {
     missing.push(`${next.cost.salvage - (banked.salvage || 0)} more salvage`);
+  }
+  // **Tech Cores buy the top two rungs** (M29, Tom's call). They were earned,
+  // banked, granted by god mode and pitied, and spent on nothing at all - true
+  // since they were introduced and verified again in M28b and M29a.
+  //
+  // They are priced *here* rather than anywhere else because of what a core is:
+  // it drops on a PERFECT landing on a small pad and nowhere else. Salvage
+  // measures how much you flew, materials measure where you went, and a core
+  // measures how well you put the lander down. Putting them on L3 and L4 means
+  // the deepest permanent upgrades are the ones that ask you to land well,
+  // which is the one thing the hangar could not previously ask for.
+  //
+  // Cores wipe on death like every other banked resource, so the M28 rule
+  // applies: a rung is only real if one run can fund it by the time its gate
+  // opens. Measured over the full ladder, cores banked by ladder position:
+  // sloppy 1/3/4/5, normal 3.5/8/11.5/16, clean 10/20/29/40 at bodies
+  // 3/6/8/10. L3 gates from body 3 and costs 3; L4 gates from body 6 and costs
+  // 6. Asserted in `components-tests.js`.
+  if ((banked.cores || 0) < (next.cost.cores || 0)) {
+    missing.push(`${next.cost.cores - (banked.cores || 0)} more tech cores`);
   }
   for (const [mat, need] of Object.entries(next.cost.materials || {})) {
     const have = (banked.materials || {})[mat] || 0;
@@ -220,6 +240,7 @@ export function purchase(componentId, componentLevels, banked) {
   if (!check.ok) return null;
   const nextBanked = { ...banked, materials: { ...banked.materials } };
   nextBanked.salvage -= check.cost.salvage;
+  if (check.cost.cores) nextBanked.cores = (nextBanked.cores || 0) - check.cost.cores;
   for (const [mat, need] of Object.entries(check.cost.materials || {})) {
     nextBanked.materials[mat] = (nextBanked.materials[mat] || 0) - need;
   }

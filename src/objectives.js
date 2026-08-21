@@ -42,6 +42,51 @@ export const OBJECTIVES = {
     progress: (r) => `${Math.round(r.radiation)}% / under 30%`,
   },
 
+  // M29. Seven bodies had `optionalObjective: null` on all 35 of their
+  // missions, so M14's whole objectives system was dead on seven tenths of the
+  // ladder. These are the conditions those chapters are written against, and
+  // every one of them reads a status channel that a body's own hazard raises -
+  // an objective is a reason to engage with the hazard, so an objective about a
+  // hazard the body does not have would be filler.
+  'low-heat': {
+    kind: 'condition', short: 'HEAT',
+    test: (r) => r.heat < 45,
+    progress: (r) => `${Math.round(r.heat)}% / under 45%`,
+  },
+  'cold-hands': {
+    kind: 'condition', short: 'COLD',
+    test: (r) => r.cold < 55,
+    progress: (r) => `${Math.round(r.cold)}% / under 55%`,
+  },
+  'low-acid': {
+    kind: 'condition', short: 'CORROSION',
+    test: (r) => r.corrosion < 50,
+    progress: (r) => `${Math.round(r.corrosion)}% / under 50%`,
+  },
+  'low-charge': {
+    kind: 'condition', short: 'CHARGE',
+    test: (r) => r.charge < 40,
+    progress: (r) => `${Math.round(r.charge)}% / under 40%`,
+  },
+  'no-hull': {
+    kind: 'condition', short: 'NO DAMAGE',
+    test: (r) => r.hullLost <= 0.001,
+    progress: (r) => (r.hullLost <= 0.001 ? 'no damage' : `${Math.round(r.hullLost * 100)}% lost`),
+  },
+  'fuel-40': {
+    kind: 'condition', short: 'FUEL 40%',
+    test: (r) => r.fuelFrac >= 0.40,
+    progress: (r) => `${Math.round(r.fuelFrac * 100)}% / 40%`,
+  },
+  // A time objective is the one that asks for commitment rather than caution,
+  // which is the counterweight the set is otherwise short of: every other
+  // condition here rewards flying slowly and carefully.
+  quick: {
+    kind: 'condition', short: 'UNDER 60s',
+    test: (r) => r.elapsed > 0 && r.elapsed < 60,
+    progress: (r) => `${r.elapsed.toFixed(0)}s / under 60s`,
+  },
+
   // Cargo. `label` is drawn on the object, `place` says where it belongs.
   'sample-titanium': { kind: 'cargo', short: 'SAMPLE', label: 'SAMPLE', place: 'deep' },
   'power-relay': { kind: 'cargo', short: 'RELAY', label: 'RELAY', place: 'deep' },
@@ -51,6 +96,16 @@ export const OBJECTIVES = {
   // fly to. Measured in the M14 encounter audit; these are the fix.
   'core-ice': { kind: 'cargo', short: 'ICE CORE', label: 'CORE', place: 'deep' },
   'probe-lost': { kind: 'cargo', short: 'PROBE', label: 'PROBE', place: 'offRoute' },
+
+  // M29 recoveries, one per survey body, so every body has something physical
+  // to fly to and not only a number to keep under.
+  'lake-sample': { kind: 'cargo', short: 'SAMPLE', label: 'SAMPLE', place: 'deep' },       // Titan
+  'vent-sensor': { kind: 'cargo', short: 'SENSOR', label: 'SENSOR', place: 'offRoute' },   // Enceladus
+  'beacon-dark': { kind: 'cargo', short: 'BEACON', label: 'BEACON', place: 'offRoute' },   // Ganymede
+  'basalt-core': { kind: 'cargo', short: 'CORE', label: 'CORE', place: 'deep' },           // Io
+  'sun-panel': { kind: 'cargo', short: 'PANEL', label: 'PANEL', place: 'deep' },           // Mercury
+  'ice-drill': { kind: 'cargo', short: 'DRILL', label: 'DRILL', place: 'offRoute' },       // Pluto
+  'crush-probe': { kind: 'cargo', short: 'PROBE', label: 'PROBE', place: 'deep' },         // Venus
 };
 
 export function objectiveDef(id) {

@@ -1,7 +1,7 @@
 // Component effects, purchase rules and stacking:  node test/components-tests.js
 import {
   COMPONENTS, COMPONENT_IDS, deriveLoadout, purchaseCheck, purchase,
-  RECOMMENDED_TIER, fittedLevels, tierCheck,
+  RECOMMENDED_TIER, fittedLevels, tierCheck, everyMaterial,
 } from '../src/components.js';
 import { PLANET_ORDER } from '../src/route.js';
 import { PLANETS } from '../src/planets.js';
@@ -158,6 +158,42 @@ for (const id of COMPONENT_IDS) {
   check('fittedLevels counts levels above stock, not levels',
     fittedLevels(stock) === 0 && fittedLevels({ ...stock, hull: 3 }) === 2);
   check('the shortfall is what the screen prints', tierCheck(5, stock).short === RECOMMENDED_TIER[4]);
+}
+
+// --- **Tech Cores buy the top two rungs** (M29)
+//
+// Cores were earned, banked, pitied and granted by god mode, and spent on
+// nothing at all - verified in M28b and again in M29a, then priced here on
+// Tom's call. Two things need asserting, and the second is the one that matters:
+// the price exists, and it is affordable by the time its gate opens.
+//
+// Cores wipe on death like every other banked resource, so M28's rule applies
+// unchanged: a rung is only real if a single run can fund it. Measured over the
+// full ladder, cores banked by ladder position - sloppy 1/3/4/5, normal
+// 3.5/8/11.5/16, clean 10/20/29/40 at bodies 3/6/8/10.
+{
+  const coreCost = (id, level) => (COMPONENTS[id].levels[level].cost || {}).cores || 0;
+  for (const id of COMPONENT_IDS) {
+    const t = COMPONENTS[id];
+    check(`${t.name} L2 costs no cores`, coreCost(id, 1) === 0, String(coreCost(id, 1)));
+    check(`${t.name} L3 costs cores`, coreCost(id, 2) > 0, String(coreCost(id, 2)));
+    check(`${t.name} L4 costs more cores than L3`, coreCost(id, 3) > coreCost(id, 2),
+      `${coreCost(id, 2)} -> ${coreCost(id, 3)}`);
+    // The affordability floor, stated against what a run actually banks by the
+    // ladder position each rung gates at rather than against a chosen number.
+    check(`${t.name} L3 is affordable on a normal run by its gate`, coreCost(id, 2) <= 3, String(coreCost(id, 2)));
+    check(`${t.name} L4 is affordable on a normal run by its gate`, coreCost(id, 3) <= 8, String(coreCost(id, 3)));
+  }
+  // And the refusal names what is missing, which is M10's rule.
+  const mats = Object.fromEntries(everyMaterial().map((m) => [m, 999]));
+  const levels = Object.fromEntries(COMPONENT_IDS.map((id) => [id, 2]));
+  const broke = purchaseCheck('gear', levels, { salvage: 999999, cores: 0, materials: mats });
+  check('a refusal for cores says so', !broke.ok && /tech cores/i.test(broke.reason), broke.reason);
+  const rich = purchaseCheck('gear', levels, { salvage: 999999, cores: 99, materials: mats });
+  check('and with cores in the bank it goes through', rich.ok, rich.reason || '');
+  const after = purchase('gear', levels, { salvage: 999999, cores: 99, materials: mats });
+  check('buying a cored rung spends the cores',
+    after.banked.cores === 99 - COMPONENTS.gear.levels[2].cost.cores, String(after.banked.cores));
 }
 
 console.log(`\n  ${pass} passed, ${fail} failed`);

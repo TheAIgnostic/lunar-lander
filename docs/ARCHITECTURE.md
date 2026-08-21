@@ -19,10 +19,10 @@ Everything under `src/` is a plain ES module, loaded directly in the browser and
 | `src/archetypes.js` | 7 macro silhouettes and their landing-zone anchors | M2 |
 | `src/spawn.js` | the starting position and momentum rule (the terrain owns the entry since M14) | M3/M14 |
 | `src/validate.js` | structural mission checks: spawn clearance, approach corridors, delta-v bound | M3 |
-| `src/planets.js` | 10 PlanetDefinitions, the gravity mapping, and what the ground is made of | M4/M5/M20/M29a |
+| `src/planets.js` | 10 PlanetDefinitions, the gravity mapping, and what the ground is made of | M4/M5/M20/M29a/M29 |
 | `src/planeticons.js` | one icon per body, for the route screen | M17 |
-| `src/missions.js` | authored Moon/Mars/Europa chapters, survey-chapter generator, `chapterFor` | M4-M9 |
-| `src/forces.js` | force/status interface: atmosphere, dust, wind channels, thermal, cryo, plumes, radiation | M5-M7/M28b |
+| `src/missions.js` | **all ten authored chapters** (50 missions), the survey-chapter fallback, `chapterFor` | M4-M9/M29 |
+| `src/forces.js` | force/status interface: atmosphere, dust, wind channels, thermal, cryo, plumes, radiation, glide, acid, downdraft, eruption, magnetic, falseRadar, darkness | M5-M7/M28b/M29 |
 | `src/save.js` | versioned MetaSave + RunState, legacy migration, corruption recovery | M8 |
 | `src/economy.js` | rewards, the carried haul, what a deposit is worth, the transmitted/cargo split, settlement and banking | M9/M15 |
 | `src/route.js` | the ten-body ladder, the next-body card, the progress trail, checkpoint rule | M9/M27 |
@@ -86,12 +86,71 @@ what makes a seed reproduce a flight. The dust squall needs to feel random anywa
 time slot — unpredictable to the player, identical on replay, salted per mission so two missions do
 not storm in lockstep. Anything else that wants "occasionally, unpredictably" wants the same trick.
 
+**The hazard name in authored data is a key into a table in code, and a miss is silent.**
+`forcesFor` does `BUILDERS[spec.type]`; when that comes back undefined, `add()` is never called, no
+error is raised, and the body flies with **no weather at all** while its route card, its summary and
+its briefing all describe some. M29 audited every planet and every authored mission and found this
+on three names — `'heat'` against a builder named `thermal`, `'cold'` against `cryo`, `'plume'`
+against `plumes` — which, with Ganymede's two hazards that had no builder at all, meant **Mercury,
+Io, Enceladus and Ganymede had no working hazard whatsoever**, at positions 5 to 8 of a ladder every
+run walks. M28b caught the `plume` case from an external review; `heat` and `cold` had never been
+noticed, and *this document listed them as working*.
+
+Aliases in `BUILDERS` are the fix. The rule is the test: `forces-tests.js` asserts that **every
+hazard string any planet or mission declares resolves to a builder**, with `NON_FORCE_HAZARDS`
+(`ice`, implemented as `surfaceFriction`) as the one stated exception. Generalise it — anywhere a
+**name in content** indexes a **table in code**, assert that every name resolves, because the failure
+mode is silence.
+
+**Four status channels, four different consequences, on purpose.** A status that only fills a gauge
+is the fault M29a named on radiation. Heat costs **thrust** (the engine derates past 60% and recovers
+when you stop burning), cold costs **control** (the attitude thrusters stiffen), corrosion costs
+**hull**, and charge adds a torque and a downward pull. Radiation eats hull *high* and in sweeps;
+acid eats hull *low* and never stops, so Europa and Venus sit at opposite ends of the ladder teaching
+opposite instincts. `ship.thermalDerate` and `ship.rcsStiffness` are the two multipliers the ship
+reads back, and `applyForces` resets both every step — a hazard must never follow a lander to another
+body.
+
+**And a status needs a rate a player can act on.** M18 slowed radiation because *"it went clean to
+saturated in three seconds, which left no room to reach a shadow"*, and M29's first tuning of four
+new channels walked straight back into it: Mercury went clean to derated in **3.2 s**. Retuned
+against mission length (25-45 s) so mission 1 of a body barely bites and mission 5 bites
+mid-crossing, and `forces-tests.js` asserts a 10 s floor on every authored mission that declares one.
+
+**Darkness and dust are different channels.** Pluto's darkness was `visibility: 0.45`, and the
+renderer draws visibility as dust, so the darkest body in the game rendered as pale blue haze. Dust
+tints toward the body's own dust colour and lightens; darkness subtracts toward black and closes a
+sight radius. A body can be hazy, dark, both or neither, and neither has to lie about the other.
+Beacons and ore crates draw above both, so blind is never targetless — the M18 line does not move
+because the cause changed.
+
+**The sanctuary rule covers weather, not just machines.** M29 put hazards in *places* for the first
+time (vents, fountains, sinking air, anomalies), and the first tuning had an Enceladus vent over the
+safe pad: the way home fell to 11/20 while the prize route held at 19/20 on every force setting
+tried. Force barely moved it, which is what said the problem was *where* it was. `plumes`,
+`downdraft` and `eruption` all call `offSanctuary`, which reads `sanctuaryPad` from `enemies.js`
+rather than reimplementing "the nearest landing zone" — one rule, one implementation. The deep zone
+is fair game, which is why the prize route never moved.
+
+**A hazard may never leave presentation, which is the accessibility rule from the other side.**
+`falseRadar` moves the HUD readout and **nothing else**: flown twice from the same state with and
+without it, the lander ends at the same position, velocity and spin to six decimals, and that is
+asserted. It also follows that no autopilot here can measure whether Ganymede is any good — the same
+blind spot visibility has had since M24, and darkness now shares it.
+
+**Tech Cores buy the top two hangar rungs.** A core drops on a PERFECT landing on a small pad and
+nowhere else, so salvage measures how much you flew, materials measure where you went, and a core
+measures how well you put the lander down. Cores wipe on death, so M28's affordability rule applies
+unchanged and is asserted: L3 costs 3 and gates from body 3, L4 costs 6 and gates from body 6,
+against measured yields of 3.5/8/11.5/16 by ladder position on a normal run. L2 costs no cores, so
+the M28 income floor is untouched.
+
 **A hazard that is only a gauge cannot be learned.** Radiation raised a number and drew nothing, so
 there was no way to know where it was or which way to go; it is an altitude belt with a drawn edge
-now. The general rule: if a hazard has a boundary, draw the boundary. And check a named hazard has a
-builder before believing it does anything — `wind`, `glide`, `acid`, `downdraft`, `eruption`,
-`magnetic` and `falseRadar` are all strings with nothing behind them, and `plume` (Enceladus) is
-spelled against a `plumes` builder, so it never even reaches the no-op.
+now. The general rule: if a hazard has a boundary, draw the boundary — which since M29 also means the
+vents, fountains, sinking-air columns and magnetic anomalies that have a *place* rather than a level.
+Every hollow hazard named here before M29 is implemented, and the check that used to be advice is a
+test now (see the rule above).
 
 **The rule that holds accessibility honest:** every accessibility setting changes *presentation*
 only — shake, flashing, instrument size, contrast and key bindings never reach the simulation.
@@ -406,19 +465,21 @@ The MVP is complete and measured (`test/BASELINE.md`, M13 section). What the nex
   Sentry and Shielded Guardian are roster entries with no implementation. Adding one is an
   `ENEMY_TYPES` entry plus a draw function; the field, telegraph, projectile, damage and reward
   systems are shared. `PlanetDefinition.eligibleEnemySets` is where a new design joins the bodies
-  that should field it.
-- **Seven bodies still fly generated survey chapters** rather than authored missions: Mercury,
-  Venus, Titan, Enceladus, Io, Pluto, Ganymede. `src/missions.js` is where authored content goes,
-  and `generateChapter` is what it replaces. **Since M27 they are all on the ladder**, so this is
-  content a player meets on every run rather than bodies the route might offer — which is what makes
-  M29 worth doing and why the validator now flies each of them at the sector it actually occupies.
+  that should field it. **M29 made this the most valuable thing left**: Enceladus measured that on a
+  low-gravity body the machine *type* decides almost everything and the count decides almost nothing
+  (drones at 2 machines 2-5/20, turrets at 4 machines 17-20/20), so more designs is the only real
+  lever left on the combat ramp.
+- ~~**Seven bodies still fly generated survey chapters**~~ — **done in M29.** All ten bodies are
+  authored, 50 missions in `src/missions.js`. `generateChapter` is consequently reached by nothing a
+  player flies; it is kept as the fallback that makes `chapterFor` total for a body added to
+  `PLANETS` without content, and is still swept by `validate-missions.js` and `objectives-tests.js`
+  so it cannot rot. Whether to keep it is flagged for Tom in `ROADMAP_STATUS.md`.
 - **Landing bands await human playtest data.** They were deliberately not retuned in M13 — the only
   recorded data is an autopilot, which is not a proxy for a person.
 - **Moving landing platforms** are still deferred (Europa 5, Io 5): `padAt` and the landing check
   would have to become time-aware.
-- **Three ice bodies still fly rock.** Enceladus, Pluto and Ganymede have no `terrainStyle` set, so
-  they generate the same ground Luna does. That is one line each when their chapters are authored;
-  it was left alone in M20 because those bodies still fly generated surveys.
+- ~~**Three ice bodies still fly rock.**~~ Fixed in M29a — Enceladus, Pluto and Ganymede carry
+  `terrainStyle: 'ice'` with friction to match.
 - **Mission fuel budgets have not been re-authored** since the map grew, and M15 gave the gap a
   number: taking the deposits that lie on the fuel road is comfortable (236/300 landings, 27–55%
   left), but sweeping every deposit lands 156/300 and 0/20 on `mars-2` and `europa-4`. Written for a

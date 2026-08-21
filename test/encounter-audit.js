@@ -14,12 +14,18 @@
 import { Terrain } from '../src/terrain.js';
 import { flyMission } from './pilot.js';
 import { cargoFor } from '../src/objectives.js';
-import { MOON_LEVELS, MARS_LEVELS, EUROPA_LEVELS } from '../src/missions.js';
+import { CHAPTERS } from '../src/missions.js';
+import { PLANET_ORDER } from '../src/route.js';
 import { placeEnemies, ENEMY_TYPES, lineOfSight } from '../src/enemies.js';
 
 const SEEDS = +(process.argv[2] || 20);
 const seedList = Array.from({ length: SEEDS }, (_, i) => 1000 + i * 137);
-const AUTHORED = [...MOON_LEVELS, ...MARS_LEVELS, ...EUROPA_LEVELS];
+// All ten bodies since M29 - what a player meets is now a statement about the
+// whole ladder rather than about its first three rungs.
+const AUTHORED = PLANET_ORDER
+  .map((pid) => Object.values(CHAPTERS).find((c) => c.planet === pid))
+  .filter(Boolean)
+  .flatMap((c) => c.levels);
 
 /** The near landing zone: the one the mission promises is always reachable. */
 const nearIndex = (terrain) => {

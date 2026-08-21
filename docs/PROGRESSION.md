@@ -7,10 +7,12 @@ Written because Tom lost the overview after M24–M26 changed the run shape thre
 the audit found a blocker that no test catches: **four of the five hangar tracks cannot be climbed
 at all on the three-body ladder M25 shipped.**
 
-> **Status, after M27 and M28 (2026-08-21): the hangar and the economy are both fixed.** The ladder
-> is ten bodies, all five tracks reach L4, the material costs are re-cut for order *and* scale, and
-> M13's anti-frustration floor pays out again. What is left is **content** (M29) and a human
-> playtest. The measured state is the M27 and M28 sections of `test/BASELINE.md`.
+> **Status, after M29 (2026-08-21): the hangar, the economy and the content are all done.** The
+> ladder is ten bodies, all five tracks reach L4, the material costs are re-cut for order *and*
+> scale, M13's anti-frustration floor pays out again, and **all ten bodies are authored** — 50
+> missions with distinct names, briefs, objectives and a set piece each. Tech Cores buy the L3 and L4
+> rungs, so the third currency has a sink. What is left is **a human flying it**. The measured state
+> is the M27, M28 and M29 sections of `test/BASELINE.md`.
 >
 > **Three figures below were wrong when M28 re-measured them**, and two had already sent a brief off
 > in the wrong direction. They are corrected in place and marked. This document was honest when it
@@ -29,7 +31,7 @@ matters most is which survive a death, because that is the whole risk structure 
 
 | | buys | costs | on death | full cost |
 | --- | --- | --- | --- | ---: |
-| **Hangar** (`components.js`) | 5 tracks × 3 levels | salvage **+ body-specific material** | **kept** | 12,840 salvage |
+| **Hangar** (`components.js`) | 5 tracks × 3 levels | salvage **+ body-specific material**, and **tech cores on L3/L4** (M29) | **kept** | 12,840 salvage |
 | **Skills** (`skills.js`) | 3 trees × 4 nodes, ranked | research data | **wiped** | 1,555 data |
 | **Loadout** (`modules.js`) | 1 active + 1 passive slot | nothing — blueprints are earned | blueprints **kept** | 5 active, 4 passive |
 
@@ -86,13 +88,24 @@ next section. Europa teaches ice at position 2 and Venus — gravity 10.48, dens
 it moves it moves the wrong way.
 
 ```
-machines down the ladder: lun 4 · eur 3 · tit 3 · mar 5 · enc 0 · gan 3 · io 3 · mer 3 · plu 3 · ven 3
+machines down the ladder (M27): lun 4 · eur 3 · tit 3 · mar 5 · enc 0 · gan 3 · io 3 · mer 3 · plu 3 · ven 3
+after M29 authored them:        lun 4 · eur 3 · tit 3 · mar 5 · enc 4 · gan 5 · io 5 · mer 5 · plu 4 · ven 5
 ```
 
-Every survey body caps at 3 because `generateChapter`'s budget is `min(3, ...)`, while the authored
-introductory Moon fields 4 and Mars fields 5. **Enceladus, at position 5, has no `eligibleEnemySets`
-at all** — a body with nothing hostile on it, halfway down. The saturated "heavy resistance" the
-route card used to print was hiding this; it is measured on the card now.
+Every survey body capped at 3 because `generateChapter`'s budget is `min(3, ...)`, while the authored
+introductory Moon fields 4 and Mars fields 5. **Enceladus, at position 5, had no `eligibleEnemySets`
+at all** — a body with nothing hostile on it, halfway down.
+
+**M29 fixed it by authoring the budgets rather than deriving them**, and the fix carries a finding
+worth more than the numbers: on Enceladus the machine *count* barely mattered and the *type* decided
+everything. Measured unarmed over 20 seeds on the way home — drones at 2 machines 2–5/20, turrets at
+4 machines 17–20/20. At 7.3 px/s² a lander cannot decelerate, so a drone that closes and rams is not
+a difficulty knob there; it is a coin toss. Enceladus is a turret body that meets its first drone on
+mission 4.
+
+Titan and Europa stay at 3 for the same structural reason M21 recorded: both are drone bodies, and a
+drone-only chapter cannot absorb machines the way a mixed one can. **The remaining lever on the
+combat ramp is the six unimplemented enemy designs**, not bigger budgets.
 
 ---
 
@@ -199,6 +212,9 @@ of one Moon visit**. Every cost is 25–50 now.
 
 ## Are the other seven bodies finished?
 
+**Yes, since M29** — this section is kept for the reasoning and for what the audit found. What
+follows described the state before it.
+
 **Systems yes, content no.** They are playable and validated — since M27, at the sector each one
 actually occupies on the ladder and over 20 seeds rather than 6, and every body is structural 100/100
 — but they are anonymous. And since M27 they are no longer optional: every run meets all seven.
@@ -224,20 +240,33 @@ What the seven survey bodies lack:
 - **No per-mission hazard tuning.** They inherit planet defaults; authored Mars missions tune dust
   period, floor and duty per mission.
 
-### Hazards named but not implemented
+### Hazards named but not implemented — *all implemented in M29, and there were more than this*
 
-`ice` (Europa) and `darkness` (Pluto) *are* implemented — through `surfaceFriction` and `visibility`
-rather than a force builder, so they do not appear in `forces.js` `BUILDERS`. These five are genuinely
-hollow, flavour on the route card and nothing more:
+This table was **wrong in both directions**, and only an audit found it. It is kept exactly as
+written because being wrong is the useful part.
 
-| hazard | body | consequence |
-| --- | --- | --- |
-| acid, downdraft | Venus | survives on gravity 10.48 + dense drag |
-| eruption | Io | keeps heat, loses its signature |
-| magnetic, falseRadar | Ganymede | **both hollow — Ganymede is the Moon with a different colour** |
+| hazard | body | what this doc said | truth |
+| --- | --- | --- | --- |
+| acid, downdraft | Venus | hollow | hollow — correct |
+| eruption | Io | hollow | hollow — correct |
+| magnetic, falseRadar | Ganymede | hollow | hollow — correct |
+| **heat** | **Mercury, Io** | *not listed* | **hollow** — spelled against a builder named `thermal` |
+| **cold** | **Pluto** | *not listed* | **hollow** — spelled against `cryo` |
+| **plume** | **Enceladus** | *not listed* | **hollow** — spelled against `plumes` (M28b) |
+| `ice` | Europa | implemented via `surfaceFriction` | correct, and left alone |
+| `darkness` | Pluto | "implemented via `visibility`" | **technically true, practically wrong** |
 
-Roughly a week of content work to make all seven shippable: 35 names and briefs, 35 objectives, one
-set piece each, three signature hazards.
+So **four bodies had no working hazard at all** — Mercury, Io, Enceladus and Ganymede — not the two
+this table implies. And the `darkness` note actively misled: it was low visibility, the renderer
+draws visibility as *dust*, and so the darkest body in the game came out as pale blue fog, which is
+what Tom reported in M29a. Following the "do not fix them" advice would have kept it that way.
+
+Every one is implemented now, and `forces-tests.js` asserts that **every hazard string any planet or
+mission declares resolves to a builder**, so this cannot recur silently. The estimate below was
+about right for the writing and missed the audit entirely.
+
+*(Original estimate: roughly a week of content work — 35 names and briefs, 35 objectives, one set
+piece each, three signature hazards.)*
 
 ---
 
@@ -365,8 +394,10 @@ Now scheduled as **M27–M29** in `ROADMAP_STATUS.md`. In short:
    open**, because it is a difficulty change and *is it hard or is it unfair?* is unanswered.
 4. ~~**Let Hull answer the two-shot rule** (M28).~~ **It always did.** Hull L2 buys the third shot;
    the claim otherwise came from a test that encoded 150, a hull no level produces.
-5. **Make the seven survey bodies into content** (M29), held until the re-cut ladder has been played,
-   because the balance will move.
+5. ~~**Make the seven survey bodies into content** (M29).~~ **Done.** 35 missions authored with
+   distinct names, briefs, objectives and a set piece each; every hollow hazard implemented; and
+   Tech Cores given a sink on the L3/L4 rungs. The audit that opened it found four bodies with no
+   working weather at all, which no plan had listed.
 
 Farming decay is **no longer needed** — Tom removed replay entirely, so there is nothing to decay.
 See the risk that creates, above.

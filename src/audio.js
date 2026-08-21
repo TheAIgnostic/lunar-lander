@@ -299,6 +299,12 @@ const WARNINGS = {
   heat:            { rank: 2, hold: 3.0, play: (a) => a.arpeggio([520, 470], 0.09, 'sawtooth', 0.08) },
   cold:            { rank: 2, hold: 3.0, play: (a) => a.arpeggio([300, 260], 0.09, 'triangle', 0.09) },
   radiation:       { rank: 2, hold: 3.0, play: (a) => a.arpeggio([740, 740, 740], 0.07, 'square', 0.06) },
+  // M29's two new status channels. Same rank as the other three status voices,
+  // so the right-of-way rule (M13) still keeps a charging turret and a low tank
+  // from shouting over each other - a new hazard joins the queue, it does not
+  // jump it. Corrosion is a falling sour pair, magnetic a rising hum.
+  corrosion:       { rank: 2, hold: 3.0, play: (a) => a.arpeggio([410, 345], 0.11, 'sawtooth', 0.08) },
+  charge:          { rank: 2, hold: 3.0, play: (a) => a.arpeggio([180, 240, 300], 0.08, 'sine', 0.10) },
   lock:            { rank: 3, hold: 0.4, play: (a) => a.charge(1.1) },
   'fuel-critical': { rank: 4, hold: 1.5, play: (a) => a.blip(220, 0.16, 'sawtooth', 0.11) },
   hull:            { rank: 5, hold: 0.5, play: (a) => a.hullHit() },

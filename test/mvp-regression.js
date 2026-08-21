@@ -13,7 +13,8 @@ import { spawnFor } from '../src/spawn.js';
 import { EnemyField, COMBAT } from '../src/enemies.js';
 import { Abilities } from '../src/abilities.js';
 import { LEVELS } from '../src/levels.js';
-import { MOON_LEVELS, MARS_LEVELS, EUROPA_LEVELS } from '../src/missions.js';
+import { CHAPTERS, MARS_LEVELS } from '../src/missions.js';
+import { PLANET_ORDER } from '../src/route.js';
 
 const SEEDS = +(process.argv[2] || 12);
 const seedList = Array.from({ length: SEEDS }, (_, i) => 1000 + i * 137);
@@ -25,7 +26,12 @@ const check = (name, cond, extra = '') => {
   return false;
 };
 
-const AUTHORED = [...MOON_LEVELS, ...MARS_LEVELS, ...EUROPA_LEVELS];
+// Every authored mission on the ladder - 15 until M29, 50 after it. Walked via
+// PLANET_ORDER so a body added to the game is regressed because it exists.
+const AUTHORED = PLANET_ORDER
+  .map((pid) => Object.values(CHAPTERS).find((c) => c.planet === pid))
+  .filter(Boolean)
+  .flatMap((c) => c.levels);
 
 /** The near landing zone: the one the mission promises is always reachable. */
 const nearIndex = (terrain) => {

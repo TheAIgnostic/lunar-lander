@@ -816,6 +816,46 @@ scheduled until the MVP is stable — the spec says the same.
     is where runs die because it is flown unarmed; Pluto's "darkness" renders as coloured fog because
     it is implemented as low visibility; and cores still do nothing
 
+- [x] **M29 — the survey bodies become content** (this commit)
+  - the brief was writing: 35 missions sharing five names and five briefs, 35 with
+    `optionalObjective: null`, no set pieces, and a list of hollow hazards. The hazard audit ran
+    first and found **more than the brief listed**
+  - **four bodies had no working hazard at all.** `forcesFor` looks a hazard's name up in `BUILDERS`
+    and a miss is silent, so `'heat'` (Mercury, Io) against a builder named `thermal`, `'cold'`
+    (Pluto) against `cryo`, and `'plume'` (Enceladus) against `plumes` all resolved to nothing -
+    Mercury, Io, Enceladus and Ganymede flew with no weather at all, at positions 5 to 8 of a ladder
+    every run walks. M28b caught the `plume` spelling from a review; **`heat` and `cold` had never
+    been noticed, and both this file and `docs/ARCHITECTURE.md` listed them as working**
+  - the fix is aliases; the durable part is that `forces-tests.js` now asserts **every hazard string
+    any planet or mission declares resolves to a builder**, with `ice` as the one stated exception
+  - **seven new force builders**: `glide` (Titan's lift from horizontal speed), `acid` and
+    `downdraft` (Venus), `eruption` (Io, telegraphed), `magnetic` and `falseRadar` (Ganymede),
+    `darkness` (Pluto). Heat and cold gained consequences too - heat derates the engine, cold
+    stiffens the thrusters, corrosion eats hull at the deck. Four channels, four different costs
+  - **the first tuning walked straight into M18's radiation fault**: Mercury went clean to derated in
+    **3.2 seconds**. Retuned against mission length and asserted with a 10 s floor, so mission 1 of a
+    body barely bites and mission 5 bites mid-crossing
+  - **the sanctuary rule now covers weather.** A vent over the safe pad took Enceladus 2 to 11/20
+    home while the prize route held at 19/20 on every force setting tried - force barely moved it,
+    which is what said the problem was *where* it was. Placed hazards call the same `sanctuaryPad`
+    the machines do. 11/20 -> **20/20**
+  - **Enceladus: the count did not matter, the type did.** At 7.3 px/s^2 a lander cannot decelerate,
+    so drones at 2 machines gave 2-5/20 and turrets at 4 gave 17-20/20. It is a turret body that
+    meets its first drone on mission 4, and it has resistance at last - the ladder's machine ramp
+    goes `enc 0 -> 4` and the back half `3 -> 4/5`
+  - **50 authored missions**, 50 distinct names, 50 distinct briefs, zero null objectives, seven new
+    set pieces, and 26 objectives all of which content uses
+  - the M26 shuffle test caught the seven new chapters dealing **4 layouts over 40 seeds** - three-shape
+    palettes with one pinned. Widened to six, `pinShape` re-cut to "pin only where the name would
+    lie"; they now deal 32-36, more than the three bodies authored before them
+  - **Tom's four design calls, all taken:** Mars drag 0.15 -> **0.24** (measured over five values);
+    the weapon **fitted** to an empty slot on recovery, so moon-3 is the first mission flown armed;
+    Tech Cores buy the **L3 and L4** rungs; and **darkness is its own channel**, not low visibility
+  - raising Mars' drag found a second-path bug: `windChannels` reads `level.drag`, so `mars-2` - the
+    one Mars mission the double-apply never touched - fell 15/20 to 8/20. It pins its own drag now
+  - **the physics fixture did not move**; the flight fixture moved by exactly mars-1/-3/-4/-5 x 3
+    seeds, which is the containment proof, plus 35 new missions
+
 
 ## Decisions (Tom, 2026-08-16)
 
@@ -834,25 +874,32 @@ None.
 
 ## Next task
 
-**M29 — the survey bodies become content.** The playtest happened (M29a) and its mechanical findings
-are all fixed; what is left on the seven survey bodies is *writing*: 35 missions sharing five names
-and five briefs, 35 with `optionalObjective: null`, no set pieces, and the hollow hazards below.
+**Open.** M29 closed the content gap — all ten bodies are authored, every hazard a body declares now
+does something, and the four design calls from Tom's playtest are shipped. What is left is either a
+system the roadmap still owes, or a question only a person can answer.
 
-**Four things that playtest left open, all design calls rather than code:**
+**The two systems the spec still owes** (both recorded since M12/M13, neither blocked):
 
-1. **Mars is now the easiest body on the ladder**, two milestones after being the hardest — M28b took
-   its double drag off and M29a's log is what that looks like in the hand. One authored number.
-2. **The Moon is where runs die**, because it is flown stock *and unarmed* — the weapon blueprint only
-   arrives after a body has shot at you. Both of Tom's crashes were there.
-3. **Cores do nothing.** Earned, banked, pitied, granted by god mode, spent nowhere.
-4. **Pluto's "darkness" renders as coloured fog**, because it is low `visibility` and the renderer
-   draws visibility as dust. It wants to dim, not haze.
+- **Six of the eight enemy designs.** Coil Cannon, Patrol Drone, Mortar Platform, Magnetic Mine,
+  Solar Sentry and Shielded Guardian are roster entries with no implementation. Adding one is an
+  `ENEMY_TYPES` entry, a draw function in `enemydraw.js`, and a line in
+  `PlanetDefinition.eligibleEnemySets`. **M29 makes this the most valuable thing left**: Enceladus
+  measured that on a low-gravity body the machine *type* decides everything and the count decides
+  almost nothing, so more designs is the only real lever left on the combat ramp.
+- **Moving landing platforms** (Europa 5, Io 5). Still structural: `padAt` and the landing check
+  would have to become time-aware. `io-5 THE FOUNTAIN` ships the timing problem as telegraphed
+  fountains around a static pad instead, which is honest but not the brief.
 
-Known-hollow hazards, for whoever authors these bodies: `acid`, `downdraft` (Venus), `eruption` (Io),
-`magnetic`, `falseRadar` (Ganymede), `glide` (Titan), `wind` as a bare string. **And `plume`
-(Enceladus) is spelled against a `plumes` builder**, so authoring vents alone will not switch it on.
+**The one deliberately outstanding tuning item**, unchanged since M28: pad width and machine damage
+have not been tuned against the recommended lander, because that is a difficulty change and *is it
+hard or is it unfair?* is still unanswered.
 
-*(Superseded — the three questions this section used to hold are answered in the M29a baseline.)*
+**A question for Tom, not a task:** `generateChapter` is now reached by nothing a player flies. All
+ten bodies are authored, so `chapterFor` never falls through to it. It is kept because it is what
+makes `chapterFor` total — a body added to `PLANETS` without content still produces a playable,
+validated chapter rather than throwing — and it is still swept by `validate-missions.js` and
+`objectives-tests.js` so it cannot rot. Delete it or keep it as the fallback; both are defensible and
+it is not a decision to take quietly.
 
 **The playtest that was:** M27 built the ladder and M28 made the economy under it work; both
 were built and measured by an autopilot that does not dodge and cannot see the screen, and everything
@@ -909,42 +956,32 @@ blocker found by the floor check it insisted on doing first. See the M28 section
 **One item is deliberately outstanding**: pad width and machine damage were not tuned against the
 recommended lander, because that is a difficulty change and the M24 question is still open.
 
-### M29 — the survey bodies become content
+### M29 — the survey bodies become content (done, this commit)
 
-**Held until the re-cut ladder has been played**, because the balance will move. Seven bodies are
-systemically complete and narratively empty:
+Shipped as planned, plus one thing the plan did not anticipate and that changed the shape of the
+milestone: **the plan's list of hollow hazards was itself incomplete.** It named five — `acid`,
+`downdraft` (Venus), `eruption` (Io), `magnetic`, `falseRadar` (Ganymede) — and noted `plume`
+(Enceladus) as a spelling fault from M28b. It also said, in as many words, *"`ice` and `darkness` are
+implemented ... do not 'fix' them"*.
 
-- 35 missions share five names and five briefs — FIRST LOOK / LOW PASS / DEEP FIELD / THE SHELF /
-  LAST LIGHT on every body
-- 35 have `optionalObjective: null`, so M14's objectives system is dead on seven of ten bodies
-- no set pieces; each authored body has one
-- five named hazards do nothing: **acid** and **downdraft** (Venus), **eruption** (Io), **magnetic**
-  and **falseRadar** (Ganymede). Ganymede is the worst case — both of its hazards are hollow, so it
-  is the Moon with a different colour
+Both of those were partly wrong, and only the audit found it:
 
-Note that `ice` and `darkness` *are* implemented, through `surfaceFriction` and `visibility` rather
-than a force builder; do not "fix" them.
+- **`heat` (Mercury, Io) and `cold` (Pluto) were hollow too**, by the same spelling fault as `plume` —
+  builders named `thermal` and `cryo`. Neither this file nor `docs/ARCHITECTURE.md` listed them.
+  With `plume` and Ganymede's pair, that is **four bodies with no working hazard at all**.
+- **`darkness` was "implemented" in the sense that mattered least.** It was `visibility: 0.45`, and
+  the renderer draws visibility as *dust*, so it rendered as coloured fog — which is precisely what
+  Tom reported in M29a. Not fixing it would have been following the note off a cliff. `ice` genuinely
+  is fine as `surfaceFriction`, and was left alone.
 
-**M25 fixed the run economy Tom hit in playtest and made the progression a ladder.** Before that,
-**M24** was the first milestone whose headline number is deliberately *worse* than the one before it. The game is harder, there is one mode, and a run is a run. What it needs next is not
-another number — it is **a human flying it**, because the two things M24 changed most (how lethal the
-crossing is, and how blind the weather is) are the two things this project's instrument cannot
-measure. The autopilot does not dodge, and it does not look at the screen.
+The other four items landed as written: 35 missions authored with distinct names, briefs and
+objectives; a set piece per body; per-mission hazard tuning; and Ganymede is no longer the Moon with
+a different colour. See the M29 section of `test/BASELINE.md` for every figure.
 
-**The first question for the next session is Tom's, not the code's:** at 70% unarmed crossings and
-Mars at 0.05 visibility, is it hard or is it unfair? Everything below waits on that answer.
-
-The natural next milestones, in the spec's own production order (section 16, Phase 7):
-
-- **Titan and Enceladus chapters** — five authored missions each, replacing their generated survey
-  chapters; atmosphere and plume contrast. `src/missions.js` is where authored content goes.
-- **The remaining six enemy designs** — each is an `ENEMY_TYPES` entry plus a draw function in
-  `enemydraw.js` (327 lines, split in M23 for exactly this), plus a line in
-  `PlanetDefinition.eligibleEnemySets`.
-- **Moving landing platforms** (Europa 5, Io 5) — a structural change: `padAt` and the landing
-  check become time-aware.
-- **Landing-band tuning and the fuel budgets** — both wait on human playtest data, recorded as
-  such since M13 and M15.
+**Two things it deliberately did not do.** Pad width and machine damage are still not tuned against
+the recommended lander, for the reason M28 recorded and M29 did not change: it is a difficulty change
+and the M24 question is open. And `generateChapter` was kept rather than deleted, because it is what
+makes `chapterFor` total — flagged in "Next task" as Tom's call, not taken quietly.
 
 ### M21 — structures, and guards that belong somewhere
 
@@ -1003,23 +1040,25 @@ that needs none of the conversation that produced this plan.
 
 ### Handover
 
-*Rewritten 2026-08-21, after the session that ran **M27, god mode, M28, M28b and M29a** — the
-ten-body ladder, the economy under it, an external review, and Tom's first playtest of the result.*
+*Rewritten 2026-08-21, after the session that ran **M29** — the seven survey bodies authored, every
+hollow hazard implemented, and Tom's four playtest design calls taken.*
 
 **The first prompt for a new session:**
 
-> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then `docs/PROGRESSION.md`, then the M28 and
-> M29a sections of `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything. Then pick
-> up "Next task" — **M29, the survey bodies become content** — but read "Open with Tom" first,
-> because four of the things that came out of his playtest are design calls and not code.
+> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then `docs/PROGRESSION.md`, then the M29
+> section of `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything. Then read "Open
+> with Tom" — the four design calls there are answered and shipped, but **nothing M29 added has been
+> flown by a human**, and two of its hazards cannot be measured by this project's instrument at all.
 
-That shape matters more than the wording: read the state, then *measure* the state, then build.
-Every milestone here that went well started from a number, and every one that went badly started
-from an assumption. This session proved it four more times — see "the instrument" below.
+That shape matters more than the wording: read the state, then *measure* the state, then build. This
+session proved it again in the most direct way available — the milestone opened with a hazard audit
+instead of with content, and the audit found that **four bodies had no working weather**, which no
+brief and neither document had said.
 
-**Where the game is.** `main` is live on two GitHub Pages sites (see "Where it is published") and is
-current as of `059bfcb`. `v2` and `main` are level. The tree is clean, the suite is green, both
-fixtures are byte-identical, and `./macos/build.sh` self-tests clean.
+**Where the game is.** `main` is live on two GitHub Pages sites (see "Where it is published") and was
+current as of `059bfcb` before this session. `v2` is ahead by M29. The tree is clean, the suite is
+green, the physics fixture is byte-identical, and the flight fixture moved by exactly the four Mars
+missions the drag change touches.
 
 ### Reading order
 
@@ -1029,34 +1068,29 @@ fixtures are byte-identical, and `./macos/build.sh` self-tests clean.
 3. **`docs/PROGRESSION.md`** — the hangar, the skills and the loadout as one system. Read it before
    touching economy, difficulty or the route. **Three of its figures were wrong when M28 re-measured
    them**; they are corrected in place and the header says so. Re-measure it anyway
-4. **`test/BASELINE.md`** — **M29a** for what a human actually found, **M28** for the economy,
-   **M27** for the ladder, **M19/M20** for where the wall is on terrain
+4. **`test/BASELINE.md`** — **M29** for the ten authored bodies and the hazard audit, **M29a** for
+   what a human actually found, **M28** for the economy, **M27** for the ladder, **M19/M20** for
+   where the wall is on terrain
 
 Then **measure before editing**: `./test/run-all.sh 20`. It ends with the encounter audit, so one
 command tells you both that the game still works and what a player currently meets in it.
 
 ### What this session did
 
-- **M27 — the ten-body ladder.** `PLANET_ORDER` is all ten, difficulty-sorted; no replay; shuttles
-  attrit `+1` capped at 3. The hangar went from four capped tracks (Sensors unbuyable at all) to all
-  five reaching L4, by putting the bodies back on the route rather than repointing a single cost.
-  M9's discovery-tier machinery was deleted — M27 answered the question keeping it alive.
-- **God mode** — a test switch in settings: any body startable, bottomless pot, hangar window held
-  open. Stamped into the playtest log header so a cheated run cannot be read as a normal one.
-- **M28 — the economy.** The floor check it insisted on doing first found that M13's anti-frustration
-  debrief **had not paid out since M24** (banked, then wiped on the next line). Materials were re-cut
-  for ordering *and scale*, because every L4 rung wanted more of one material than a single visit can
-  produce. Two of the brief's four items closed as "already true, the record was stale".
-- **M28b — an external review, checked line by line.** Four of its claims did not survive. The three
-  that did: `resumeExpedition` pinned `g.forcedSeed` so **every run after a resume flew identical
-  terrain**; Mars ran at **double drag** from M6 to now; and abandoning a run was strictly better than
-  losing one, with a farmable floor.
-- **M29a — Tom's playtest, acted on.** Salvage cut to 30% and L3/L4 repriced to ~5 and ~8-9 body
-  clears; **six of ten bodies were wearing another body's name**; radiation given 3x damage, an
-  altitude belt and a drawn edge; Titan's and Venus's storms made to exist at all, plus 3-5 s
-  squalls; a diamond and a real completion screen for clearing all ten.
+- **M29 — the survey bodies become content.** Seven chapters authored (35 missions), so all ten
+  bodies now have names, briefs, objectives and a set piece each. 50 missions, 50 distinct names, 50
+  distinct briefs, zero `optionalObjective: null`.
+- **The hazard audit, which is the finding of the milestone.** `'heat'`, `'cold'` and `'plume'` were
+  spelled against builders named `thermal`, `cryo` and `plumes`, and six other hazard names had no
+  builder at all — **Mercury, Io, Enceladus and Ganymede flew with nothing**, at positions 5 to 8 of
+  the ladder. Seven new builders, three aliases, and a test that asserts the property so it cannot
+  recur.
+- **Weather keeps off the safe pad.** M29 put hazards in *places* for the first time and immediately
+  put a vent over a landing zone; the sanctuary rule the machines live under now covers them too.
+- **Tom's four design calls**, all measured before being taken: Mars drag `0.24`, the weapon fitted
+  on recovery, Tech Cores buying the L3/L4 rungs, and darkness as its own channel.
 
-### The instrument, and four ways it has misled a session
+### The instrument, and five ways it has misled a session
 
 - **The autopilot has no evasive logic, no terrain lookahead, and cannot see the screen.** It is
   still the only automated instrument. The 70% unarmed-crossing figure is a **floor** measured by a
@@ -1069,6 +1103,11 @@ command tells you both that the game still works and what a player currently mee
   post-landing state itself against `LEVELS.length` — the twelve *classic* missions — so a scripted
   expedition landed five missions and reported `cleared=[]`. Cost about an hour. Same class as M23's
   drifted autopilot copy. One settle now, held by `settleAfter`.
+- **A silent lookup miss is the quietest bug this codebase can produce.** `BUILDERS[spec.type]`
+  returning undefined costs nothing, throws nothing and logs nothing — the body simply flies with no
+  weather while every screen describes some. It survived from M5 to M29 on three bodies, and the two
+  documents whose job is to record exactly this both listed `heat` and `cold` as working. Anywhere a
+  **name in authored data** is looked up in a **table in code**, assert that every name resolves.
 - **A recommendation made from a guess, with the measurement already in the log.** The ten-body
   ladder was argued against at "50 missions a run" — the length of the *rarest* outcome. Tom's own
   log had ~3 minutes a body. Measure before recommending, not just before editing.
@@ -1084,36 +1123,48 @@ command tells you both that the game still works and what a player currently mee
 - **A test can encode a decision rather than a property.** M24 found two, M28 found three more — one
   of which (`Math.ceil(150 / damage)`, against a hull no level produces) had escaped into the
   documentation and shaped a whole recommendation.
-- **A named hazard is not an implemented one.** `wind`, `glide`, `acid`, `downdraft`, `eruption`,
-  `magnetic` and `falseRadar` are strings with no builder, and `plume` (Enceladus) is spelled against
-  a `plumes` builder so it never even reaches the no-op. Check `BUILDERS` before believing a body has
-  weather.
+- **A named hazard is not an implemented one — and M29 is why this is now a test.** Until M29,
+  `glide`, `acid`, `downdraft`, `eruption`, `magnetic` and `falseRadar` had no builder, and `heat`,
+  `cold` and `plume` were spelled against builders named `thermal`, `cryo` and `plumes` so they never
+  even reached a no-op. **Four bodies had no working hazard at all.** Every one of them is
+  implemented now, and `forces-tests.js` asserts that every hazard string any planet or mission
+  declares resolves to a builder, so this class of fault fails a test instead of shipping.
 
 ### Open with Tom
 
-**Four design calls, all from his own playtest, all recorded under "Next task" and none of them code:**
+**The four design calls from his playtest were answered on 2026-08-21 and are shipped in M29.** For
+the record, since every one of them is now a number somebody may want to move again:
 
-1. **Mars is now the easiest body on the ladder**, two milestones after being the hardest — M28b took
-   its double drag off, and his log shows mars-5 flown in 10 seconds with 129 of 138 fuel left. The
-   fix is one authored number; which way is his call.
-2. **The Moon is where runs die.** Both his crashes were on body 1, flown stock *and unarmed* — the
-   weapon blueprint only arrives after a body has shot at you. Bodies 2-4 cost him nothing.
-3. **Tech Cores do nothing.** Earned, banked, pitied, granted by god mode, spent nowhere. Either
-   something gets priced in them or they stop being shown.
-4. **Pluto's "darkness" renders as coloured fog**, because it is implemented as low `visibility` and
-   the renderer draws visibility as dust. It wants to dim, not haze.
+1. **Mars** — raise the authored drag. `0.15 → 0.24`, chosen from a five-value sweep: the way home
+   goes 95→94 of 100 and the prize route 76→62, so the cost lands where the reward is. Deliberately
+   under the 0.30 the double-apply was worth, because Mars is position 4 of 10.
+2. **The Moon** — fit the weapon on recovery rather than reopening the loadout. It fills an *empty*
+   active slot only, so moon-3 is the first mission flown armed and a deliberate choice is never
+   overwritten.
+3. **Tech Cores** — price the L3 and L4 hangar rungs in them, 3 and 6. A core drops on a PERFECT
+   landing on a small pad and nowhere else, so the deepest permanent upgrades now ask you to land
+   well. L2 costs no cores, so M28's income floor is untouched.
+4. **Pluto** — a real darkness channel, separate from visibility. Pluto's air is clear now and its
+   night ramps 0.62 → 0.86 across the chapter.
 
-**Still open from earlier, and still only answerable by a person:**
+**Still open, and still only answerable by a person:**
 
-- **The six re-skinned bodies and the new weather have never been flown**, only measured. Titan and
-  Venus squalls, the radiation belt, and the ten palettes all shipped on screenshots and numbers.
+- **Nothing in M29's content has been flown by a human.** Seven chapters, seven new hazards and 35
+  missions shipped on measurements and screenshots. Two of them — **`falseRadar` and `darkness`** —
+  are provably unmeasurable by this project's instrument, because the autopilot flies on state and
+  cannot see the screen. Ganymede's whole identity is one of them.
+- **Is it hard or is it unfair?** Open since M24. The campaign-wide unarmed crossing reads 80% now
+  against M24's 70%, but that is a wider sample over more turret bodies, not the game getting
+  easier — and it is still a floor measured by a pilot that does not dodge.
+- **`pluto-4 UNDER THE PLAIN` lands 16/20 on the way home.** In family with the two shipped caves
+  (18/20 and 17/20) and unmoved by every knob tried, so it is the single-pad cave geometry against a
+  pilot with no terrain lookahead — but it is the weakest new mission and worth watching.
+- **`titan-5 THE LONG GLIDE` takes the prize on 0-2/20.** It is authored to be flown *on the air* and
+  the test pilot has no glide planning at all, so the number measures the instrument rather than the
+  mission. Its way home is 20/20. A human is the only way to know.
 - **The landing bands and the fuel budgets** have awaited human data since M13 and M15.
-- **Half of M29a's session was menus** — 13.5 minutes at supply stops against 15.5 flying, including
-  7.7 minutes at one. Worth knowing whether that is deliberation or confusion.
-- **The clicking noise is not confirmed fixed** (open since M16) — the change made was a likely cause
-  rather than a diagnosis.
-- **`europa-3 RADIATION PASS` deep route is 5/20** since M20's ice, and radiation just got three
-  times more dangerous. Worth watching.
+- **Half of M29a's session was menus** — 13.5 minutes at supply stops against 15.5 flying.
+- **The clicking noise is not confirmed fixed** (open since M16).
 - **God mode is public.** It ships on both live sites as a visible settings button. Gating it behind
   `?god=1` was offered and not taken; the offer stands.
 
