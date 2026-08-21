@@ -991,49 +991,90 @@ None.
 
 ## Next task
 
-**Open.** M29 closed the content gap — all ten bodies are authored, every hazard a body declares now
-does something, and the four design calls from Tom's playtest are shipped. What is left is either a
-system the roadmap still owes, or a question only a person can answer.
+**M30 — analog controller support.** Decided with Tom, 2026-08-21.
 
-**The two systems the spec still owes** (both recorded since M12/M13, neither blocked):
+### The architecture question, answered
 
-- **Five of the eight enemy designs.** Coil Cannon, Patrol Drone, Mortar Platform, Magnetic Mine and
-  Shielded Guardian are roster entries with no implementation (the Mast Sniper was the sixth, built
-  in M29e). Adding one is an
-  `ENEMY_TYPES` entry, a draw function in `enemydraw.js`, and a line in
-  `PlanetDefinition.eligibleEnemySets`. **M29 makes this the most valuable thing left**: Enceladus
-  measured that on a low-gravity body the machine *type* decides everything and the count decides
-  almost nothing, so more designs is the only real lever left on the combat ramp.
-- **Moving landing platforms** (Europa 5, Io 5). Still structural: `padAt` and the landing check
-  would have to become time-aware. `io-5 THE FOUNTAIN` ships the timing problem as telegraphed
-  fountains around a static pad instead, which is honest but not the brief.
+Tom asked whether the flight model should be split for controller and keyboard, and whether that
+means refactoring the model or adding a second one. **Neither.** It is a change to the *input
+contract*, and the flight model does not fork.
 
-**The one deliberately outstanding tuning item**, unchanged since M28: pad width and machine damage
-have not been tuned against the recommended lander, because that is a difficulty change and *is it
-hard or is it unfair?* was unanswered. **Tom answered it on 2026-08-21 - "balance seems good" -
-which unparks the item without demanding it be acted on.** See "Open with Tom".
+Today the simulation reads booleans: `input.thrust` is on or off, and `ship.js` smooths the throttle
+itself. A trigger gives 0–1 and a stick gives −1–1. So the contract widens from a boolean to a
+**scalar magnitude**, with the boolean as its degenerate case:
 
-**`generateChapter` is deleted** (Tom's call, 2026-08-21). It produced a five-mission survey chapter
-for any body without authored content, and it earned its keep: it is what let the ladder go from
-three bodies to ten in M27 without ten chapters having to exist first. M29 authored all ten, which
-left it reachable by nothing a player flies.
+```js
+// today                          // M30
+this.thrusting = input.thrust     const t = amountOf(input, 'thrust');   // 0..1
+if (this.thrusting) vx += ...     vx += noseX * mainThrust * t * dt;
+```
 
-The thing it was *really* providing was an invariant — **every body on the ladder has something to
-fly** — and deleting a fallback without replacing that is how a body added later becomes a blank
-screen. So the invariant moved rather than vanished:
+**Two flight models would be the fault this project has been burned by three times** — `__settleNow`
+reimplementing the settle, the autopilot drifting three milestones behind its own control law, and
+Mars running at double drag. One rule, one implementation. Two models also means balancing 50
+missions twice and making every future change twice.
 
-- `chapterFor` throws, naming the body, instead of falling through
-- `route-tests.js` asserts every id in `PLANET_ORDER` has an authored chapter, and that each is five
-  missions
-- `validate-missions.js` checks the same thing and that `chapterFor` fails loudly for an unknown body
-- the generator also read `VALIDATION.minPadWidth` so a generated pad could never be narrower than
-  the lander's stance (the fault M27 found at depth 2). Authored pads are hand-written, so that is a
-  `route-tests.js` assertion now — cheaper than waiting for a structural failure 20 seeds into the
-  sweep
+### Why this is safe, and it is provable rather than hopeful
 
-`peakMachines` and `chapterFor` lost their `sector` argument with it, which is the right answer
-anyway: on a fixed ladder a body is always flown at the same rung, so a figure that varied with the
-sector was describing a situation no player can be in.
+**The keyboard produces exactly 1.0 and 0.0**, so every multiplication it causes is `x * 1.0`.
+Measured before committing to the design: 2,000,400 multiplications across the actual constants and
+magnitudes the simulation produces, plus a random sweep over twelve orders of magnitude — **zero
+values changed by `* 1.0`**. IEEE-754 guarantees it and the sweep confirms it.
+
+So a keyboard flight after M30 must be **byte-identical** to one before it, and both fixtures are the
+test of that. This is the same trick M29c used for `STEERING.pro` (`{ spinCap: 1, idleDamp: null }`),
+which was verified by hand to 1e-9 — the precedent is one milestone old and it held.
+
+### What actually changes
+
+Nine lines in `ship.js`, all in `step()` and `settle()`:
+
+| now | becomes |
+| --- | --- |
+| `this.thrusting = input.thrust && hasFuel` | a 0–1 `throttleIn`, with `thrusting = throttleIn > 0` for audio, particles, heat and the gear cue |
+| `if (this.thrusting) burn += burnMain` | `burn += burnMain * throttleIn` — partial throttle costs proportionally less |
+| `if (this.rcsLeft) spin -= rcsAuth * dir * dt` | `spin -= rcsAuth * leftIn * dir * dt` |
+| `if (this.rcsLeft) vx -= sideAuth * dt` (DIRECT) | the same, scaled |
+| `throttleTarget = this.thrusting ? 1 : 0` | `= throttleIn` |
+
+`this.thrusting` / `rcsLeft` / `rcsRight` stay as booleans derived from the magnitudes, because a
+dozen consumers read them (audio, particles, the HUD, `thermal`, the debug overlay) and none of them
+wants a float.
+
+### Staged, with the fixture as the gate at every step
+
+1. **Widen the contract.** `Input` grows `amount(action) → 0..1`, returning exactly 1 or 0 from
+   keyboard and touch. `ship.js` reads amounts instead of booleans. **Gate: both fixtures
+   byte-identical, full suite green.** Nothing observable has changed yet, which is the point — this
+   step is provable and should be its own commit.
+2. **The gamepad backend.** A `pollGamepad()` called once per frame from the main loop (the Gamepad
+   API is poll-only, no events), filling a third source ORed into `held()` and `amount()` alongside
+   keyboard and touch. Triggers and sticks feed the magnitudes directly. Deadzone, and a response
+   curve worth tuning (linear is usually wrong for a throttle).
+3. **Binding and the settings screen.** Store pad controls as pseudo-keys — `pad:6`, `axis:1+` — in
+   the existing string binding map. `keyLabel()` grows a case, and `rebind()`'s "an action can never
+   be left with nothing on it" rule, the save format and the whole settings UI keep working unmoved.
+4. **One-shot actions.** `ability` fires from a `keydown` event today, so the pad needs edge
+   detection to call the same `onAction` callbacks.
+5. **Hot-plug and pad choice**, plus the `gamepadconnected` event and the browser quirk that a pad
+   often will not appear until it has been touched.
+
+### Where to test it, given there is no pad in node or the headless browser
+
+At the **mapping seam**: a fake pad object in, an intent out. That is a pure function and it is where
+the bugs will be. `settings-tests.js` is the file — it already reads source and drives `Input`
+directly. Do not try to test the physics through a gamepad; the physics is tested by the fixtures
+being unmoved in stage 1.
+
+### Two things for Tom, before stage 2
+
+- **Analog is strictly more precise than binary**, so a controller player will land better than a
+  keyboard player on the same mission. That is a real balance asymmetry. Precedent says it is fine —
+  the game already ships three steering modes of different difficulty and lets the player choose —
+  but it should be a decision rather than a side effect.
+- **Partial throttle costs proportionally less fuel**, which follows from the same change and makes
+  hovering cheaper. The fuel budgets were authored against full-or-nothing burns. Worth watching on
+  the tightest missions (`mars-2`, `europa-4`) rather than pre-emptively retuned.
 
 **The playtest that was:** M27 built the ladder and M28 made the economy under it work; both
 were built and measured by an autopilot that does not dodge and cannot see the screen, and everything
@@ -1178,25 +1219,27 @@ that needs none of the conversation that produced this plan.
 
 ### Handover
 
-*Rewritten 2026-08-21, after the session that ran **M29** — the seven survey bodies authored, every
-hollow hazard implemented, and Tom's four playtest design calls taken.*
+*Rewritten 2026-08-21, after the session that ran **M29 through M29h** — the seven survey bodies
+authored, the hollow hazards implemented, `generateChapter` deleted, classic steering split, the
+turret redrawn, the Mast Sniper built, and a soundbed for the title screen.*
 
 **The first prompt for a new session:**
 
-> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then `docs/PROGRESSION.md`, then the M29
-> section of `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything. Then read "Open
-> with Tom" — the four design calls there are answered and shipped, but **nothing M29 added has been
-> flown by a human**, and two of its hazards cannot be measured by this project's instrument at all.
+> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then `docs/PROGRESSION.md`, then the M29 and
+> M29e sections of `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything. Then build
+> **M30, analog controller support** — the plan under "Next task" is decided and staged, and stage 1
+> is provable: if both fixtures move, stage 1 is wrong.
 
-That shape matters more than the wording: read the state, then *measure* the state, then build. This
-session proved it again in the most direct way available — the milestone opened with a hazard audit
-instead of with content, and the audit found that **four bodies had no working weather**, which no
-brief and neither document had said.
+**Where the game is.** `main` is live on two GitHub Pages sites and current as of `75398e8`. `v2` and
+`main` are level, the tree is clean, the suite is green, both fixtures are byte-identical and
+`./macos/build.sh` self-tests clean.
 
-**Where the game is.** `main` is live on two GitHub Pages sites (see "Where it is published") and was
-current as of `059bfcb` before this session. `v2` is ahead by M29. The tree is clean, the suite is
-green, the physics fixture is byte-identical, and the flight fixture moved by exactly the four Mars
-missions the drag change touches.
+**What is different about the state you are inheriting.** For most of this project's history the
+standing problem was that nobody had played the thing. That is no longer true — **Tom playtests
+continuously**, and on 2026-08-21 he gave the first direct answer to the question that had been
+blocking four items since M24: *balance seems good*. Read that as unparking pad width, machine
+damage, the landing bands and the fuel budgets — **not** as an instruction to start moving them.
+Nothing gets retuned without a specific complaint to aim at.
 
 ### Reading order
 
@@ -1215,20 +1258,20 @@ command tells you both that the game still works and what a player currently mee
 
 ### What this session did
 
-- **M29 — the survey bodies become content.** Seven chapters authored (35 missions), so all ten
-  bodies now have names, briefs, objectives and a set piece each. 50 missions, 50 distinct names, 50
-  distinct briefs, zero `optionalObjective: null`.
-- **The hazard audit, which is the finding of the milestone.** `'heat'`, `'cold'` and `'plume'` were
-  spelled against builders named `thermal`, `cryo` and `plumes`, and six other hazard names had no
-  builder at all — **Mercury, Io, Enceladus and Ganymede flew with nothing**, at positions 5 to 8 of
-  the ladder. Seven new builders, three aliases, and a test that asserts the property so it cannot
-  recur.
-- **Weather keeps off the safe pad.** M29 put hazards in *places* for the first time and immediately
-  put a vent over a landing zone; the sanctuary rule the machines live under now covers them too.
-- **Tom's four design calls**, all measured before being taken: Mars drag `0.24`, the weapon fitted
-  on recovery, Tech Cores buying the L3/L4 rungs, and darkness as its own channel.
+- **M29 — the survey bodies become content.** Seven chapters authored, 50 missions in all, every one
+  with its own name, brief, objective and a set piece per body. The hazard audit that opened it found
+  **four bodies with no working weather at all** — `heat`, `cold` and `plume` were spelled against
+  builders named `thermal`, `cryo` and `plumes`, and both docs listed two of them as working.
+- **M29b — `generateChapter` deleted**, and the invariant it carried moved into three assertions.
+- **M29c — classic steering split.** CLASSIC settles the rotation when you let go; PRO CLASSIC (IAN)
+  is the original law, unchanged to the digit and verified by hand to 1e-9.
+- **M29d — the loadout is reachable during a run again**, an asymmetry live since M24.
+- **M29e — the Casemate turret and the Mast Sniper**, the first of the six deferred enemy designs.
+- **M29f — a synthesized space bed** for the title screen.
+- **M29g — the sniper moved to where it will be met**, after Tom reported never encountering it.
+- **M29h — a raised Ray Shield stops a lethal round** and burns out doing it.
 
-### The instrument, and five ways it has misled a session
+### The instrument, and six ways it has misled a session
 
 - **The autopilot has no evasive logic, no terrain lookahead, and cannot see the screen.** It is
   still the only automated instrument. The 70% unarmed-crossing figure is a **floor** measured by a
@@ -1241,6 +1284,11 @@ command tells you both that the game still works and what a player currently mee
   post-landing state itself against `LEVELS.length` — the twelve *classic* missions — so a scripted
   expedition landed five missions and reported `cleared=[]`. Cost about an hour. Same class as M23's
   drifted autopilot copy. One settle now, held by `settleAfter`.
+- **A thing can work perfectly and still not exist.** The Mast Sniper passed every test, engaged on
+  a third of deep runs, and Tom never met one - because it was authored onto body 6 of 10 and a
+  typical run ends at body 3 or 4. M29e measured whether the machine worked and never asked whether
+  anyone would be standing there. **Ask where the player will be**, not only whether the code is
+  right; the same question applies to any content gated behind progress.
 - **A silent lookup miss is the quietest bug this codebase can produce.** `BUILDERS[spec.type]`
   returning undefined costs nothing, throws nothing and logs nothing — the body simply flies with no
   weather while every screen describes some. It survived from M5 to M29 on three bodies, and the two
