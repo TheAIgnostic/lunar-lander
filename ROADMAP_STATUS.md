@@ -894,12 +894,27 @@ system the roadmap still owes, or a question only a person can answer.
 have not been tuned against the recommended lander, because that is a difficulty change and *is it
 hard or is it unfair?* is still unanswered.
 
-**A question for Tom, not a task:** `generateChapter` is now reached by nothing a player flies. All
-ten bodies are authored, so `chapterFor` never falls through to it. It is kept because it is what
-makes `chapterFor` total — a body added to `PLANETS` without content still produces a playable,
-validated chapter rather than throwing — and it is still swept by `validate-missions.js` and
-`objectives-tests.js` so it cannot rot. Delete it or keep it as the fallback; both are defensible and
-it is not a decision to take quietly.
+**`generateChapter` is deleted** (Tom's call, 2026-08-21). It produced a five-mission survey chapter
+for any body without authored content, and it earned its keep: it is what let the ladder go from
+three bodies to ten in M27 without ten chapters having to exist first. M29 authored all ten, which
+left it reachable by nothing a player flies.
+
+The thing it was *really* providing was an invariant — **every body on the ladder has something to
+fly** — and deleting a fallback without replacing that is how a body added later becomes a blank
+screen. So the invariant moved rather than vanished:
+
+- `chapterFor` throws, naming the body, instead of falling through
+- `route-tests.js` asserts every id in `PLANET_ORDER` has an authored chapter, and that each is five
+  missions
+- `validate-missions.js` checks the same thing and that `chapterFor` fails loudly for an unknown body
+- the generator also read `VALIDATION.minPadWidth` so a generated pad could never be narrower than
+  the lander's stance (the fault M27 found at depth 2). Authored pads are hand-written, so that is a
+  `route-tests.js` assertion now — cheaper than waiting for a structural failure 20 seeds into the
+  sweep
+
+`peakMachines` and `chapterFor` lost their `sector` argument with it, which is the right answer
+anyway: on a fixed ladder a body is always flown at the same rung, so a figure that varied with the
+sector was describing a situation no player can be in.
 
 **The playtest that was:** M27 built the ladder and M28 made the economy under it work; both
 were built and measured by an autopilot that does not dodge and cannot see the screen, and everything
@@ -978,10 +993,13 @@ The other four items landed as written: 35 missions authored with distinct names
 objectives; a set piece per body; per-mission hazard tuning; and Ganymede is no longer the Moon with
 a different colour. See the M29 section of `test/BASELINE.md` for every figure.
 
-**Two things it deliberately did not do.** Pad width and machine damage are still not tuned against
+**One thing it deliberately did not do.** Pad width and machine damage are still not tuned against
 the recommended lander, for the reason M28 recorded and M29 did not change: it is a difficulty change
-and the M24 question is open. And `generateChapter` was kept rather than deleted, because it is what
-makes `chapterFor` total — flagged in "Next task" as Tom's call, not taken quietly.
+and the M24 question is open.
+
+**And `generateChapter` is gone.** It was flagged as Tom's call rather than taken quietly, and the
+call was to delete it. The invariant it carried is now three assertions instead of a fallback — see
+"Next task" for what moved where.
 
 ### M21 — structures, and guards that belong somewhere
 

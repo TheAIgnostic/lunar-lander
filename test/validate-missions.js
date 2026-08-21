@@ -6,7 +6,7 @@ import { validateTerrain, validateEnemies, sanctuaryClear } from '../src/validat
 import { flyMission } from './pilot.js';
 import { LEVELS } from '../src/levels.js';
 import { ARCHETYPE_NAMES } from '../src/archetypes.js';
-import { CHAPTERS, generateChapter } from '../src/missions.js';
+import { CHAPTERS, chapterFor } from '../src/missions.js';
 import { PLANET_ORDER } from '../src/route.js';
 
 const SEEDS = +(process.argv[2] || 12);
@@ -127,71 +127,36 @@ for (const pid of PLANET_ORDER) {
   }
 }
 
-// M27 put all ten bodies on the ladder, so every survey chapter is now content
-// a player reaches on a normal run rather than a body the route might offer.
-// Two things follow for this sweep. It flies each body **at the sector it
-// actually occupies** - the ladder position is the sector, and the sector sets
-// pad width, fuel and enemy budget through `generateChapter`'s depth term, so
-// sector 1 and 3 no longer describes what Venus is flown at. And it flies the
-// full seed list rather than the first six, because these are no longer
-// off-route bodies.
+// **The invariant the deleted generator used to provide.**
 //
-// Sector 1 is kept alongside as the floor: a body has to be sound at the
-// easiest setting it can be generated at, which is what a shortened ladder or a
-// future mission-select would produce.
-// **Since M29 this block validates the fallback, not the content.** All ten
-// bodies are authored, so `chapterFor` never reaches `generateChapter` for
-// anything a player flies - the block above is the shipped ladder. The
-// generator is still what makes `chapterFor` total for a body added to
-// `PLANETS` without content, so it is still swept here: dead-but-kept code with
-// a passing test is a decision this project has made before (M25) and it only
-// stays honest while the test still runs.
-console.log(`\nvalidating the survey-chapter fallback (every body, at its ladder position)\n`);
-for (const pid of PLANET_ORDER) {
-  const ladderSector = PLANET_ORDER.indexOf(pid) + 1;
-  for (const sector of [...new Set([1, ladderSector])]) {
-    const ch = generateChapter(pid, 4242, sector);
-    let worstReach = 0, worstLand = 0, structural = 0, deepMiss = 0;
-    for (const level of ch.levels) {
-      for (const seed of seedList) {
-        const terrain = new Terrain(level, seed);
-        const v = validateTerrain(level, terrain);
-        const ev = validateEnemies(level, terrain, seed);
-        if (v.problems.length || ev.problems.length) structural++;
-        // The way home on the tank, then the prize by way of the fuel road.
-        const near = nearIndex(terrain);
-        const runs = [
-          flyMission(level, terrain, { padIndex: near }),
-          flyMission(level, new Terrain(level, seed), { padIndex: near, approach: 'left' }),
-        ];
-        if (!runs.some((r) => r.reached)) worstReach++;
-        if (!runs.some((r) => r.outcome === 'land')) worstLand++;
-        if (flyMission(level, new Terrain(level, seed), { padIndex: 0, viaCells: true }).outcome !== 'land') deepMiss++;
-      }
-    }
-    const n = ch.levels.length * seedList.length;
-    // **Structural is the gate; flight is evidence.** This block used to fail
-    // the sweep when the test pilot never reached a pad, which is the opposite
-    // of the rule `assess()` above states and follows - a validator can prove
-    // geometry, and can only offer evidence about flyability, because a failed
-    // flight may be the pilot's fault. It went unnoticed while these bodies
-    // were off the route and 6 seeds deep; at 20 seeds Venus - the heaviest
-    // body in the game, flown by a pilot with a known weakness for weight and
-    // drag - failed the sweep on 2 seeds of 20 with the geometry sound at
-    // 100/100 and every failure a crash short of the pad.
-    //
-    // So it warns now, in the same words and the same summary as everywhere
-    // else. It is not hidden: an unreachable pad is still printed on the line,
-    // still listed under the flight warnings, and still counted.
-    const ok = structural === 0;
-    if (!ok) hardFail++;
-    const tag = `${pid} s${sector}${sector === ladderSector ? ` (body ${ladderSector})` : ''}`;
-    if (worstReach) warnings.push(`${pid} s${sector}: ${worstReach}/${n} seeds the pilot never reached the pad`);
-    console.log(`${!ok ? 'FAIL' : (worstReach ? 'warn' : (worstLand ? 'ok* ' : 'ok  '))} ${tag.padEnd(22)}` +
-      ` structural ${String(n - structural).padStart(3)}/${n}   home ${String(n - worstLand).padStart(3)}/${n}` +
-      `   prize ${String(n - deepMiss).padStart(3)}/${n}` +
-      `${worstReach ? `   never reached ${worstReach}` : ''}`);
+// Until M29 this block swept `generateChapter`, the fallback that produced a
+// five-mission survey chapter for any body without authored content. It is what
+// let the ladder go from three bodies to ten in M27 without ten chapters having
+// to exist first, and M29 authored all ten, which left it reachable by nothing.
+// Deleted on Tom's call.
+//
+// What it was really providing was the guarantee that **every body on the
+// ladder has something to fly**, and deleting a fallback without replacing that
+// guarantee is how a body added later becomes a blank screen. So it is checked
+// directly here, and asserted again in `route-tests.js`: a missing chapter is a
+// failing test rather than a generated apology.
+console.log(`\nchecking every body on the ladder has an authored chapter\n`);
+{
+  const missing = PLANET_ORDER.filter((pid) => !Object.values(CHAPTERS).some((c) => c.planet === pid));
+  if (missing.length) {
+    hardFail++;
+    console.log(`FAIL  ${missing.length} bodies have no authored chapter: ${missing.join(', ')}`);
+  } else {
+    const counts = PLANET_ORDER.map((pid) => {
+      const c = Object.values(CHAPTERS).find((x) => x.planet === pid);
+      return `${pid.slice(0, 3).toLowerCase()} ${c.levels.length}`;
+    });
+    console.log(`ok    all ${PLANET_ORDER.length} bodies authored   ${counts.join(' · ')}`);
   }
+  // And that `chapterFor` fails loudly rather than quietly for one that is not.
+  let threw = false;
+  try { chapterFor('NOT_A_BODY', 1); } catch { threw = true; }
+  if (!threw) { hardFail++; console.log('FAIL  chapterFor does not throw for an unknown body'); }
 }
 
 // ---------------------------------------------------------------- combat

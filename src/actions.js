@@ -245,7 +245,7 @@ export function act(action) {
     run.missionIndex = 0;
     run.shuttles = g.lives;
     if (!run.visited.includes(card.planet)) run.visited.push(card.planet);
-    g.chapter = chapterFor(card.planet, run.seed + run.sector * 101, run.sector);
+    g.chapter = chapterFor(card.planet, run.seed + run.sector * 101);
     g.campaign = card.planet;
     Save.saveRun(run);
     flow.startLevel(0, false);

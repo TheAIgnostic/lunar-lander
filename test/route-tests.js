@@ -4,7 +4,8 @@ import { makeRng } from '../src/util.js';
 import { missionReward, addReward, settleHaul, bankHaul, freshHaul, CORE_PITY, DEBRIEF } from '../src/economy.js';
 import { PLANET_IDS, PLANETS } from '../src/planets.js';
 import { WORLDS } from '../src/levels.js';
-import { chapterFor } from '../src/missions.js';
+import { chapterFor, CHAPTERS } from '../src/missions.js';
+import { VALIDATION } from '../src/validate.js';
 import { everyMaterial } from '../src/components.js';
 
 let pass = 0, fail = 0;
@@ -194,6 +195,43 @@ check('but not before one is cleared', !isCheckpoint(0));
 // by measuring: a chapter that deals the same shapes on every seed (Europa did,
 // on mulberry32's correlated first output), and a chapter that deals so few
 // distinct shapes that the variety is nominal.
+// --- **Every body on the ladder has an authored chapter.**
+//
+// This is the guarantee `generateChapter` used to provide by construction, and
+// M29 deleted it (Tom's call) once all ten bodies were authored. A fallback that
+// quietly produces content is also a fallback that hides a missing chapter, so
+// the invariant is asserted here instead: adding a body to `PLANET_ORDER`
+// without writing its five missions fails this test rather than shipping a
+// generated apology or a blank screen.
+{
+  const missing = PLANET_ORDER.filter((id) => !Object.values(CHAPTERS).some((c) => c.planet === id));
+  check('every body on the ladder has an authored chapter', missing.length === 0, missing.join(', '));
+  check('and every chapter is five missions',
+    Object.values(CHAPTERS).every((c) => c.levels.length === 5),
+    Object.values(CHAPTERS).map((c) => `${c.id} ${c.levels.length}`).join(' '));
+  let threw = false;
+  try { chapterFor('NOT_A_BODY', 1); } catch { threw = true; }
+  check('a body with no chapter fails loudly', threw);
+
+  // **The other guarantee the generator used to carry.** It read
+  // `VALIDATION.minPadWidth` so that a generated pad could never be narrower
+  // than the lander's own stance - the fault M27 found, where depth 2 asked for
+  // a 50 px pad against a 56 px stance and the last five bodies each produced a
+  // mission their own validator rejects. Authored pads are hand-written, so the
+  // shared constant has to be enforced somewhere: here, cheaply, rather than
+  // only as a structural failure 20 seeds deep in the sweep.
+  const narrow = [];
+  for (const c of Object.values(CHAPTERS)) {
+    for (const m of c.missions) {
+      for (const pad of m.pads || []) {
+        if (pad.width < VALIDATION.minPadWidth + 8) narrow.push(`${m.id} ${pad.width}px`);
+      }
+    }
+  }
+  check('no authored pad is narrower than the lander can stand on',
+    narrow.length === 0, narrow.join(', '));
+}
+
 {
   const seeds = Array.from({ length: 40 }, (_, i) => 1000 + i * 137);
   const counts = PLANET_ORDER.map((id, i) => {

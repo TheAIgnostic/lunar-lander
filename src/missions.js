@@ -32,7 +32,6 @@
 
 import { PLANETS, gravityFor } from './planets.js';
 import { cargoFor } from './objectives.js';
-import { VALIDATION } from './validate.js';
 import { makeRng } from './util.js';
 
 export const MOON_MISSIONS = [
@@ -310,14 +309,16 @@ export const EUROPA_LEVELS = EUROPA_MISSIONS.map(missionToLevel);
  *
  * These are those 35 missions, authored.
  *
- * **The numbers start from the generator, not from taste.** `generateChapter`'s
- * fuel formula, pad widths and the depth ramp were set from measured sweeps in
- * M9, M21 and M27, and throwing that away to hand-pick 35 fuel budgets would
+ * **The numbers started from the generator, not from taste.** `generateChapter`
+ * carried a fuel formula, pad widths and a depth ramp set from measured sweeps
+ * in M9, M21 and M27, and throwing that away to hand-pick 35 fuel budgets would
  * have been the "started from an assumption" failure this file records twice.
- * Each chapter below was seeded with what the generator produces for that body
+ * Each chapter below was seeded with what the generator produced for that body
  * at **its own ladder position**, then hand-tuned where the content asks for
- * something the formula cannot know - a set piece, a longer crossing, a body
- * whose hazard makes hovering expensive.
+ * something a formula cannot know - a set piece, a longer crossing, a body whose
+ * hazard makes hovering expensive. The generator itself was deleted once all ten
+ * bodies were authored; its arithmetic is in these numbers, and its guarantees
+ * are in `route-tests.js` and `validate-missions.js`.
  *
  * **A body is visited once per run and always at the same rung**, because the
  * ladder order is fixed (Tom, 2026-08-20). So the sector/depth term the
@@ -830,103 +831,24 @@ export const AUTHORED_MISSIONS = {
   IO: IO_MISSIONS, MERCURY: MERCURY_MISSIONS, PLUTO: PLUTO_MISSIONS, VENUS: VENUS_MISSIONS,
 };
 
-const SURVEY_NAMES = [
-  ['FIRST LOOK', 'Nobody has landed here. The map always costs less than the ground does.'],
-  ['LOW PASS', 'Second landing, tighter ground. The forecast was optimistic.'],
-  ['DEEP FIELD', 'Further in, where the terrain stops being scenery.'],
-  ['THE SHELF', 'A narrow ledge, and good reasons not to be standing on it.'],
-  ['LAST LIGHT', 'The one that asks for everything this world does, all at once.'],
-];
-
 /**
- * A five-mission chapter generated from a PlanetDefinition, for bodies with no
- * authored missions yet. Same shape, same systems, same validator - the route
- * screen would be a lie if half the cards led nowhere.
- */
-export function generateChapter(planetId, seed = 1, sector = 1) {
-  const planet = PLANETS[planetId];
-  const rng = makeRng(((seed ^ 0x5bf03635) + planetId.length * 7919) >>> 0);
-  const gravity = gravityFor(planetId);
-  const palette = planet.terrainPalette;
-  // **The floor under the deep pad**, and the reason it is read from the
-  // validator rather than written here: the two must agree or the generator
-  // produces missions its own checker rejects, which is exactly what happened.
-  //
-  // The prize pad narrows with the mission and again with the sector's depth,
-  // and at depth 2 - sector 5 and beyond - mission 5 asked for 50 px against a
-  // 56 px stance. M25's three-body ladder never reached sector 5, and this
-  // sweep only ever ran sectors 1 and 3, so the last five bodies of the M27
-  // ladder each generated one impossible mission and nothing said so.
-  //
-  // The margin is a terrain cell: a pad is carved to whole cells (~7 px), so a
-  // request of exactly the minimum quantises *down* through it. Measured: 60
-  // requested carves to 54.7, 62 carves to 61.5. Read inside the function, not
-  // at module load - a module-level read of an imported config is the M15 trip
-  // hazard that throws "cannot access before initialization" in the bundle.
-  const minDeepPad = VALIDATION.minPadWidth + 8;
-
-  const missions = SURVEY_NAMES.map(([name, brief], i) => {
-    const step = i / 4;                       // 0 at mission 1, 1 at mission 5
-    const depth = Math.min(2, (sector - 1) * 0.5);
-    const archetype = palette[(i + rng.int(0, palette.length - 1)) % palette.length];
-    const padWidth = Math.round(200 - 110 * step - depth * 14);
-    const mult = i >= 3 ? 5 : i >= 1 ? 3 : 2;
-    // Fuel has to pay for three things: hovering against gravity for the length
-    // of the flight, fighting the atmosphere, and the hazards. Ignoring the
-    // atmosphere term made every Titan survey run the tank dry.
-    const fuel = Math.round(
-      80 + gravity * 0.9 + (planet.drag || 0) * 180 + Math.abs(planet.wind || 0) * 0.35
-      + planet.hazards.length * 6 - i * 5 - depth * 4,
-    );
-    return {
-      id: `${planetId.toLowerCase()}-s${sector}-${i + 1}`,
-      planet: planetId, index: i + 1,
-      name: `${name}`,
-      brief,
-      width: 2800 + i * 100 + Math.round(depth * 150),
-      relief: 200 + i * 26 + Math.round(depth * 30),
-      detail: 0.9 + i * 0.18,
-      rough: 160 + i * 18,
-      fuel,
-      terrain: { archetype },
-      // Pads are authored prize-first: index 0 is the deep one - narrower,
-      // richer, and past the fuel road - and the last is the wide near zone
-      // that always gets you home.
-      // The deep pad tightens with the mission and the sector, but never below
-      // what the lander can stand on. Past that floor the difficulty has to
-      // come from somewhere else - the same lesson as the enemy budgets, where
-      // a number past the map's capacity is fiction rather than difficulty.
-      pads: i >= 3
-        ? [{ mult: mult + 1, width: Math.max(minDeepPad, Math.round(padWidth * 0.8)) }, { mult: 2, width: padWidth + 70 }]
-        : [{ mult: mult + 1, width: Math.max(minDeepPad, Math.round(padWidth * 0.7)) }, { mult, width: padWidth + 40 }],
-      hazards: planet.hazards.length ? undefined : [],   // undefined = inherit the planet's
-      fuelCells: i >= 2 ? 2 : 0,
-      // The same ramp the authored chapters use (M15): the first mission of a
-      // chapter is always quiet, and the rest climb. Depth makes a later sector
-      // harder but can never arm mission one - "somewhere to learn the body"
-      // has to survive the difficulty curve.
-      enemyBudget: planet.eligibleEnemySets.length && i > 0
-        ? Math.min(3, [0, 1, 2, 2, 3][i] + Math.floor(depth))
-        : 0,
-      enemySets: planet.eligibleEnemySets,
-      optionalObjective: null,
-      procedural: true,
-    };
-  });
-
-  return {
-    id: `${planetId.toLowerCase()}-s${sector}`,
-    planet: planetId,
-    title: planet.displayName,
-    procedural: true,
-    levels: missions.map(missionToLevel),
-  };
-}
-
-/**
- * The chapter for a body: authored where one exists, generated otherwise.
- * Accepts a planet id ('LUNA'); a chapter id ('moon') is tolerated so older
- * saves and links keep working.
+ * The chapter for a body. Accepts a planet id ('LUNA'); a chapter id ('moon') is
+ * tolerated so older saves and links keep working.
+ *
+ * **There is no generated fallback any more.** `generateChapter` produced a
+ * five-mission survey chapter for any body without authored content, and it did
+ * its job: it is what let the ladder grow from three bodies to ten in M27
+ * without ten chapters having to exist first. M29 authored all ten, which left
+ * it reachable by nothing a player flies, and Tom's call is to delete it rather
+ * than keep a tested path nobody takes.
+ *
+ * What the fallback was really providing was an **invariant** - every body on
+ * the ladder has something to fly - and deleting it without replacing that is
+ * how a body added to `PLANETS` later becomes a blank screen. So the invariant
+ * moved from a fallback to two things that fail loudly instead: this function
+ * throws with the body named, and `route-tests.js` asserts that every id in
+ * `PLANET_ORDER` has an authored chapter. A missing chapter is now a failing
+ * test at build time rather than a generated one at run time.
  */
 
 /**
@@ -1008,7 +930,7 @@ export function shapedMissions(missions, planetId, seed = 1) {
     : { ...m, terrain: { ...m.terrain, archetype: draw() } }));
 }
 
-export function chapterFor(planetId, seed = 1, sector = 1) {
+export function chapterFor(planetId, seed = 1) {
   const id = String(planetId);
   const authored = Object.values(CHAPTERS).find(
     (c) => c.planet === id || c.id === id.toLowerCase(),
@@ -1024,19 +946,27 @@ export function chapterFor(planetId, seed = 1, sector = 1) {
     };
   }
   if (!PLANETS[id]) throw new Error(`chapterFor: no such planet ${id}`);
-  return generateChapter(id, seed, sector);
+  throw new Error(
+    `chapterFor: ${id} has no authored chapter. Every body on PLANET_ORDER needs `
+    + `one in CHAPTERS - there is no generated fallback since M29.`,
+  );
 }
 
 /**
- * The most machines any one mission of this body's chapter fields, at this
- * sector. It is what the route card's "resistance" line reads, and it is
- * measured off the chapter rather than inferred from a difficulty table -
- * because inferring it is what made six of the ten M27 cards print the same
- * forecast. Enemy budgets are authored (or, for a survey chapter, derived from
- * the sector), so this is seed-independent and cheap enough to call per render.
+ * The most machines any one mission of this body's chapter fields. It is what
+ * the route card's "resistance" line reads, and it is measured off the chapter
+ * rather than inferred from a difficulty table - because inferring it is what
+ * made six of the ten M27 cards print the same forecast.
+ *
+ * It took a `sector` until M29 deleted `generateChapter`, because a survey
+ * chapter derived its budgets from the sector's depth term. Every budget is
+ * authored now, so the figure depends on the body alone - and that is the
+ * better answer anyway: on a fixed ladder a body is always flown at the same
+ * rung, so a budget that varied with the sector was describing a situation the
+ * player could never be in.
  */
-export function peakMachines(planetId, sector = 1) {
-  const ch = chapterFor(planetId, 1, sector);
+export function peakMachines(planetId) {
+  const ch = chapterFor(planetId, 1);
   return (ch.levels || []).reduce((m, l) => Math.max(m, l.enemyBudget || 0), 0);
 }
 

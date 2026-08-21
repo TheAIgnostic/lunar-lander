@@ -5,7 +5,7 @@ import { Terrain, MATERIAL_SITE } from '../src/terrain.js';
 import { spawnFor } from '../src/spawn.js';
 import { flyMission } from './pilot.js';
 import { missionReward, nodeWorth, haulOf } from '../src/economy.js';
-import { MOON_LEVELS, MARS_LEVELS, EUROPA_LEVELS, generateChapter } from '../src/missions.js';
+import { MOON_LEVELS, MARS_LEVELS, EUROPA_LEVELS, CHAPTERS } from '../src/missions.js';
 import { LEVELS } from '../src/levels.js';
 
 let pass = 0, fail = 0;
@@ -209,9 +209,16 @@ const report = (over = {}) => ({
   }
   check('legacy levels are untouched by any of this',
     new Terrain(LEVELS[0], 1000).pads.every((p) => p.tier == null && p.reach == null));
-  const gen = generateChapter('TITAN', 4242, 1);
-  check('generated chapters get the gradient too',
-    new Terrain(gen.levels[0], 1000).pads.every((p) => p.tier != null));
+  // Was `generateChapter('TITAN', ...)` until M29 deleted the generator. The
+  // claim it made is worth keeping and is stronger stated over the real
+  // content: **every mission on the ladder** carries the distance gradient, not
+  // just a representative one.
+  for (const c of Object.values(CHAPTERS)) {
+    for (const lvl of c.levels) {
+      check(`${lvl.id}: pads carry a distance tier`,
+        new Terrain(lvl, 1000).pads.every((p) => p.tier != null));
+    }
+  }
 }
 
 console.log(`\n  ${pass} passed, ${fail} failed`);

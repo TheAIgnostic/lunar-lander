@@ -157,7 +157,7 @@ export function planetCard(planetId, sector, rng) {
   const p = PLANETS[planetId];
   const hazards = [...p.hazards];
   const hidden = hazards.length > 1 && rng() < 0.5 ? hazards.pop() : null;
-  const machines = peakMachines(planetId, sector);
+  const machines = peakMachines(planetId);
   return {
     planet: planetId,
     name: p.displayName,

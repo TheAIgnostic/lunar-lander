@@ -177,7 +177,7 @@ function beginExpedition(startId = null) {
     g.run.visited = [...g.run.cleared, wanted];
     g.run.sector = sector;
   }
-  g.chapter = chapterFor(wanted, position > 0 ? seed + sector * 101 : seed, sector);
+  g.chapter = chapterFor(wanted, position > 0 ? seed + sector * 101 : seed);
   g.campaign = wanted;
   g.endless = false;
   g.score = 0; g.combo = 0; g.newRecord = false;
@@ -243,7 +243,7 @@ function resumeExpedition() {
   const run = Save.loadRun();
   if (!run) { setState('chapters'); return; }
   g.run = run;
-  g.chapter = chapterFor(run.chapterId, run.seed, run.sector);
+  g.chapter = chapterFor(run.chapterId, run.seed);
   g.campaign = run.chapterId;
   g.endless = false;
   g.score = run.score;
@@ -1175,7 +1175,7 @@ window.__preview = (archetype, relief = 260, detail = 1) => {
 window.__goMission = (chapterId, mission = 1) => {
   const index = Math.max(0, (mission | 0) - 1);
   g.run = null;
-  g.chapter = chapterFor(chapterId, g.forcedSeed != null ? g.forcedSeed : 1, 1);
+  g.chapter = chapterFor(chapterId, g.forcedSeed != null ? g.forcedSeed : 1);
   g.campaign = chapterId;
   g.endless = false;
   g.score = 0; g.lives = 3; g.combo = 0; g.newRecord = false;

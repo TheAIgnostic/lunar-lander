@@ -195,12 +195,17 @@ disc is covered by more — and `placeEnemies` and `validate.js` enforce it with
 A consequence worth knowing before raising a budget: **a map holds a finite number of
 non-overlapping engagements**, and past that the budget is fiction rather than difficulty.
 
-`generateChapter` reads `VALIDATION.minPadWidth` for the same reason and to the same end. It used to
+`generateChapter` read `VALIDATION.minPadWidth` for the same reason and to the same end. It used to
 carry its own pad arithmetic, and at depth 2 — sector 5 and beyond, which the three-body ladder never
 reached — it asked for a 50 px prize pad against a 56 px stance, so **the last five bodies of the
 M27 ladder each generated one mission its own validator rejects**. Where a generator and its checker
-both encode a limit, they share the constant. Read it *inside* the function, never at module load. The
-budgets in `missions.js` were set from a measured capacity sweep and fill to 99%.
+both encode a limit, they share the constant.
+
+M29 deleted the generator, so there is no second encoder of that limit left — but the *rule* outlived
+it: pads are hand-authored now, and `route-tests.js` asserts that no authored pad is narrower than
+`VALIDATION.minPadWidth + 8`, reading the validator's own constant. When a shared constant loses its
+sharer, move the check; do not let it lapse. The budgets in `missions.js` were set from a measured
+capacity sweep and fill to 99%.
 
 **The rule that holds combat fair, and what M24 narrowed it to.** Every mission keeps a
 *sanctuary* — its lowest-multiplier pad and the 420 px column above it — outside every machine's
@@ -252,11 +257,13 @@ made seven of ten unreachable: Sensors could not be bought at all. The materials
 being on the route**, so the "this material comes from that world" texture survives intact rather
 than being repointed at whatever is nearby.
 
-**The sector is the ladder position.** `run.sector` increments once per body, so it runs 1–10, and
-`generateChapter` reads it as depth. Two consequences worth knowing: a survey body is generated
-harder further down the ladder, and anything that *adds* the sector to a per-body difficulty figure
-is double-counting, because the position is already sorted by difficulty. That is what saturated the
-route card's forecast in M27 until it was measured — six of ten cards printed the same thing.
+**The sector is the ladder position.** `run.sector` increments once per body, so it runs 1–10. It
+used to feed `generateChapter` as a depth term, which is why a survey body was generated harder
+further down the ladder; with the generator deleted in M29, difficulty is authored per mission and
+neither `chapterFor` nor `peakMachines` takes a sector at all. The consequence that still matters:
+anything that *adds* the sector to a per-body difficulty figure is double-counting, because the
+position is already sorted by difficulty. That is what saturated the route card's forecast in M27
+until it was measured — six of ten cards printed the same thing.
 
 `isCheckpoint` fires after **every** body, which is both the design and the fix for a real bug:
 rewards accumulate in `run.haul`, purchases spend from `meta.banked`, and only a checkpoint moves one
@@ -470,10 +477,10 @@ The MVP is complete and measured (`test/BASELINE.md`, M13 section). What the nex
   (drones at 2 machines 2-5/20, turrets at 4 machines 17-20/20), so more designs is the only real
   lever left on the combat ramp.
 - ~~**Seven bodies still fly generated survey chapters**~~ — **done in M29.** All ten bodies are
-  authored, 50 missions in `src/missions.js`. `generateChapter` is consequently reached by nothing a
-  player flies; it is kept as the fallback that makes `chapterFor` total for a body added to
-  `PLANETS` without content, and is still swept by `validate-missions.js` and `objectives-tests.js`
-  so it cannot rot. Whether to keep it is flagged for Tom in `ROADMAP_STATUS.md`.
+  authored, 50 missions in `src/missions.js`, and `generateChapter` is **deleted**. There is no
+  generated fallback: `chapterFor` throws for a body with no chapter, and the invariant the fallback
+  used to provide is asserted in `route-tests.js` and `validate-missions.js` instead. Adding a body
+  to `PLANET_ORDER` without writing its five missions is a failing test, not a blank screen.
 - **Landing bands await human playtest data.** They were deliberately not retuned in M13 — the only
   recorded data is an autopilot, which is not a proxy for a person.
 - **Moving landing platforms** are still deferred (Europa 5, Io 5): `padAt` and the landing check

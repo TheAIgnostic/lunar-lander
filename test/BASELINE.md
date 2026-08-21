@@ -2651,6 +2651,38 @@ here, a hazard may never leave it. It also means **no autopilot in this project 
 Ganymede is any good**, the same blind spot visibility has had since M24. Darkness is in the same
 position. Both shipped on screenshots and numbers.
 
+### M29b — `generateChapter` deleted
+
+Tom's call, taken after M29 shipped. The generator produced a five-mission survey chapter for any
+body without authored content, and it earned its keep: it is what let the ladder go from three bodies
+to ten in M27 without ten chapters having to exist first. M29 authored all ten, which left it
+reachable by nothing a player flies.
+
+**What it was really providing was an invariant**, not a code path: *every body on the ladder has
+something to fly*. Deleting a fallback without replacing that is how a body added later becomes a
+blank screen, so the invariant moved rather than vanished.
+
+| the fallback used to | now |
+| --- | --- |
+| generate a chapter for a body with none | `chapterFor` **throws**, naming the body |
+| — | `route-tests.js`: every `PLANET_ORDER` id has an authored chapter, each five missions |
+| — | `validate-missions.js`: the same check, plus `chapterFor` throwing for an unknown body |
+| read `VALIDATION.minPadWidth` so a pad could never be narrower than the stance | `route-tests.js` asserts it over **authored** pads, reading the validator's own constant |
+
+The last row is the one worth remembering: when a shared constant loses its sharer, **move the check
+rather than letting it lapse**. `VALIDATION.minPadWidth` existed in two places because a generator
+and its checker both encoded the limit (the M27 fault, where depth 2 asked for a 50 px pad against a
+56 px stance). With the generator gone the limit had exactly one encoder and no cross-check at all,
+and pad widths are now hand-typed — which is precisely when a typo gets through.
+
+`chapterFor` and `peakMachines` also lost their `sector` argument, which is the right answer
+independently: on a fixed ladder a body is always flown at the same rung, so a figure that varied
+with the sector was describing a situation no player can be in.
+
+**Nothing moved.** Both fixtures byte-identical, full suite green, and all ten bodies flown in the
+browser with no console errors — 168 lines removed from `src/`, and 69 route assertions where there
+were 65.
+
 ### How to re-measure
 
 ```bash
