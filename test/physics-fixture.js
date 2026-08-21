@@ -28,6 +28,7 @@ const CASES = [
   { name: 'vacuum-low-g', level: { gravity: 28, width: 2400, height: 1400, groundBase: 300, rough: 150, fuel: 200, pads: [{ mult: 2, width: 200 }] } },
   { name: 'vacuum-high-g', level: { gravity: 66, width: 2400, height: 1400, groundBase: 300, rough: 150, fuel: 200, pads: [{ mult: 2, width: 200 }] } },
   { name: 'atmosphere', level: { gravity: 42, width: 2400, height: 1400, groundBase: 300, rough: 150, fuel: 200, wind: 26, gust: 14, drag: 0.16, pads: [{ mult: 2, width: 200 }] } },
+  { name: 'classic-steering', settings: { steering: 'classic', invertRotation: false }, level: { gravity: 32, width: 2400, height: 1400, groundBase: 300, rough: 150, fuel: 200, pads: [{ mult: 2, width: 200 }] } },
   { name: 'direct-steering', settings: { steering: 'direct', invertRotation: false }, level: { gravity: 32, width: 2400, height: 1400, groundBase: 300, rough: 150, fuel: 200, pads: [{ mult: 2, width: 200 }] } },
 ];
 
@@ -35,7 +36,13 @@ function run(c) {
   const terrain = new Terrain(c.level, 4242);
   const ship = new Ship();
   ship.reset(600, 200, c.level.fuel);
-  const settings = c.settings || { steering: 'classic', invertRotation: false };
+  // **Pinned to `pro`, which is the original rotation law to the digit.**
+  // M29c split classic steering in two and made the *new* tuned mode the
+  // default, so leaving this on the default would have quietly re-pointed the
+  // M0 physics baseline at a different flight model. This fixture exists to
+  // prove the original has not drifted, so it names the mode that is the
+  // original. The new mode gets its own case below.
+  const settings = c.settings || { steering: 'pro', invertRotation: false };
   const dt = 1 / 120;
   let t = 0;
   const samples = [];
@@ -63,8 +70,21 @@ if (process.argv.includes('--record')) {
 
 const expected = JSON.parse(readFileSync(FIXTURE, 'utf8'));
 let diffs = 0;
-for (const name of Object.keys(now)) {
-  (expected[name] || []).forEach((v, i) => {
+// **A case this file does not know about must be reported, not skipped.**
+// This used to iterate `Object.keys(now)` and read `expected[name] || []`, so a
+// newly added case compared against nothing and passed silently, and a case
+// deleted from the fixture was never noticed at all. A regression test that can
+// quietly test nothing is the M18 `pipefail` fault in another costume - found
+// when M29c added a `classic-steering` case and the fixture cheerfully reported
+// "unchanged" without ever having run it.
+for (const name of new Set([...Object.keys(expected), ...Object.keys(now)])) {
+  if (!expected[name]) { console.log(`  NEW      ${name} (${now[name].length} steps) - record to accept`); continue; }
+  if (!now[name]) { console.log(`  MISSING  ${name}`); diffs++; continue; }
+  if (expected[name].length !== now[name].length) {
+    console.log(`  LENGTH   ${name}: was ${expected[name].length} steps, now ${now[name].length}`);
+    diffs++;
+  }
+  expected[name].forEach((v, i) => {
     if (v !== now[name][i]) {
       console.log(`  CHANGED  ${name} step ${i}\n             was ${v}\n             now ${now[name][i]}`);
       diffs++;

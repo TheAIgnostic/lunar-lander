@@ -545,16 +545,29 @@ section('3. turning it on moves the simulation');
 
 {
   // --- spinDampBonus: the gyro settles rotation in flight
-  const spinDecay = (loadout) => {
+  const spinDecay = (loadout, settings) => {
     const { ship, terrain, level } = rig(loadout);
     ship.y = terrain.heightAt(ship.x) - 520;
     ship.spin = 2.0;
     const idle = { thrust: false, left: false, right: false, hold: false };
-    for (let i = 0; i < 240; i++) ship.step(1 / 120, idle, level, terrain, i / 120);
+    for (let i = 0; i < 240; i++) ship.step(1 / 120, idle, level, terrain, i / 120, settings);
     return Math.abs(ship.spin);
   };
   const spinBare = spinDecay(deriveFull({}, deriveSkills({}), {}));
   const spinGyro = spinDecay(deriveFull({}, deriveSkills({}), derivePassive('gyro-stabilizer')));
+  // **In both steering modes.** M29c's first cut took `Math.min` of the ship's
+  // spin damping and the new idle damping, and 0.90 beats the gyro's 0.985 - so
+  // on the default mode the module was inert and this check failed with
+  // `0.000 -> 0.000`. A passive that does nothing on the mode most players use
+  // is the `hazardLead` fault, so the modes are named explicitly here rather
+  // than left to whatever the default happens to be.
+  for (const steering of ['classic', 'pro']) {
+    const set = { steering, invertRotation: false };
+    const bare = spinDecay(deriveFull({}, deriveSkills({}), {}), set);
+    const gyro = spinDecay(deriveFull({}, deriveSkills({}), derivePassive('gyro-stabilizer')), set);
+    check(`the gyro is worth fitting in ${steering} steering`, gyro < bare * 0.98,
+      `${bare.toFixed(4)} -> ${gyro.toFixed(4)} rad/s after 2 s`);
+  }
   check('the gyro passive settles rotation faster', spinGyro < spinBare * 0.98,
     `${spinBare.toFixed(3)} -> ${spinGyro.toFixed(3)} rad/s after 2 s`);
 

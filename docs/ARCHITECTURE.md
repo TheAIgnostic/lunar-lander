@@ -152,6 +152,41 @@ vents, fountains, sinking-air columns and magnetic anomalies that have a *place*
 Every hollow hazard named here before M29 is implemented, and the check that used to be advice is a
 test now (see the rule above).
 
+**Steering is the one setting that is allowed to change the simulation, and there are three.**
+Everything on the settings screen is presentation-only *except* this, which has always been true
+(`direct` has changed the flight model since M0) and is worth stating because the next rule below
+says the opposite about everything else.
+
+Since M29c the rotating law comes in two:
+
+| mode | what a burner does | who it is for |
+| --- | --- | --- |
+| `classic` (default) | adds spin; **release and the rotation settles within about half a second** | the tuned mode |
+| `pro` | adds spin that keeps going until you cancel it | the original law, unchanged to the digit |
+| `direct` | translates the hull, which holds itself upright | no attitude to fly at all |
+
+`classic` is *rate* control rather than acceleration control, and it is deliberately **not** an angle
+spring: the attitude you set persists, so you still point the nose and choose the angle. Auto-levelling
+on release would mean holding a burner and the booster together to translate at all, which is most of
+the way to `direct` — and `direct` already exists.
+
+Three things hold the split honest. `STEERING.pro` is `{ spinCap: 1, idleDamp: null }` **precisely so
+every line of the classic branch reduces to its pre-split arithmetic**, and `settings-tests.js`
+reproduces that arithmetic by hand and requires a match to 1e-9. Both fixtures and `test/pilot.js`
+name `pro` explicitly rather than taking the default, so every figure recorded in `test/BASELINE.md`
+— M19's terrain wall, M21's placement numbers, M24's 70% crossing — still measures the model it was
+measured against, and stays a *floor* for what a player on the default meets. And `STEERING_MODES` is
+the single vocabulary the flight model, the save layer and the settings screen all read, because a
+mode the game accepts and the save layer rejects would work for one session and silently reset on the
+next launch — for exactly the one player who chose the non-default.
+
+**Idle damping composes with the ship's own, it does not replace it.** The first cut took
+`Math.min(spec.spinDamp, mode.idleDamp)`, and 0.90 is stronger than the Gyro Stabilizer's 0.985 — so
+on the default mode the gyro's entire spin-damping half was inert, a module bought, equipped and
+doing nothing. That is the `hazardLead` fault, and `loadout-tests.js` caught it on the first run;
+it now asserts the gyro is worth fitting in *both* named modes rather than in whatever the default
+happens to be.
+
 **The rule that holds accessibility honest:** every accessibility setting changes *presentation*
 only — shake, flashing, instrument size, contrast and key bindings never reach the simulation.
 `test/settings-tests.js` flies the same mission with all of them changed and asserts the result is

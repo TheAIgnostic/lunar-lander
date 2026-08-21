@@ -17,9 +17,57 @@ export const SHIP = {
   radius: 20,
 };
 
+/**
+ * **The two rotating steering modes.**
+ *
+ * Classic steering is acceleration control: a burner adds angular *momentum*,
+ * and stopping a rotation means counter-burning for as long as you started it
+ * for. That is the 1969 problem and it is the mode's whole character - but it is
+ * also the single hardest thing in the game to learn, and the M29a/M29 logs show
+ * it splitting a household: Ian flies it, Tom fights it.
+ *
+ * So it splits in two, and **the split is one behaviour, not a difficulty
+ * slider**:
+ *
+ * - `pro` is the original law, **unchanged to the digit**. `spinCap: 1` and
+ *   `idleDamp: null` make every line below evaluate exactly as it did, which is
+ *   what keeps both fixtures regressing the M0 flight model.
+ * - `classic` is *rate* control instead. Release both burners and the rotation
+ *   stops within about half a second, so the lander holds the attitude you left
+ *   it at rather than continuing to turn. You still have to point the nose and
+ *   you still choose the angle; you no longer have to cancel your own momentum
+ *   by hand.
+ *
+ * Deliberately **not** an angle spring. Auto-levelling to upright on release
+ * would mean holding a burner and the booster together to translate at all,
+ * which is a different game and is most of the way to DIRECT - and DIRECT
+ * already exists for players who want it. Attitude persists here; only the
+ * *rate* is tamed.
+ */
+export const STEERING = {
+  // spinCap multiplies SHIP.maxSpin (so a future component that raises it still
+  // works); idleDamp is the per-1/60s decay applied only while neither burner
+  // is held, and only when it damps harder than the ship's own spinDamp - so
+  // the Gyro Stabilizer's 0.985 is never made worse by it.
+  classic: { spinCap: 0.56, idleDamp: 0.90 },
+  pro: { spinCap: 1, idleDamp: null },
+};
+
+/**
+ * Every value `settings.steering` may hold. Exported so the save layer, the
+ * settings screen and the tests all read one list - a mode added here and
+ * forgotten in `save.js` would load, work for one session, and be silently
+ * reset to the default on the next launch, which is the worst kind of bug to
+ * hand the one player who chose the non-default mode.
+ */
+export const STEERING_MODES = ['classic', 'pro', 'direct'];
+
 export const DEFAULT_SETTINGS = {
-  steering: 'classic',    // 'classic' = burners rotate | 'direct' = burners translate
-  invertRotation: false,  // classic only: swap which burner spins which way
+  // 'classic' = burners rotate, rotation settles on release
+  // 'pro'     = burners rotate, momentum is yours to cancel (the original law)
+  // 'direct'  = burners translate, the hull holds itself upright
+  steering: 'classic',
+  invertRotation: false,  // both rotating modes: swap which burner spins which way
   // Accessibility. None of these touch the simulation - they change how it is
   // presented, which is the point: the flight model must feel the same to
   // everyone, and only the presentation should have to adapt.
@@ -260,8 +308,25 @@ export class Ship {
         const damp = Math.sign(this.spin) * Math.min(Math.abs(this.spin), 6 * dt);
         this.spin -= damp;
       }
-      this.spin = clamp(this.spin, -this.spec.maxSpin, this.spec.maxSpin);
-      this.spin *= Math.pow(this.spec.spinDamp, dt * 60);
+      // Which rotating mode this is. `pro` is `{ spinCap: 1, idleDamp: null }`,
+      // so both lines below reduce to exactly the arithmetic they had before
+      // the split - that identity is what the physics fixture proves.
+      const mode = STEERING[settings.steering] || STEERING.classic;
+      this.spin = clamp(this.spin, -this.spec.maxSpin * mode.spinCap, this.spec.maxSpin * mode.spinCap);
+      // The rate tamer: harder decay while neither burner is held, so letting
+      // go stops the rotation instead of leaving it running.
+      //
+      // **Composed with the ship's own damping, not maxed against it.** The
+      // first version took `Math.min`, and 0.90 is stronger than the Gyro
+      // Stabilizer's 0.985 - so on the default steering mode the gyro's whole
+      // spin-damping half did nothing, and a module the player had bought and
+      // equipped was silently inert. That is the `hazardLead` fault (a thing
+      // sold and not delivered), and `loadout-tests.js` caught it on the first
+      // run. Multiplying keeps the gyro worth fitting in both modes and leaves
+      // `pro` exactly as it was, since its `idleDamp` is null.
+      const idle = mode.idleDamp != null && !this.rcsLeft && !this.rcsRight;
+      const spinDamp = idle ? this.spec.spinDamp * mode.idleDamp : this.spec.spinDamp;
+      this.spin *= Math.pow(spinDamp, dt * 60);
       this.angle += this.spin * dt;
     }
 

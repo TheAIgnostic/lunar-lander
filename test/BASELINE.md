@@ -2692,3 +2692,81 @@ node -e "Promise.all([import('./src/planets.js'),import('./src/missions.js'),imp
 ```bash
 node -e "Promise.all([import('./src/missions.js'),import('./src/route.js')]).then(([M,R])=>console.log(R.PLANET_ORDER.map((id,i)=>id.slice(0,3).toLowerCase()+' '+M.peakMachines(id,i+1)).join(' · ')));"
 ```
+
+---
+
+## M29c — the steering split (2026-08-21)
+
+Tom cannot hold an attitude in classic steering; his son Ian, who flew several of the missions in the
+M29a log, can. That is the clearest signal this project has had that **one control law was serving two
+very different pairs of hands**, and it is not something a difficulty number can fix — it is the
+control scheme itself.
+
+Classic steering is *acceleration* control: a burner adds angular momentum, and stopping a rotation
+means counter-burning for as long as you started it for. Measured, from a 0.4 s tap and then hands
+off:
+
+| | peak spin | rotation stops | angle at t=2 s | held-burner cap |
+| --- | ---: | --- | ---: | ---: |
+| **PRO CLASSIC (IAN)** — the original | 1.88 rad/s | never (>5.6 s) | **−160°** | 183°/s |
+| **CLASSIC** — tuned | 1.79 rad/s | **0.57 s after release** | −38° | 102°/s |
+
+The original law turns you past inverted and keeps going. That is the complaint, exactly.
+
+### What the tuned mode is, and what it deliberately is not
+
+`classic` is **rate** control: `spinCap: 0.56` on the rotation cap, and an `idleDamp` of 0.90 per
+1/60 s applied **only while neither burner is held**. Release and the lander stops turning; the
+attitude you left it at stays.
+
+It is deliberately **not an angle spring**. Auto-levelling to upright on release would mean holding a
+burner and the booster together to translate at all, which is a different game and is most of the way
+to DIRECT — and DIRECT already exists for players who want it. Attitude persists; only the *rate* is
+tamed. Asserted:
+
+| | angle at 1 s | at 4 s | at 8 s |
+| --- | ---: | ---: | ---: |
+| pro | −57° | −169° | −223° |
+| **classic** | −20.5° | **−20.6°** | **−20.6°** |
+| direct | — | — | ~0° (returns upright) |
+
+A small correction reads the same way: a 0.12 s nudge moves the nose 7.7° and stops, where the same
+nudge in pro is still turning at −70° three seconds later.
+
+### PRO is the original law, and that is what protects everything else in the repo
+
+`STEERING.pro` is `{ spinCap: 1, idleDamp: null }` **precisely so that every line of the classic
+branch reduces to the arithmetic it had before the split**. `settings-tests.js` reproduces that
+arithmetic by hand and requires a match to **1e-9**.
+
+This matters far beyond the setting. Every flight figure in this document — M19's terrain wall, M21's
+placement sweep, M24's 70% crossing, M29's 643/800 — was measured against that law. So:
+
+- **both fixtures pin `pro` explicitly** rather than taking the default, which had silently become
+  the new mode (21 physics and 183 flight differences, all of them the default changing meaning)
+- **`test/pilot.js` pins `pro`** for the same reason, with the conservative reading: pro is the
+  harder mode, so every autopilot figure stays a *floor* for what a player on the default meets
+
+A `classic-steering` case was added to the physics fixture so the new mode is regressed too. Net
+change to `physics-fixture.json`: **+10 lines, nothing rewritten.**
+
+### Two faults found on the way
+
+**The gyro went inert on the default mode.** The first cut took `Math.min(spec.spinDamp,
+mode.idleDamp)`, and 0.90 is stronger than the Gyro Stabilizer's 0.985 — so on the mode most players
+use, the module's entire spin-damping half did nothing. A passive bought, equipped and silently
+useless is the `hazardLead` fault (sold and not delivered), and `loadout-tests.js` caught it on the
+first run with `0.000 -> 0.000`. Composed multiplicatively instead, and the test now names both modes
+rather than trusting whichever is default.
+
+**The physics fixture could silently not test.** It iterated `Object.keys(now)` and read
+`expected[name] || []`, so a **newly added case compared against nothing and passed**, and a case
+deleted from the fixture was never noticed at all. Found because the new `classic-steering` case
+reported "unchanged" without ever having run. It reports NEW, MISSING and length mismatches now —
+the M18 `pipefail` fault in another costume, and the second time a regression harness in this project
+has been able to report success while checking nothing.
+
+### What did not move
+
+Every pre-existing physics case, the whole flight fixture, and every sweep — because all three name
+`pro`. Full suite green. The only content change is one more button on the settings screen.

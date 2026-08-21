@@ -297,12 +297,13 @@ export function screenHTML(s) {
         <div class="setting">
           <div class="setting-name">STEERING</div>
           <div class="opts">
-            ${opt('steering', 'classic', 'CLASSIC', 'Side burners rotate the lander. Point the nose, then burn. The 1969 problem, and the only way to fly the tight pads well.')}
+            ${opt('steering', 'classic', 'CLASSIC', 'Side burners rotate the lander. Point the nose, then burn. Let go of the burner and the rotation settles, so the nose stays where you put it.')}
+            ${opt('steering', 'pro', 'PRO CLASSIC (IAN)', 'The same, with nothing damping it. A burner adds spin that keeps going until you cancel it yourself. Harder, and the most precise thing in the game.')}
             ${opt('steering', 'direct', 'DIRECT', 'Side burners push the lander sideways and the hull stays upright. Left means left on its own, no attitude to manage.')}
           </div>
         </div>
         <div class="setting${settings.steering === 'direct' ? ' dimmed' : ''}">
-          <div class="setting-name">ROTATION${settings.steering === 'direct' ? ' (classic only)' : ''}</div>
+          <div class="setting-name">ROTATION${settings.steering === 'direct' ? ' (rotating modes only)' : ''}</div>
           <div class="opts">
             ${opt('invertRotation', false, 'NORMAL', 'Left burner tips the nose left, so left plus booster drifts you left.')}
             ${opt('invertRotation', true, 'INVERTED', 'Left burner tips the nose right. Some pilots read the stick the other way round.')}

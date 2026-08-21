@@ -1,7 +1,25 @@
 // The autopilot control law, as a pure module. Shared by the browser harness
 // and by node-side mission validation so both fly identically.
 
-import { Ship, DEFAULT_SETTINGS } from '../src/ship.js';
+import { Ship } from '../src/ship.js';
+
+/**
+ * **The pilot flies `pro`**, which is the original rotation law.
+ *
+ * M29c split classic steering into `classic` (rotation settles on release) and
+ * `pro` (the original, momentum is yours to cancel), and made the tuned one the
+ * default for players. Taking that default here would silently re-point every
+ * sweep and every recorded figure in `test/BASELINE.md` at a different flight
+ * model - M19's terrain wall, M21's placement numbers, M24's 70% crossing, all
+ * of it measured against `pro`.
+ *
+ * So the instrument keeps its own mode, and the numbers stay comparable across
+ * milestones. It is also the conservative choice: `pro` is the harder of the
+ * two, so every flight figure this pilot produces remains a **floor** for what
+ * a player on the default meets - which is exactly how this project already
+ * asks its autopilot numbers to be read.
+ */
+export const PILOT_SETTINGS = { steering: 'pro', invertRotation: false };
 import { spawnFor } from '../src/spawn.js';
 import { EnemyField } from '../src/enemies.js';
 import { nodeWorth } from '../src/economy.js';
@@ -241,7 +259,7 @@ export function flyMission(level, terrain, opts = {}) {
   const targetMid = (target.x1 + target.x2) / 2;
   const halfPad = (target.x2 - target.x1) / 2;
   let closest = Infinity;
-  const settings = opts.settings || DEFAULT_SETTINGS;
+  const settings = opts.settings || PILOT_SETTINGS;
   const step = 1 / 120;
   const maxT = opts.maxSeconds || 120;
   let t = 0;

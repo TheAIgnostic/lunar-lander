@@ -856,6 +856,43 @@ scheduled until the MVP is stable — the spec says the same.
   - **the physics fixture did not move**; the flight fixture moved by exactly mars-1/-3/-4/-5 x 3
     seeds, which is the containment proof, plus 35 new missions
 
+- [x] **M29b — `generateChapter` deleted** (this commit)
+  - Tom's call on the question M29 flagged rather than took. All ten bodies are authored, so the
+    survey-chapter fallback was reachable by nothing a player flies
+  - **what it was really providing was an invariant, not a code path** - *every body on the ladder
+    has something to fly* - so that moved rather than vanishing: `chapterFor` throws naming the body,
+    and `route-tests.js` and `validate-missions.js` both assert every `PLANET_ORDER` id has an
+    authored chapter of five missions
+  - the generator also read `VALIDATION.minPadWidth`, so a generated pad could never be narrower than
+    the lander's stance (the M27 fault at depth 2). Authored pads are hand-typed, so that is a
+    `route-tests.js` assertion now. **When a shared constant loses its sharer, move the check**
+  - `chapterFor` and `peakMachines` lost their `sector` argument, which is right independently: on a
+    fixed ladder a body is always flown at the same rung
+  - 168 lines out of `src/`, both fixtures byte-identical, all ten bodies flown in the browser
+
+- [x] **M29c — the steering split** (this commit)
+  - Tom cannot hold an attitude in classic steering and his son Ian can. That is not something a
+    difficulty number fixes - it is the control scheme, and one law was serving two very different
+    pairs of hands
+  - **CLASSIC is rate control now**: release both burners and the rotation settles in about half a
+    second, so the nose stays where you put it. **PRO CLASSIC (IAN)** is the original law. Measured
+    from a 0.4 s tap: pro never stops and is past inverted (-160deg) at two seconds; classic stops
+    0.57 s after release at -38deg
+  - **deliberately not an angle spring.** The attitude you set persists (-20.6deg at 4 s and at 8 s),
+    so you still point the nose and choose the angle. Auto-levelling on release would be most of the
+    way to DIRECT, which already exists
+  - **`pro` is the original to the digit** - `{ spinCap: 1, idleDamp: null }` makes every line reduce
+    to its pre-split arithmetic, and `settings-tests.js` reproduces that by hand to 1e-9. Both
+    fixtures and `test/pilot.js` now name `pro` explicitly, so every figure in `test/BASELINE.md`
+    still measures the model it was measured against - and stays a floor for the default mode
+  - **the gyro went inert and a test caught it**: `Math.min` of the ship's damping and the new idle
+    damping meant 0.90 beat the Gyro Stabilizer's 0.985, so on the default mode a module you bought
+    and equipped did nothing. The `hazardLead` fault. Composed multiplicatively, asserted in both modes
+  - **the physics fixture could silently not test**: it read `expected[name] || []`, so a newly added
+    case compared against nothing and passed. Found because the new `classic-steering` case reported
+    "unchanged" without ever running. NEW, MISSING and length mismatches are reported now - the M18
+    `pipefail` fault in another costume
+
 
 ## Decisions (Tom, 2026-08-16)
 
@@ -1167,6 +1204,12 @@ the record, since every one of them is now a number somebody may want to move ag
 
 **Still open, and still only answerable by a person:**
 
+- **Which steering mode is right for you, and for Ian.** M29c split it: CLASSIC settles the rotation
+  when you let go, PRO CLASSIC (IAN) is the law you have both been flying. The numbers say the tuned
+  mode should feel like pointing the nose rather than fighting momentum, but a control scheme is the
+  single least measurable thing in this project. If CLASSIC still gets away from you the lever is
+  `STEERING.classic.idleDamp` (0.90 - lower settles harder) and `spinCap` (0.56 of the original
+  183 deg/s cap).
 - **Nothing in M29's content has been flown by a human.** Seven chapters, seven new hazards and 35
   missions shipped on measurements and screenshots. Two of them — **`falseRadar` and `darkness`** —
   are provably unmeasurable by this project's instrument, because the autopilot flies on state and

@@ -8,6 +8,10 @@
 // and so a failure to read never reaches the game as an exception.
 
 import { safeStore } from './util.js';
+// The steering vocabulary lives with the flight model that reads it. Used only
+// inside functions - a module-level read of an imported value is the M15 trip
+// hazard that throws "cannot access before initialization" in the bundle.
+import { STEERING_MODES } from './ship.js';
 
 export const SAVE_VERSION = 2;
 
@@ -76,7 +80,11 @@ export function migrateLegacy(store = safeStore) {
   meta.settings.muted = read('tv_muted') === '1';
   try {
     const s = JSON.parse(read('tv_settings') || '{}') || {};
-    if (s.steering === 'classic' || s.steering === 'direct') meta.settings.steering = s.steering;
+    // Read from the shared list rather than a hand-written pair, so a new mode
+    // cannot be accepted by the game and rejected by its own migration. A
+    // legacy `tv_settings` can only ever hold 'classic' or 'direct' - 'pro' did
+    // not exist when those were written - but the list is the authority.
+    if (STEERING_MODES.includes(s.steering)) meta.settings.steering = s.steering;
     meta.settings.invertRotation = !!s.invertRotation;
   } catch { /* defaults stand */ }
   meta.stats.bestScore = meta.classic.high;
@@ -93,6 +101,11 @@ function coerceMeta(raw) {
   m.banked.materials = { ...(raw.banked && raw.banked.materials) || {} };
   m.componentLevels = { ...d.componentLevels, ...(raw.componentLevels || {}) };
   m.settings = { ...d.settings, ...(raw.settings || {}) };
+  // A steering mode this build does not have falls back to the default rather
+  // than reaching the flight loop. `ship.step` already degrades safely, but a
+  // save written by a newer build and opened by an older one should say
+  // something sane on the settings screen too.
+  if (!STEERING_MODES.includes(m.settings.steering)) m.settings.steering = d.settings.steering;
   m.stats = { ...d.stats, ...(raw.stats || {}) };
   // The logbook's nested tallies arrived after the first v2 saves, so they are
   // merged rather than assumed - an older save simply starts them empty.
