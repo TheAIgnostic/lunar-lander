@@ -212,13 +212,21 @@ export class Ship {
     return left;
   }
 
-  damage(amount, source = 'hit') {
+  damage(amount, source = 'hit', opts = {}) {
     // A wreck cannot be wrecked further: once the hull is gone the loss is
     // already decided, and counting more hits would double-report it.
     if (!this.alive || this.landed || this.hull <= 0 || amount <= 0) {
       return { absorbed: 0, damage: 0, hull: this.hull, destroyed: false };
     }
-    let left = amount;
+    // **A lethal hit is a property, not a big number.** The Mast Sniper kills
+    // in one shot whatever is fitted, and writing that as `damage: 999` would
+    // be a figure that silently stops being true the day a Hull L5 exists -
+    // the same class of fault M24 and M28 each found in an assertion. So it is
+    // asked for by name and costed here, against whatever is actually in the
+    // way: the hull, plus a raised shield if there is one.
+    let left = opts.lethal
+      ? this.hull + (this.shieldActive ? Math.max(0, this.shieldHp) : 0)
+      : amount;
     let absorbed = 0;
     if (this.shieldActive && this.shieldHp > 0) {
       absorbed = Math.min(this.shieldHp, left);

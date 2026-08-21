@@ -49,6 +49,17 @@ for (const id of ENEMY_IDS) {
   const BASE_HULL = 100;   // ship.js: hullMax = 100 * (level.hullMax || 1)
   for (const id of ENEMY_IDS) {
     const t = ENEMY_TYPES[id];
+    // **A lethal machine is exempt, and says so.** The Mast Sniper is "one shot
+    // one kill" by design (Tom, M29e), so asserting two shots against it would
+    // be asserting the absence of the feature. The rule it *does* have to obey
+    // is the one below: a machine that cannot be survived has to be avoidable,
+    // and that is checked as a longer reaction window and finite ammo.
+    if (t.shot.lethal) {
+      check(`${id}: is lethal on purpose, and pays for it in warning`,
+        t.telegraph >= 1.5 && t.ammo > 0 && t.maxPerMission === 1,
+        `telegraph ${t.telegraph}s, ammo ${t.ammo}, cap ${t.maxPerMission}`);
+      continue;
+    }
     const shots = Math.ceil(BASE_HULL / t.shot.damage);
     check(`${id}: kills an unupgraded lander in two shots`, shots === 2, `${shots} shots`);
   }

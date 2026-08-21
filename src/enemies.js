@@ -94,6 +94,96 @@ export const ENEMY_TYPES = {
     reward: 26,
     counterplay: 'Put terrain between you, or fly inside its arc.',
   },
+
+  /**
+   * **The Mast Sniper.** The first of the six roster designs the MVP deferred,
+   * and the first machine in the game that kills in one shot.
+   *
+   * Tom's brief, and every clause of it is a number below: *"it should be a
+   * sniper, one shot one kill. no more than 1 per level, it should take longer
+   * to aim and then keep aim for some amount that players can avoid and take
+   * longer to reload. max 3 shots."*
+   *
+   * The shape of it is the opposite of the casemate. A turret is a thing you
+   * fly around; this is a thing you must not be in front of when it finishes
+   * aiming. It cannot be tanked - no hull level survives a hit - so armour is
+   * not the answer and evasion is, which is a genuinely new question to ask a
+   * player who has spent nine bodies learning to soak two shots.
+   *
+   * **It is avoidable five ways, and that is what makes lethal fair:**
+   *  1. `turnRate` 0.42 - less than half the turret's, so it is slow to bring
+   *     round and a moving lander keeps breaking its solution
+   *  2. `telegraph` 1.7 s with the aim **frozen** (the M12 rule) - the longest
+   *     window in the game, and simply not being on that line beats it
+   *  3. losing line of sight during the telegraph cancels the shot outright
+   *  4. `minRange` 260 - a big blind spot; getting close is a real answer
+   *  5. `ammo` 3 - it runs out, permanently, and shows you how many are left
+   *
+   * ...and `cooldown` 8 s between them, so a mission never sees more than a
+   * handful even if it never runs dry.
+   */
+  'mast-sniper': {
+    id: 'mast-sniper',
+    name: 'MAST SNIPER',
+    kind: 'ground',
+    // Lightly built: it is a tripod and a sensor head, not a casemate. The
+    // laser kills it in appreciably less time than a turret, which is the
+    // reward for carrying a weapon to a body that fields one.
+    hp: 22,
+    radius: 16,
+    // Longer than anything else (the turret is 560), and **not as long as it
+    // wants to be**, for a reason worth recording: range costs this machine
+    // twice over. The sanctuary bubble scales with it, so a longer reach is
+    // pushed further from where the player goes; and the at-once rule counts
+    // overlapping engagement discs, so a big disc crowds out the turrets that
+    // would otherwise fill the mission's budget. Measured over every armed
+    // mission x 20 seeds:
+    //
+    // | range | campaign fill | fill on its own missions | present | fires (deep) |
+    // | ---: | ---: | ---: | ---: | ---: |
+    // | 760 | 95% | 84% | 70% | 41% |
+    // | **640** | **97%** | **91%** | **77%** | **33%** |
+    // | 560 | 97% | 90% | 73% | 18% |
+    //
+    // 640 keeps M21's "a budget is what the map fields" intact while the thing
+    // still engages on a third of deep runs.
+    range: 640,
+    minRange: 260,         // ...and has a correspondingly large blind spot
+    turnRate: 0.42,        // "longer to aim": slow to traverse
+    aimTolerance: 0.075,   // and it wants a tighter solution before it commits
+    telegraph: 1.7,        // "keep aim for some amount that players can avoid"
+    cooldown: 8.0,         // "longer to reload"
+    leadFactor: 0.9,       // it predicts better than the turret does
+    ammo: 3,               // "max 3 shots" - per mission, and it never reloads
+    // It will only stand where it can see at least this share of the crossing.
+    // See the vantage rule in `placeEnemies` for why this exists and why
+    // raising `range` instead made it worse.
+    // Measured, over 9 missions x 20 seeds, against how often it actually
+    // engages on the deep route:
+    //
+    // | vantage | placed | sees | fires in | way home |
+    // | ---: | ---: | ---: | ---: | ---: |
+    // | 0.45 | 33/180 | 0.9 s | 8% | 154/180 |
+    // | 0.30 | 104/180 | 3.3 s | 30% | 152/180 |
+    // | **0.20** | **128/180** | **4.3 s** | **42%** | **150/180** |
+    //
+    // 0.20 and not lower: past it the placement rate barely moves and the rule
+    // stops meaning anything. Note the last column - it threatens the *prize*
+    // route and costs the way home almost nothing, which is the shape a sniper
+    // should have. It is absent on about one seed in four, and that is left
+    // alone deliberately: a map with no vantage on it has no business fielding
+    // one, and the budget is filled by a turret instead.
+    vantage: 0.20,
+    maxPerMission: 1,      // "no more than 1 per level"
+    // Lethal, deliberately, and expressed as a flag rather than a big number:
+    // "one shot one kill" is a *property*, and a damage figure large enough to
+    // beat today's hull ceiling is a figure that quietly stops being true the
+    // day someone adds Hull L5. M24 and M28 both found assertions that had
+    // encoded a number instead of the rule; this is the same trap in content.
+    shot: { speed: 950, damage: 100, lethal: true, radius: 4.5, life: 6, drift: 0 },
+    reward: 64,
+    counterplay: 'It holds its aim before it fires. Be somewhere else by then, or break its line.',
+  },
   'seeker-drone': {
     id: 'seeker-drone',
     name: 'SEEKER DRONE',
@@ -221,6 +311,18 @@ export function placeEnemies(level, terrain, seed) {
   // same rejected roof every try and burns the whole budget of attempts on it.
   let tried = new Set();
   let triedFor = -1;
+  // Types this map has proved it cannot seat, so the round-robin stops offering
+  // them and the budget is filled by something it can. Without it a type with a
+  // demanding placement rule burns the whole attempt budget on one slot and the
+  // *whole mission* comes out under-filled - the Mast Sniper's vantage rule
+  // took fill from 99% to 65-86% before this existed, which is M21's "a budget
+  // is what the map fields" broken by a machine that could not be seated.
+  //
+  // Giving up on the type is the right answer rather than relaxing its rule:
+  // a sniper with no line of sight is the decorative machine the vantage rule
+  // was added to prevent, so a map with no vantage should field a turret.
+  const givenUp = new Set();
+  const vantageFails = new Map();
   const safe = sanctuaryPad(terrain);
   const gates = safe ? sanctuaryGates(safe) : null;
   const margin = 180;
@@ -237,7 +339,20 @@ export function placeEnemies(level, terrain, seed) {
     : null;
 
   for (let tries = 0; tries < COMBAT.placementTries && out.length < budget; tries++) {
-    const type = ENEMY_TYPES[sets[out.length % sets.length]];
+    // Round-robin through the mission's sets, **skipping any type already at
+    // its cap**. `maxPerMission` exists for the Mast Sniper - "no more than 1
+    // per level" - and without the skip the round-robin would happily deal a
+    // second one the moment the budget came round again. Falling through to the
+    // next eligible type rather than wasting the attempt keeps the fill rate
+    // (99% since M21) where it was.
+    let type = null;
+    for (let k = 0; k < sets.length; k++) {
+      const cand = ENEMY_TYPES[sets[(out.length + k) % sets.length]];
+      if (!cand || givenUp.has(cand.id)) continue;
+      const cap = cand.maxPerMission != null ? cand.maxPerMission : Infinity;
+      if (out.filter((m) => m.type === cand.id).length < cap) { type = cand; break; }
+    }
+    if (!type) break;   // every eligible type is at its cap: the map is full
 
     // A gun takes a roof when there is one going. It is flat by construction,
     // it is what the structure was built for, and it puts the machine
@@ -326,6 +441,57 @@ export function placeEnemies(level, terrain, seed) {
     }
     if (out.some((e) => Math.hypot(e.x - x, e.y - y) < COMBAT.minSpacing) && reject()) continue;
 
+    // **A sniper needs a view, not a station.** Measured before this existed:
+    // the Mast Sniper could see the lander for **0.5 s in a whole flight** and
+    // got a shot off on 8% of them, because the generic station rule drops a
+    // machine on the crossing without ever asking whether it can see anything
+    // from there. A lethal machine that never fires is not difficult, it is
+    // decorative - the M11 fault, where a system read only by a screen had
+    // never been shown to work.
+    //
+    // Raising `range` was the obvious fix and it made things **worse**, which
+    // is the finding worth keeping: the sanctuary bubble scales with range, so
+    // the further a machine reaches the further it is pushed from the one place
+    // the player reliably goes. At 1300 px it saw the lander for 0.0 s. Reach
+    // is not vantage.
+    //
+    // So a type may demand line of sight to a share of the corridor it is meant
+    // to cover, sampled along the crossing at the altitude a lander actually
+    // flies. Nothing else asks for this, and nothing else should: a turret is
+    // something you come to, and this is something that comes to you.
+    if (type.vantage && guardAt != null) {
+      // **The deep half of the crossing, not all of it.** Asking for a view of
+      // the whole run was unplaceable - 2 seeds in 180 - and it was also the
+      // wrong ask: the near end is inside the sanctuary bubble by construction,
+      // so a machine that could see it would be one that had no business
+      // standing there. This is a threat on the way to the prize.
+      const lo = Math.min(start.x, guardAt) + Math.abs(guardAt - start.x) * 0.45;
+      const hi = Math.max(start.x, guardAt);
+      let seen = 0;
+      const SAMPLES = 9;
+      for (let i = 0; i < SAMPLES; i++) {
+        const sx = lo + ((hi - lo) * (i + 0.5)) / SAMPLES;
+        // The glide line a crossing is actually flown on, not the ground.
+        const sy = terrain.heightAt(sx) - 260;
+        const d = Math.hypot(sx - x, sy - y);
+        if (d > type.range || d < type.minRange) continue;
+        if (lineOfSight(terrain, x, y - type.radius, sx, sy)) seen++;
+      }
+      if (seen / SAMPLES < type.vantage) {
+        const n = (vantageFails.get(type.id) || 0) + 1;
+        vantageFails.set(type.id, n);
+        // Twenty-six attempts is enough to know. Measured against campaign
+        // fill: giving up at 0.35 / 0.15 / 0.08 / 0.05 of the attempt budget
+        // yields 93% / 93% / 94% / **95%** fill, with the sniper present on 70-71%
+        // of seeds in every case - so the decision was always made in the first
+        // few dozen tries and everything after that was spent proving it again,
+        // at the cost of the machines that could have taken the slot.
+        if (n > COMBAT.placementTries * 0.05) givenUp.add(type.id);
+        reject();
+        continue;
+      }
+    }
+
     // Countable threats: adding this one may not let five engage at once.
     //
     // The test has to be symmetric. Counting only the machines already placed
@@ -386,6 +552,10 @@ function makeEnemy(type, x, y, index, rng) {
     dir: rng && rng() < 0.5 ? -1 : 1,
     alert: 0,               // 0..1, how awake it looks
     hitFlash: 0,
+    // Finite shots, for machines that have them. `null` means "never runs out",
+    // which is every machine before the Mast Sniper. It is per mission and
+    // never reloads: a sniper you have made spend its three is spent.
+    ammo: type.ammo != null ? type.ammo : null,
   };
 }
 
@@ -479,6 +649,12 @@ export class EnemyField {
     const seen = ship ? this._sees(e, type, ship) : null;
     e.alert = clamp(e.alert + (seen ? dt * 2.5 : -dt * 1.2), 0, 1);
 
+    // Out of ammo is out of the fight, permanently. It still stands there and
+    // still tracks nothing - drawn dark, so a player who counted the shots can
+    // see they were right. This is the counterplay Tom asked for made visible:
+    // spending a sniper's three is a thing you can *do* to it.
+    if (e.ammo === 0) { e.state = 'idle'; e.alert = Math.max(0, e.alert - dt); return; }
+
     if (e.state === 'idle') {
       if (seen) { e.state = 'track'; e.timer = 0; }
       return;
@@ -559,12 +735,19 @@ export class EnemyField {
       vx: Math.cos(dir) * type.shot.speed,
       vy: Math.sin(dir) * type.shot.speed,
       damage: type.shot.damage,
+      lethal: !!type.shot.lethal,
       radius: type.shot.radius,
       drift: type.shot.drift,
       life: type.shot.life,
       from: e.id,
     });
     if (this.shots.length > COMBAT.maxShots) this.shots.shift();
+    // Spent only on a shot that was really taken. A round suppressed by the
+    // muzzle-safety rule above is not spent, or the safety rule would quietly
+    // become a way to disarm a sniper by flying at it.
+    if (e.ammo != null) e.ammo = Math.max(0, e.ammo - 1);
+    if (!this._shotsBy) this._shotsBy = {};
+    this._shotsBy[e.type] = (this._shotsBy[e.type] || 0) + 1;
     this.shotsFired++;
     events.push({ kind: 'fire', enemy: e, x: px, y: py, dir });
   }
@@ -623,7 +806,7 @@ export class EnemyField {
       p.y += p.vy * dt;
 
       if (ship && Math.hypot(p.x - ship.x, p.y - ship.y) < COMBAT.shipRadius + p.radius) {
-        const res = ship.damage(p.damage, 'shot');
+        const res = ship.damage(p.damage, 'shot', { lethal: p.lethal });
         this.hitsTaken++;
         events.push({ kind: 'hit', x: p.x, y: p.y, damage: p.damage, absorbed: res.absorbed, destroyed: res.destroyed });
         this.shots.splice(i, 1);
@@ -666,12 +849,26 @@ export class EnemyField {
 
   /** Everything the results screen needs, without exposing the live objects. */
   summary() {
+    // Per-type shot counts and rounds left. A roster figure, not a total: with
+    // more than one kind of machine on a map, "shots fired" stops answering the
+    // question you actually have, which is whether a *particular* design is
+    // doing anything. The Mast Sniper made that concrete - it carries three
+    // rounds and had to be shown to spend them, since a lethal machine that
+    // never fires is not a difficult machine, it is a decorative one.
+    const shotsBy = {};
+    const ammoLeft = {};
+    for (const e of this.enemies) {
+      if (e.ammo != null) ammoLeft[e.type] = (ammoLeft[e.type] || 0) + e.ammo;
+    }
+    for (const [id, n] of Object.entries(this._shotsBy || {})) shotsBy[id] = n;
     return {
       total: this.enemies.length,
       kills: this.kills,
       shotsFired: this.shotsFired,
       hitsTaken: this.hitsTaken,
       suppressed: this.suppressed,
+      shotsBy,
+      ammoLeft,
     };
   }
 }

@@ -503,7 +503,7 @@ badly started from an assumption.
 
 The MVP is complete and measured (`test/BASELINE.md`, M13 section). What the next milestones inherit:
 
-- **Two of eight enemies exist.** Coil Cannon, Patrol Drone, Mortar Platform, Magnetic Mine, Solar
+- **Three of eight enemies exist** since M29e added the Mast Sniper. Coil Cannon, Patrol Drone, Mortar Platform, Magnetic Mine, Solar
   Sentry and Shielded Guardian are roster entries with no implementation. Adding one is an
   `ENEMY_TYPES` entry plus a draw function; the field, telegraph, projectile, damage and reward
   systems are shared. `PlanetDefinition.eligibleEnemySets` is where a new design joins the bodies
@@ -511,6 +511,15 @@ The MVP is complete and measured (`test/BASELINE.md`, M13 section). What the nex
   low-gravity body the machine *type* decides almost everything and the count decides almost nothing
   (drones at 2 machines 2-5/20, turrets at 4 machines 17-20/20), so more designs is the only real
   lever left on the combat ramp.
+
+  **What M29e learned building the first one**, for whoever builds the next five: a machine is not
+  finished when it draws and fires. The Mast Sniper passed every unit test while being able to see
+  the lander for **0.5 seconds in an entire flight** - it was placed by the generic station rule,
+  which asks where a machine should stand and never asks what it can see from there. Measure a new
+  design's *engagement*, not just its numbers. And know that `range` is not the lever it looks like:
+  the sanctuary bubble scales with it, so a longer reach is pushed further from the player, and the
+  at-once rule counts overlapping discs, so a big disc crowds the rest of the budget off the map.
+  Reach costs twice and buys less than vantage does.
 - ~~**Seven bodies still fly generated survey chapters**~~ — **done in M29.** All ten bodies are
   authored, 50 missions in `src/missions.js`, and `generateChapter` is **deleted**. There is no
   generated fallback: `chapterFor` throws for a body with no chapter, and the invariant the fallback

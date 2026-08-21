@@ -525,7 +525,7 @@ export const GANYMEDE_MISSIONS = [
       { type: 'falseRadar', radarError: 1.1 },
     ],
     optionalObjective: { id: 'no-ability', text: 'Complete without using the active module', reward: { cores: 1 } },
-    enemyBudget: 4, fuelCells: 2,
+    enemyBudget: 4, enemySets: ['sentry-turret', 'seeker-drone', 'mast-sniper'], fuelCells: 2,
   },
   {
     id: 'ganymede-5', planet: 'GANYMEDE', index: 5, name: 'THE BLIND CROSSING',
@@ -543,7 +543,7 @@ export const GANYMEDE_MISSIONS = [
       { type: 'falseRadar', radarError: 1.4 },
     ],
     optionalObjective: { id: 'low-charge', text: 'Cross the anomaly and land under 40% charge', reward: { cores: 1 } },
-    enemyBudget: 5, fuelCells: 3,
+    enemyBudget: 5, enemySets: ['sentry-turret', 'seeker-drone', 'mast-sniper'], fuelCells: 3,
   },
 ];
 
@@ -597,7 +597,7 @@ export const IO_MISSIONS = [
       { type: 'eruption', vents: [{ atX: 0.33 }, { atX: 0.56 }, { atX: 0.8 }], eruptPeriod: 9 },
     ],
     optionalObjective: { id: 'no-hull', text: 'Bring the lander home undamaged', reward: { salvage: 75 } },
-    enemyBudget: 4, fuelCells: 2,
+    enemyBudget: 4, enemySets: ['sentry-turret', 'seeker-drone', 'mast-sniper'], fuelCells: 2,
   },
   {
     id: 'io-5', planet: 'IO', index: 5, name: 'THE FOUNTAIN',
@@ -618,7 +618,7 @@ export const IO_MISSIONS = [
       ] },
     ],
     optionalObjective: { id: 'perfect', text: 'Set down on the shelf at PERFECT', reward: { cores: 2 } },
-    enemyBudget: 5, fuelCells: 3,
+    enemyBudget: 5, enemySets: ['sentry-turret', 'seeker-drone', 'mast-sniper'], fuelCells: 3,
   },
 ];
 
@@ -663,7 +663,7 @@ export const MERCURY_MISSIONS = [
     pads: [{ mult: 6, width: 72 }, { mult: 2, width: 160 }],
     hazards: [{ type: 'heat', heatRise: 9, heatFall: 4.5 }],
     optionalObjective: { id: 'hull-10', text: 'Keep hull damage below 10%', reward: { cores: 1 } },
-    enemyBudget: 4, fuelCells: 2,
+    enemyBudget: 4, enemySets: ['sentry-turret', 'mast-sniper'], fuelCells: 2,
   },
   {
     id: 'mercury-5', planet: 'MERCURY', index: 5, name: 'THE TERMINATOR',
@@ -679,7 +679,7 @@ export const MERCURY_MISSIONS = [
     pads: [{ mult: 6, width: 64 }, { mult: 2, width: 132 }],
     hazards: [{ type: 'heat', heatRise: 11, heatFall: 4, heatBite: 55 }],
     optionalObjective: { id: 'low-heat', text: 'Reach the pad with engine heat under 45%', reward: { cores: 2 } },
-    enemyBudget: 5, fuelCells: 3,
+    enemyBudget: 5, enemySets: ['sentry-turret', 'mast-sniper'], fuelCells: 3,
   },
 ];
 
@@ -741,7 +741,7 @@ export const PLUTO_MISSIONS = [
     pads: [{ mult: 6, width: 64 }, { mult: 2, width: 132 }],
     hazards: [{ type: 'cold', coldRate: 2.5 }, { type: 'darkness', darkness: 0.86 }],
     optionalObjective: { id: 'quick', text: 'Cross and land in under a minute', reward: { cores: 2 } },
-    enemyBudget: 4, fuelCells: 3,
+    enemyBudget: 4, enemySets: ['sentry-turret', 'mast-sniper'], fuelCells: 3,
   },
 ];
 
@@ -792,7 +792,7 @@ export const VENUS_MISSIONS = [
       { type: 'downdraft', columns: [0.36, 0.72], downForce: 60 },
       { type: 'dust', period: 11, minVisibility: 0.42, duty: 0.55 }],
     optionalObjective: { id: 'low-acid', text: 'Land with corrosion under 50%', reward: { cores: 1 } },
-    enemyBudget: 5, fuelCells: 2,
+    enemyBudget: 5, enemySets: ['sentry-turret', 'mast-sniper'], fuelCells: 2,
   },
   {
     id: 'venus-5', planet: 'VENUS', index: 5, name: 'THE DESCENT',
@@ -812,7 +812,7 @@ export const VENUS_MISSIONS = [
       ] },
       { type: 'dust', period: 11, minVisibility: 0.34, duty: 0.6, squallChance: 0.35 }],
     optionalObjective: { id: 'perfect', text: 'Set down at PERFECT on the last pad in the system', reward: { cores: 3 } },
-    enemyBudget: 5, fuelCells: 3,
+    enemyBudget: 5, enemySets: ['sentry-turret', 'mast-sniper'], fuelCells: 3,
   },
 ];
 

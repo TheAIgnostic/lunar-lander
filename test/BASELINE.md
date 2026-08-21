@@ -2770,3 +2770,145 @@ has been able to report success while checking nothing.
 
 Every pre-existing physics case, the whole flight fixture, and every sweep — because all three name
 `pro`. Full suite green. The only content change is one more button on the settings screen.
+
+---
+
+## M29e — the Casemate, and the Mast Sniper (2026-08-21)
+
+Tom did not like the turret. Three redesigns were drawn at true game scale and he picked one as the
+new standard and promoted a second into a **new machine** — the first of the six roster designs the
+MVP deferred in M12.
+
+### The Sentry Turret is a casemate
+
+It was a four-point trapezoid, a 4 px line for a barrel and one dot: the one machine that never got
+the pass M16 gave the drone. It is a low sloped glacis with bolt heads, a heavy barrel in a mantlet,
+and the eye set back in an aperture slit.
+
+Drawing all three candidates at radius 16 on a terrain line — the size they are actually seen at — is
+what decided it. Detail is worth nothing at 32 px and outline is worth everything, and the wide low
+block with one unmistakable barrel was the one that still read as a gun. Nothing about `radius`,
+`range` or `aim` moved, so placement, the sanctuary rule and every measured figure are untouched.
+
+### The Mast Sniper
+
+Tom's brief: *"it should be a sniper, one shot one kill. no more than 1 per level, it should take
+longer to aim and then keep aim for some amount that players can avoid and take longer to reload.
+max 3 shots."* Every clause is a number:
+
+| clause | number |
+| --- | --- |
+| one shot one kill | `shot.lethal` |
+| no more than 1 per level | `maxPerMission: 1` |
+| longer to aim | `turnRate` 0.42 against the turret's 1.15 |
+| keep aim so players can avoid | `telegraph` 1.7 s, aim frozen (the M12 rule) |
+| longer to reload | `cooldown` 8.0 s against 3.0 |
+| max 3 shots | `ammo: 3`, per mission, never reloads |
+
+**Lethality is a flag, not a big number.** `damage: 999` would be a figure that silently stops being
+true the day a Hull L5 exists — the fault M24 and M28 each found in an assertion, moved into content.
+`ship.damage(..., { lethal: true })` costs the hit against whatever is actually in the way, hull plus
+a raised shield. It follows that **the Ray Shield does not save you from a sniper round**, which is a
+consequence worth Tom's eye rather than mine.
+
+Three things the field could not do before: finite ammo, a per-type placement cap, and lethal damage.
+
+### The finding: it was decorative, and range made it worse
+
+Measured before shipping, over 9 missions × 20 seeds — and the first version was a machine that did
+nothing at all:
+
+```
+substeps it could see the lander   0.5 s per flight
+locks                              0.13 per flight
+fired                              0.08 per flight   (8% of flights)
+rounds spent, of 3                 0.08
+```
+
+A lethal machine that never fires is not difficult, it is decorative — the M11 fault, where a system
+only ever read by a screen had never been shown to work. Loosening the aim did nothing (8% → 11%
+across every combination of `turnRate`, `aimTolerance` and `minRange`), because **aiming was never
+the problem: line of sight was.**
+
+**Raising `range` made it strictly worse, and that is the finding worth keeping:**
+
+| range | sees the lander | fires in |
+| ---: | ---: | ---: |
+| 760 | 0.5 s | 8% |
+| 1000 | 0.4 s | 5% |
+| 1300 | **0.0 s** | **0%** |
+
+The sanctuary bubble scales with `range`, so the further a machine reaches the further it is pushed
+from the one place the player reliably goes. **Reach is not vantage.**
+
+### The vantage rule
+
+A type may now demand line of sight to a share of the crossing it is meant to cover, sampled along
+the **deep half** at the altitude a lander actually flies. Asking for the whole crossing was both
+unplaceable (2 seeds in 180) and wrong — the near end is inside the sanctuary bubble by construction.
+
+| vantage | placed | sees | fires in | way home |
+| ---: | ---: | ---: | ---: | ---: |
+| 0.45 | 33/180 | 0.9 s | 8% | 154/180 |
+| 0.30 | 104/180 | 3.3 s | 30% | 152/180 |
+| **0.20** | **128/180** | **4.3 s** | **42%** | **150/180** |
+
+Read the last column: it threatens the **prize** route and costs the way home almost nothing, which
+is the shape a sniper should have.
+
+### Two placement faults it exposed
+
+**A type with a demanding rule burns the whole attempt budget.** The round-robin kept re-offering the
+sniper for the same slot, so campaign fill fell from 99% to 84–93% — M21's "a budget is what the map
+fields" broken by a machine that could not be seated. A `givenUp` set retires a type this map has
+proved it cannot seat, and the budget fills with turrets instead. Giving up rather than relaxing the
+rule is deliberate: a sniper with no line of sight is exactly the decorative machine the rule exists
+to prevent.
+
+| give up after | campaign fill | sniper present |
+| ---: | ---: | ---: |
+| 0.35 of tries | 93% | 71% |
+| 0.08 | 94% | 71% |
+| **0.05** | **95%** | **70%** |
+
+The decision was always made in the first few dozen attempts; everything after that was spent proving
+it again, at the cost of the machines that could have taken the slot.
+
+**A long-range machine crowds out the short-ranged ones.** The at-once rule counts overlapping
+engagement discs, so a big disc eats the budget. Range pays for itself twice, and 640 is where both
+constraints are satisfied:
+
+| range | campaign fill | fill on its own missions | present | fires (deep) |
+| ---: | ---: | ---: | ---: | ---: |
+| 760 | 95% | 84% | 70% | 41% |
+| **640** | **97%** | **91%** | **77%** | **33%** |
+| 560 | 97% | 90% | 73% | 18% |
+
+Still the longest reach in the game — the turret is 560.
+
+### Where it stands
+
+Nine missions of fifty: the last two of each of the five hardest bodies (Ganymede, Io, Mercury,
+Venus) plus `pluto-5`. **Deliberately not in any `eligibleEnemySets`** — since M29b deleted
+`generateChapter`, that field is only the default for a mission with no `enemySets` of its own, so
+putting a lethal machine there would hand one to every armed mission on the body, including a
+mission 2 and including `pluto-4`, a single-pad cave where M21 measured there is no route around a
+machine at all.
+
+### What did not move
+
+**Both fixtures byte-identical** — the fixtures fly with enemies off, which is the M12 rule that
+keeps a terrain regression from becoming a combat regression. **Sanctuary 20/20 on all 40 armed
+missions.** At-once distribution 0: 62.8% · 1: 26.1% · 2: 9.7% · 3: 1.4% · 4: 0.1%, against
+62.3/26.1/10.1/1.5/0.1 before. Campaign fill 97%.
+
+### Left for Tom
+
+- **The Ray Shield does not stop a sniper round.** That follows from "one shot one kill" taken
+  literally. Making the shield absorb one — and be destroyed doing it — is the obvious alternative
+  and is a design call, not a fix.
+- **It is absent on about one seed in four**, on maps with no vantage. Left alone deliberately, but
+  it does mean the machine is a surprise rather than a fixture.
+- **The instrument cannot judge whether it feels like a sniper.** 33% engagement on the deep route is
+  measured by a pilot with no evasive logic that never loiters. A human lining up a landing is far
+  more exposed than that number suggests.

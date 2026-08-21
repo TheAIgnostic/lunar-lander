@@ -910,6 +910,32 @@ scheduled until the MVP is stable — the spec says the same.
   - `settings-tests.js` asserts the two menu buttons are offered **on the same terms as each other**,
     so the next divergence fails a test rather than waiting for someone to go looking
 
+- [x] **M29e — the Casemate, and the Mast Sniper** (this commit)
+  - Tom did not like the turret. Three redesigns drawn at **true game scale**; he took one as the new
+    standard and promoted a second into a new machine - the first of the six roster designs M12 deferred
+  - **the Sentry Turret is a casemate**: sloped glacis, bolt heads, a heavy barrel in a mantlet, the
+    eye in an aperture slit. Drawing all three at radius 16 on a terrain line is what decided it -
+    detail is worth nothing at 32 px and outline is worth everything. No change to radius, range or aim
+  - **the Mast Sniper**, one number per clause of Tom's brief: `shot.lethal`, `maxPerMission: 1`,
+    `turnRate` 0.42 against the turret's 1.15, `telegraph` 1.7 s with the aim frozen, `cooldown` 8 s,
+    and `ammo: 3` that never reloads. Lethality is a **flag, not a big number** - `damage: 999` is a
+    figure that stops being true the day a Hull L5 exists, which is the M24/M28 fault moved into content
+  - **the first version was decorative and the measurement said so**: it could see the lander for
+    0.5 s in a whole flight and fired on 8% of them. The M11 fault - a system never shown to work
+  - **raising `range` made it worse**, which is the finding: 760 -> 1300 took visibility 0.5 s -> 0.0 s,
+    because the sanctuary bubble scales with range and pushes a long reach away from where the player
+    goes. **Reach is not vantage.** A `vantage` rule now requires line of sight to a share of the
+    deep half of the crossing; at 0.20 it sees the lander 4.3 s and fires on 42% of deep runs while
+    costing the way home 1 landing in 180
+  - two placement faults it exposed: a type with a demanding rule **burned the whole attempt budget**
+    and took campaign fill from 99% to 84-93% (a `givenUp` set retires a type the map cannot seat, and
+    the budget fills with turrets); and a **long-range machine crowds out short-ranged ones** through
+    the at-once rule, which is why range is 640 and not 760
+  - nine missions of fifty, the last two of each of the five hardest bodies. **Deliberately not in any
+    `eligibleEnemySets`** - since M29b that field is only a default, so it would have handed one to
+    every armed mission including `pluto-4`, the single-pad cave with no route around a machine
+  - **both fixtures byte-identical**, sanctuary 20/20 on all 40 armed missions, campaign fill 97%
+
 
 ## Decisions (Tom, 2026-08-16)
 

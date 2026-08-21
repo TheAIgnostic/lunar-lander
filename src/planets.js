@@ -34,6 +34,15 @@ const P = (o) => ({
 });
 
 // Which machines a body can be given, following the distribution in section 12.
+//
+// **The Mast Sniper is deliberately not in any of these lists.** Since M29b
+// deleted `generateChapter`, `eligibleEnemySets` is only the *default* for a
+// mission that does not declare its own `enemySets` - so putting a lethal
+// machine here would quietly hand one to every armed mission on the body,
+// including a mission 2 and including `pluto-4`, a single-pad cave where M21
+// measured that there is no route around a machine at all. It is named per
+// mission instead, on the last two missions of the last five bodies, which is
+// what "harder levels" means as data.
 // Only the two designs M12 implements appear here; the other six roster entries
 // join the list they belong to when they exist, and nothing else has to change.
 
