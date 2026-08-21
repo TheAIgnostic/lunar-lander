@@ -1967,3 +1967,173 @@ has got, not what the run is.
 shape, the screens, a generated pad floor and a debug hook. The crossing measurement is unchanged at
 167/240 (70%), the sanctuary holds 20/20 everywhere, and the encounter audit reports the same
 distribution it did at M24.
+
+---
+
+## M28 — the material re-cut and the economy (2026-08-21)
+
+The brief had four items and an instruction: **do the floor check first, before tuning anything.**
+Doing it in that order was the whole milestone — two of the four items turned out to be based on
+figures that were no longer true, and the floor check found something none of them had named.
+
+### The floor check: M13's anti-frustration floor had not paid out since M24
+
+`DEBRIEF` guarantees that a failed run still transmits 60 salvage and 40 research, so it "always ends
+with a decision". M24 made death empty `meta.banked`. The two met:
+
+```
+settleHaul on an empty haul pays      60 salvage / 40 data
+after bankRun, meta.banked reads      60 salvage / 40 data
+after wipeForDeath, meta.banked reads  0 salvage /  0 data
+```
+
+The floor was banked and then zeroed **on the next line**. Every run that ended in a loss had ended
+with nothing since M24 — and M27 made that far worse by removing replay, because this is now the
+only income a run that dies early can leave behind.
+
+The order is the fix: `wipeForDeath(meta, { debrief })` wipes and then credits, so "what a death
+costs" stays the answer of one function. Proved at runtime by throwing all three landers away on
+moon-1 — the worst run the game allows, zero missions cleared:
+
+| | before | after |
+| --- | ---: | ---: |
+| banked after the run is lost | 0 / 0 | **60 salvage / 40 research** |
+| skill ranks affordable next run | 0 | **1** |
+
+### Two of the brief's four items were already true
+
+**The payout is not an order of magnitude short.** `docs/PROGRESSION.md` said a perfect Moon chapter
+pays 300 against a 320 cheapest upgrade and so "buys nothing". Measured across three play profiles —
+sloppy is the near pad with mixed grades and no ore, clean is the deep pad every time:
+
+| body | sloppy | normal | clean |
+| --- | ---: | ---: | ---: |
+| Moon / Mars | 300 | 435 | 563 |
+| Europa | 361 | 496 | 603 |
+| every survey body | 314 | 469 | 711 |
+
+The cheapest rung is **260**, not 320 — the doc compared against Landing Gear rather than the
+cheapest thing on the board. **Every profile on every body clears it**, including the sloppy one,
+which is the figure from Tom's own playtest. Nothing was inflated; the number was already right and
+the record was stale.
+
+**Hull L2 already buys the third shot.** The doc said "capped at L2 (+12%), 112 hull still dies in
+two". It does not: 112 − 50 − 50 = 12, alive, and the third shot kills.
+
+| hull | max | dies on hit |
+| --- | ---: | ---: |
+| L1 stock | 100 | **2** |
+| L2 | 112 | **3** |
+| L3 / L4 | 125 / 140 | 3 |
+
+`enemies-tests.js` was asserting this against `Math.ceil(150 / damage)`, and **150 is not a hull any
+level produces** — the track runs 100/112/125/140. It encoded a figure rather than the property, the
+same fault M24 found in two other assertions in that same file, and it is where the doc's wrong claim
+came from. Rewritten to derive the hull from the component table and assert what matters: *the
+cheapest hull the player can buy must buy a third shot.* No game change was needed.
+
+### The real blocker was material scale, and no item had named it
+
+Every rung costs salvage plus a body-specific material. Materials are **wiped on death** like every
+other banked resource, and each body is visited **once per run**. So a rung is only ever buyable if
+one visit can produce its whole material cost. Measured yield per body, per run:
+
+| | sweeping every deposit | clean run | normal run | sloppy run |
+| --- | ---: | ---: | ---: | ---: |
+| material from one body | ~470 | **~90** | **~50** | **~25** |
+
+The theoretical ceiling is irrelevant: the encounter audit lands a full sweep **33 times in 300**.
+Against the realistic 50–90, the old costs:
+
+| rung | wanted | one visit yields |
+| --- | ---: | ---: |
+| Landing gear L4 | 160 Ilmenite | 90 |
+| Engine & tanks L4 | 140 Iron-oxide | 90 |
+| Hull L4 | 130 Sulfur-resistant | 107 |
+| Attitude thrusters L4 | 120 Hydrocarbon | 107 |
+| Sensors L4 | 120 Magnetite | 107 |
+
+**Every single L4 was unbuyable in one run**, and since materials do not survive a death there is no
+second run to save up in. The only path to an L4 was to clear all ten bodies — which banks rather
+than wipes — and then play again, the rarest outcome in the game. Worse at the track level: the whole
+Landing Gear track wanted 40 + 90 + 160 = **290 Ilmenite** out of a single Moon visit.
+
+### The re-cut
+
+Two rules, both now asserted in `components-tests.js` against `PLANET_ORDER` rather than against a
+list of bodies, so a change to the ladder fails there rather than quietly nailing a track shut again.
+
+**Ordering** — every track's L2 from bodies 1–3, L3 from 3–6, L4 from 6–10, Hull's L2 before Mars:
+
+| track | L2 | L3 | L4 |
+| --- | ---: | ---: | ---: |
+| Landing gear | body 1 | body 3 | body 6 |
+| Engine & tanks | body 1 | body 4 | body 8 |
+| Attitude thrusters | body 2 | body 3 | body 7 |
+| Hull | **body 3** | body 4 | body 10 |
+| Sensors | **body 2** | body 5 | body 9 |
+
+Hull L2 moved from Mars to Titan and Sensors L2 from Enceladus (body 5) to Europa. What is buyable at
+each supply stop:
+
+| after body | before | after |
+| --- | --- | --- |
+| 1 Moon | gear, engine, rcs | gear, engine |
+| 2 Europa | gear, engine, rcs | gear, engine, rcs, sensors |
+| **3 Titan** | gear, engine, rcs | **all five** |
+| 4 Mars | + hull | all five |
+| 5 Enceladus | all five | all five |
+
+**Scale** — no rung asks for more of one material than a normal run's visit produces. Every cost is
+now 25–50, against a normal yield of ~50 and a clean one of ~90. Salvage prices are untouched, since
+the measurement said they were already right.
+
+What one run leaves behind, permanently — the number the whole ladder model rests on:
+
+| dies after | upgrades bought, before | after |
+| --- | ---: | ---: |
+| body 1 | 1 | 1 |
+| body 2 | 3 | 3 |
+| body 3 | 4 | **5** |
+| body 5 | 7 | **7** |
+| all ten | 8 | **10** of 15 |
+
+### A recommended tier, printed where it can still be acted on
+
+Nothing told the player what the next body expected them to be flying, which is what kept upgrades
+feeling optional. `RECOMMENDED_TIER` is a count of upgrade levels fitted above stock, by ladder
+position, and it is printed at the supply stop — the only screen where the hangar is open, the
+salvage is banked and the choice is still live.
+
+The figures are **measured, not aspirational**: they sit just under what one normal run can fund by
+that point. A recommendation the economy cannot pay for is worse than none, because it teaches the
+player to ignore it. Verified live at the first stop: *"Recommended lander for EUROPA — 1 upgrade
+fitted · you have 0 · 1 short"*, 661 salvage and 59 Ilmenite banked, gear L2 bought for 320 + 30, and
+the line flips to *"you have 1"*.
+
+### What this milestone deliberately did not do
+
+**Pad width and machine damage were not retuned against the recommended lander.** That half of the
+brief's third item is a difficulty change, and the open question since M24 — *is it hard or is it
+unfair?* — is still unanswered, because the only instrument here is an autopilot that does not dodge
+and cannot see the screen. Tuning difficulty against an economy that has itself just moved, with no
+human data on either, is the exact failure mode this project has recorded twice. It waits on a
+playtest.
+
+Also found and fixed: the run-lost screen still told the player *"A body you have already cleared can
+be re-flown to pay for the hangar"* — M25 copy that M27 made false.
+
+### What did not move
+
+**Both fixtures byte-identical.** Nothing here touches the simulation: it is costs, a settlement
+order, a printed recommendation and screen copy.
+
+### How to re-measure
+
+```bash
+node -e "Promise.all([import('./src/save.js'),import('./src/economy.js')]).then(([S,E])=>{const d=E.settleHaul(E.freshHaul(),{completed:false});console.log('debrief through the wipe:',S.wipeForDeath(S.defaultMeta(),{debrief:d.debrief}).banked);});"
+```
+
+```bash
+node -e "Promise.all([import('./src/components.js'),import('./src/planets.js'),import('./src/route.js')]).then(([C,P,R])=>{const pos={};R.PLANET_ORDER.forEach((id,i)=>{pos[P.PLANETS[id].rareMaterial]=i+1;});for(const id of C.COMPONENT_IDS){const t=C.COMPONENTS[id];console.log(t.name.padEnd(20)+t.levels.slice(1).map(l=>'body '+Math.max(...Object.keys(l.cost.materials||{}).map(m=>pos[m]||99))).join('  '));}});"
+```

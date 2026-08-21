@@ -26,7 +26,7 @@ Everything under `src/` is a plain ES module, loaded directly in the browser and
 | `src/save.js` | versioned MetaSave + RunState, legacy migration, corruption recovery | M8 |
 | `src/economy.js` | rewards, the carried haul, what a deposit is worth, the transmitted/cargo split, settlement and banking | M9/M15 |
 | `src/route.js` | the ten-body ladder, the next-body card, the progress trail, checkpoint rule | M9/M27 |
-| `src/components.js` | 5 component tracks, `deriveLoadout` / `deriveFull`, purchase rules | M10/M11 |
+| `src/components.js` | 5 component tracks, `deriveLoadout` / `deriveFull`, purchase rules, the recommended tier | M10/M11/M28 |
 | `src/skills.js` | 3 skill trees, `deriveSkills`, purchase and gating rules | M11 |
 | `src/modules.js` | 5 active + 4 passive modules, blueprint guarantee list | M11/M12 |
 | `src/enemies.js` | enemy roster, placement around the prize, telegraphs, projectiles, damage, rewards | M12/M14 |
@@ -199,8 +199,21 @@ is set only by carrying an expedition through all ten bodies.
 **And since M27 that decision has no safety net.** Removing replay removed the only way to recover
 from a bad run: income is bounded by how far the player gets, and a player stuck at body 3 cannot
 grind their way out. Every run has to leave them measurably stronger than the last or the loop
-deadlocks. M13's anti-frustration debrief is the existing hook, and verifying that floor is the
-first thing M28 does — before any number is tuned.
+deadlocks. Three rules hold that floor up, and M28 had to repair two of them:
+
+- **The debrief is paid through the wipe.** `wipeForDeath(meta, { debrief })` clears the pot and
+  *then* credits M13's 60/40 floor. It used to be banked before the wipe and zeroed by it, so from
+  M24 until M28 a lost run left literally nothing. The order is the mechanism — put a credit before
+  the wipe and it disappears.
+- **No rung may cost more of one material than a single visit yields.** Materials are wiped on death
+  and each body is visited once per run, so a cost above ~50 is a rung nobody can ever buy. Every L4
+  used to be one. Asserted in `components-tests.js`, along with the gate windows (L2 from bodies
+  1–3, L3 from 3–6, L4 from 6–10) — both stated against `PLANET_ORDER`, so re-ordering the ladder
+  fails a test rather than quietly nailing a track shut.
+- **`RECOMMENDED_TIER` says what the next body expects you to be flying**, printed at the supply stop
+  where the hangar is open and the choice is still live. The figures sit just under what one normal
+  run can fund by that point: a recommendation the economy cannot pay for teaches the player to
+  ignore it.
 
 **God mode is a test switch with a deliberately narrow blast radius.** Settings → GOD MODE grants
 **resources and a starting position**, and nothing else: 999,999 of every currency, every material

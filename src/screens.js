@@ -8,7 +8,7 @@
 import * as Log from './gamelog.js';
 import * as R from './render.js';
 import * as Save from './save.js';
-import { COMPONENTS, COMPONENT_IDS, purchaseCheck } from './components.js';
+import { COMPONENTS, COMPONENT_IDS, purchaseCheck, tierCheck } from './components.js';
 import { describeThreats } from './enemies.js';
 import { ACTIONS, keyLabel } from './input.js';
 import { LANDING, capsFor } from './landing.js';
@@ -580,6 +580,10 @@ export function screenHTML(s) {
         : `<tr><td>Transmitted salvage</td><td>${formatScore(h.salvageSafe)}</td></tr>
            <tr><td>Physical cargo (at risk until the next checkpoint)</td><td>${formatScore(h.salvageCargo)}</td></tr>
            <tr><td>Research data</td><td>${formatScore(h.data)}</td></tr>`;
+      // What the next body expects you to be flying (M28). Printed here because
+      // this is the only screen where it can still be acted on - the hangar is
+      // open, the salvage is banked, and the choice is spend or press on.
+      const tier = tierCheck(cleared.length + 1, meta.componentLevels);
       const full = g.lives >= run.maxShuttles;
       return `<div class="screen wide">
         <div class="eyebrow" style="color:#4dff9f">${cleared.length} OF ${PLANET_ORDER.length} BODIES CLEARED${checkpoint ? ' · SUPPLY STOP' : ''}</div>
@@ -590,6 +594,8 @@ export function screenHTML(s) {
         ${ladderHTML(cleared)}
         <table class="score">
           ${rows}
+          <tr${tier.ready ? '' : ' class="run"'}><td>Recommended lander for ${offers.length ? offers[0].name : 'the next body'}</td>
+            <td>${tier.want} upgrade${tier.want === 1 ? '' : 's'} fitted · you have ${tier.have}${tier.ready ? '' : ` · <b>${tier.short} short</b>`}</td></tr>
           <tr class="tot"><td>SHUTTLES</td><td>${g.lives} / ${run.maxShuttles}${full ? '' : ' · one back per body cleared'}</td></tr>
         </table>
         <div class="grid routes centred">${cards}</div>
@@ -624,6 +630,9 @@ export function screenHTML(s) {
       const kept = Object.entries(meta.componentLevels || {})
         .filter(([, lvl]) => lvl > 1)
         .map(([id, lvl]) => `${COMPONENTS[id] ? COMPONENTS[id].name : id} ${lvl}`);
+      // M13's floor, which M28 reconnected: paid *through* the wipe, so it is
+      // the one number on this screen that is still in the player's pocket.
+      const debrief = (g.lastRunSummary && g.lastRunSummary.settled && g.lastRunSummary.settled.debrief) || null;
       return `<div class="screen">
         <div class="verdict bad">EXPEDITION LOST</div>
         <p class="body">All three shuttles are gone. The skills, the salvage and the research go
@@ -634,9 +643,13 @@ export function screenHTML(s) {
           <tr><td>Run score</td><td>${formatScore(g.score)}</td></tr>
           <tr class="tot"><td>KEPT — HANGAR</td><td>${kept.length ? kept.join(' · ') : 'nothing fitted yet'}</td></tr>
           <tr class="run"><td>LOST — SALVAGE &amp; RESEARCH</td><td>everything unspent</td></tr>
+          ${debrief ? `<tr><td>FINAL DEBRIEF — transmitted anyway</td><td>${formatScore(debrief.salvage)} salvage · ${formatScore(debrief.data)} research</td></tr>` : ''}
         </table>
-        <p class="body">Next time out, spend it at a supply stop rather than carrying it. A body you
-        have already cleared can be re-flown to pay for the hangar.</p>
+        <p class="body">${debrief
+          ? 'The survey office pays for the wreck. It is not much, but it is enough to start the next run with a decision rather than an empty hangar.'
+          : 'You brought back more than the office would have paid for a failure, so there is no debrief on top.'}
+        There is no going back to a cleared body for more — spend it at a supply stop, or lose it
+        the way this run just did.</p>
         <div class="btns">${btn('menu', 'BACK TO START', true, 'SPACE')}</div>
       </div>`;
     }

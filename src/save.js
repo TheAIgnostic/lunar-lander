@@ -273,11 +273,24 @@ export function bankRun(meta, run, { completed, settled, id = 'final' }) {
  * keep anything, and it costs you the loadout you would otherwise have carried
  * into the next sector. Stats and settings are the player's record and their
  * accessibility choices; neither is progress, so neither is taken.
+ *
+ * **`debrief` is paid on the way out**, and it has to be paid here rather than
+ * before, which is the M28 fix. M13's anti-frustration floor guarantees that a
+ * failed run still transmits enough to buy something, so it "always ends with a
+ * decision". M24 then made death empty `meta.banked`. The two met and nobody
+ * noticed: the floor was banked and then zeroed on the next line, so it had not
+ * paid out since. Wiping and then crediting is the order that makes it real,
+ * and it keeps "what a death costs" the answer of one function.
  */
-export function wipeForDeath(meta) {
+export function wipeForDeath(meta, { debrief = null } = {}) {
   const m = coerceMeta(meta);
   m.purchasedSkills = {};
-  m.banked = { salvage: 0, data: 0, cores: 0, materials: {} };
+  m.banked = {
+    salvage: (debrief && debrief.salvage) || 0,
+    data: (debrief && debrief.data) || 0,
+    cores: 0,
+    materials: {},
+  };
   m.clearedChapters = [];
   m.discoveredPlanets = ['LUNA'];
   return m;

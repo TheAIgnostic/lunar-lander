@@ -1,10 +1,10 @@
 // Save, migration and corruption tests:  node test/save-tests.js
 import {
   SAVE_VERSION, KEYS, defaultMeta, migrateLegacy, loadMeta, saveMeta,
-  newRun, loadRun, saveRun, clearRun, bankRun, resetAll,
+  newRun, loadRun, saveRun, clearRun, bankRun, resetAll, wipeForDeath,
 } from '../src/save.js';
-import { settleHaul } from '../src/economy.js';
-import { purchase } from '../src/components.js';
+import { settleHaul, freshHaul } from '../src/economy.js';
+import { purchase, COMPONENTS } from '../src/components.js';
 
 let pass = 0, fail = 0;
 const check = (name, cond, extra = '') => {
@@ -250,7 +250,11 @@ console.log('save, migration and recovery');
   const stages = ['flight', 'result', 'hangar', 'purchase', 'route'];
   let meta = defaultMeta();
   meta.banked.salvage = 1000;
-  meta.banked.materials['Ilmenite alloy stock'] = 100;
+  // Stock whatever the upgrade under test actually asks for. Naming a material
+  // here made this test a hostage to the cost tables, and M28's re-cut moved
+  // the one it named onto a different body.
+  const rcsCost = COMPONENTS.rcs.levels[1].cost;
+  for (const [m, n] of Object.entries(rcsCost.materials)) meta.banked.materials[m] = n + 60;
   let ok = true;
   for (const stage of stages) {
     const run = newRun('moon', 1234);
@@ -272,8 +276,48 @@ console.log('save, migration and recovery');
     if (reloadedMeta.componentLevels.rcs !== meta.componentLevels.rcs) ok = false;
   }
   check('quitting at any stage reloads to the same place', ok);
-  check('a completed purchase is deducted exactly once', meta.banked.salvage === 1000 - 260, String(meta.banked.salvage));
+  check('a completed purchase is deducted exactly once',
+    meta.banked.salvage === 1000 - rcsCost.salvage, String(meta.banked.salvage));
   check('the bought level stuck', meta.componentLevels.rcs === 2);
+}
+
+// --- M28: the anti-frustration floor actually reaches the player
+//
+// M13 built `DEBRIEF` so "a run that ends badly still ends with a decision".
+// M24 then made death empty `meta.banked`. The two met and nobody noticed: the
+// floor was banked by `bankRun` and zeroed by `wipeForDeath` on the next line,
+// so it had not paid out since. M27 made it matter more by removing replay -
+// this is now the only income a run that dies early leaves behind.
+//
+// The order is the fix, so the order is what these assert.
+{
+  const settled = settleHaul(freshHaul(), { completed: false });
+  check('a failed run still files a debrief', settled.debrief !== null);
+
+  let meta = defaultMeta();
+  meta = bankRun(meta, { banked: [], sector: 1, visited: [], score: 0 },
+    { completed: false, settled, id: 'final' });
+  check('banking it before the wipe is not enough', meta.banked.salvage > 0);
+  check('...because the wipe takes it', wipeForDeath(meta).banked.salvage === 0);
+
+  const paid = wipeForDeath(meta, { debrief: settled.debrief });
+  check('paying it through the wipe is what reaches the player',
+    paid.banked.salvage === settled.debrief.salvage && paid.banked.data === settled.debrief.data,
+    `${paid.banked.salvage}/${paid.banked.data}`);
+  check('the debrief still leaves the player able to buy something',
+    paid.banked.data >= 40, String(paid.banked.data));
+  check('death still takes everything else',
+    Object.keys(paid.purchasedSkills).length === 0 && paid.banked.cores === 0
+    && Object.keys(paid.banked.materials).length === 0);
+  check('and still keeps what the hangar built',
+    JSON.stringify(paid.componentLevels) === JSON.stringify(meta.componentLevels));
+
+  // A run that did well is not topped up - the floor is a floor, not a subsidy.
+  const rich = settleHaul({ salvageSafe: 400, salvageCargo: 400, data: 200, cores: 2, materials: {} },
+    { completed: false });
+  check('a good run gets no debrief', rich.debrief === null);
+  check('and a good run still loses its banked salvage on death',
+    wipeForDeath(defaultMeta(), { debrief: rich.debrief }).banked.salvage === 0);
 }
 
 // --- god mode is a test switch, and must behave like one

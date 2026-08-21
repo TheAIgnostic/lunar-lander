@@ -8,7 +8,7 @@ import { Ship } from '../src/ship.js';
 import { spawnFor } from '../src/spawn.js';
 import { MOON_LEVELS, MARS_LEVELS, EUROPA_LEVELS } from '../src/missions.js';
 import { deriveSkills } from '../src/skills.js';
-import { deriveFull } from '../src/components.js';
+import { deriveFull, deriveLoadout } from '../src/components.js';
 import { derivePassive } from '../src/modules.js';
 
 let pass = 0, fail = 0;
@@ -54,8 +54,23 @@ for (const id of ENEMY_IDS) {
   }
   // ...and the hull track has to be worth buying, so an upgraded hull survives
   // a third. This is the consumer that stops "2 shots" becoming "always 2".
-  const upgraded = Math.ceil(150 / ENEMY_TYPES['sentry-turret'].shot.damage);
-  check('a hull upgrade buys a third shot', upgraded >= 3, `${upgraded} shots`);
+  //
+  // **This used to read `Math.ceil(150 / damage)`**, and 150 is not a hull any
+  // level produces: the track runs 100 / 112 / 125 / 140. It encoded a figure
+  // instead of the property, exactly the fault M24 found in two other
+  // assertions here, and it sent `docs/PROGRESSION.md` off with the claim that
+  // "112 hull still dies in two" - which is false, 112 survives two and dies on
+  // the third. M28 measured it and rewrote the check around the thing that
+  // actually matters: **the cheapest hull the player can buy must buy a third
+  // shot**, derived from the real component table.
+  const hullShots = (level) => {
+    const hullMax = Math.round(100 * (deriveLoadout({ hull: level }).hullMax || 1));
+    return Math.ceil(hullMax / ENEMY_TYPES['sentry-turret'].shot.damage);
+  };
+  check('a stock hull dies in two', hullShots(1) === 2, `${hullShots(1)} shots`);
+  check('the cheapest hull upgrade buys a third shot', hullShots(2) >= 3, `L2 = ${hullShots(2)} shots`);
+  check('and every level above it keeps that',
+    [3, 4].every((l) => hullShots(l) >= 3), [3, 4].map(hullShots).join('/'));
 }
 
 // --- placement is deterministic, and obeys every fairness rule

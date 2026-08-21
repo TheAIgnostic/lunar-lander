@@ -781,7 +781,15 @@ function onCrash() {
       // hangar built survives, which is the whole of the trade.
       g.lastRunSummary.wiped = true;
       Log.log('run-lost', { sector: g.run.sector, missions: g.run.missionsCleared, chapters: g.run.chaptersCleared });
-      setMeta(Save.wipeForDeath(meta));
+      // **The debrief is paid on the way out, after the wipe.** M13 built it as
+      // the anti-frustration floor - "a run that ends badly still ends with a
+      // decision" - and M24 made death empty `meta.banked`. The two met and
+      // nobody noticed: the floor was banked and then zeroed on the next line.
+      // Measured at the top of M28: banked 60/40, then 0/0. It has not paid out
+      // since M24, and M27 removed replay, so it is now the *only* income a run
+      // that dies early leaves behind.
+      setMeta(Save.wipeForDeath(meta, { debrief: settled.debrief }));
+      if (settled.debrief) Log.log('debrief', { salvage: settled.debrief.salvage, data: settled.debrief.data });
       Save.saveMeta(meta);
       Save.clearRun();
       g.run = null;

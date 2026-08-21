@@ -713,6 +713,43 @@ scheduled until the MVP is stable — the spec says the same.
     Moon with the hangar intact, and Venus clearing to `expedition-complete`
 
 
+- [x] **M28 — the material re-cut and the economy** (this commit)
+  - the brief said *do the floor check first, before tuning anything*, and doing it in that order was
+    the milestone: **two of its four items were based on figures that were no longer true**, and the
+    floor check found the thing none of them had named
+  - **M13's anti-frustration floor had not paid out since M24.** `settleHaul` computes 60/40 for a
+    failed run, `bankRun` puts it in `meta.banked`, and `wipeForDeath` zeroed that pot on the very
+    next line. M27 made it critical by removing replay - it is the only income a run that dies early
+    leaves behind. `wipeForDeath(meta, { debrief })` wipes *then* credits. Proved by throwing all
+    three landers away on moon-1: 0/0 before, **60 salvage / 40 research** after, worth one skill rank
+  - **the payout was already fine.** Measured across three profiles: sloppy 300-361, normal 435-496,
+    clean 563-711, against a cheapest rung of **260**. `docs/PROGRESSION.md` compared against Landing
+    Gear at 320 rather than the cheapest thing on the board. Nothing was inflated
+  - **Hull L2 already buys the third shot** - 112 survives two hits and dies on the third. The doc
+    said it "still dies in two" because `enemies-tests.js` asserted against `Math.ceil(150/damage)`,
+    and **150 is no hull any level produces** (100/112/125/140). The M24 fault again: a test encoding
+    a figure instead of a property. Rewritten around the property; no game change needed
+  - **the real blocker was material scale, and no item had named it.** Materials wipe on death and
+    each body is visited once per run, so a rung is only buyable if one visit funds its whole cost.
+    One visit yields ~50 normal / ~90 clean (the ~470 sweep-everything ceiling is reached 33 times in
+    300). **Every L4 wanted 120-160 of one material** - all five unbuyable in one run, and the whole
+    Landing Gear track wanted 290 Ilmenite out of a single Moon visit
+  - **the re-cut**: ordering into the windows (Hull L2 Mars -> Titan, Sensors L2 body 5 -> body 2, so
+    all five tracks are buyable by body 3 instead of body 5) and scale (every cost now 25-50). Salvage
+    prices untouched. A run that dies at body 3 now leaves 5 upgrades rather than 4; a full ladder
+    leaves 10 of 15 rather than 8
+  - **a recommended tier per body**, printed at the supply stop where the hangar is open and the
+    choice is still live. Measured, not aspirational - just under what one normal run can fund by
+    that point, because a recommendation the economy cannot pay for teaches the player to ignore it
+  - **deliberately not done: pad width and machine damage were not retuned** against that lander.
+    That is a difficulty change, and *is it hard or is it unfair?* has been unanswered since M24.
+    Tuning difficulty against an economy that has just moved, with no human data on either, is the
+    exact failure mode recorded twice in this file
+  - also fixed: the run-lost screen still said *"A body you have already cleared can be re-flown to
+    pay for the hangar"* - M25 copy that M27 made false
+  - **both fixtures byte-identical**, full suite green
+
+
 ## Decisions (Tom, 2026-08-16)
 
 1. **Gravity** — compressed mapping is the *baseline*, then a per-body hand-tuned offset so each
@@ -730,12 +767,23 @@ None.
 
 ## Next task
 
-**M28, the material re-cut and the economy.** M27 shipped the ladder; the audit behind both is
-`docs/PROGRESSION.md` and the measurements are the M27 section of `test/BASELINE.md`.
+**A human playtest, then M29.** M27 built the ladder and M28 made the economy under it work; both
+were built and measured by an autopilot that does not dodge and cannot see the screen, and everything
+still queued depends on answers only Tom can give.
 
-**The blocker is cleared.** All five hangar tracks reach L4 — Sensors could not be bought at all and
-three others were capped. What M27 did *not* do, and said it would not, is put those levels in a
-sensible order. That is M28, and it is now a table of numbers rather than a claim (below).
+**The three questions the code cannot answer**, all open since M24 and now more load-bearing:
+
+1. **Is it hard or is it unfair?** 70% unarmed crossings, Mars bottoming out at 0.05 visibility.
+2. **Does the ladder ramp?** M27 measured that the machine count barely moves and moves the *wrong*
+   way where it does — every survey body caps at 3 while the authored Moon fields 4 and Mars 5, and
+   **Enceladus at position 5 has no eligible enemy sets at all**.
+3. **Is Venus a wall or a brick?** 86/100 home and 36/100 on the prize route, geometry sound 100/100.
+
+**God mode exists for exactly this** (Settings → GOD MODE): jump to any body with the hangar filled,
+and the playtest log stamps its own header so a cheated run cannot be mistaken for a normal one.
+
+The one M28 item left open — tuning pad width and machine damage against the recommended lander —
+waits on question 1, and should not be attempted before it is answered.
 
 ### Tom's decisions (2026-08-20) — constraints, not options
 
@@ -765,38 +813,14 @@ four are in the M27 section of `test/BASELINE.md`.
 The trail assumption was taken as written — Tom asked to remove the replay **option**, not the
 display — so the cleared bodies are still on screen, as ten non-interactive rungs rather than cards.
 
-### M28 — the material re-cut and the economy
+### M28 — the material re-cut and the economy (done, this commit)
 
-**Do the floor check first, before tuning anything.** Removing replay removed the player's only
-recovery mechanism: income per run is now bounded by how far they get, and a player stuck at body 3
-cannot grind their way out. Every run must leave the player measurably stronger than the last or the
-loop deadlocks. M13's anti-frustration debrief is the existing hook — re-tune it, do not re-invent it.
+Shipped, with two of its four items closing as "already true, the record was stale" and one new
+blocker found by the floor check it insisted on doing first. See the M28 section of
+`test/BASELINE.md` for every figure.
 
-- **material re-cut**: every track's L2 from bodies 1-3, L3 from bodies 3-6, L4 from bodies 6-10, and
-  Hull's L2 earlier than Mars. Measured against the M27 ladder — three tracks already comply and two
-  do not:
-
-  | track | L2 | L3 | L4 |
-  | --- | ---: | ---: | ---: |
-  | Landing gear | body 1 | body 2 | body 4 |
-  | Engine & tanks | body 1 | body 4 | body 8 |
-  | Attitude thrusters | body 1 | body 3 | body 6 |
-  | **Hull** | **body 4** | **body 10** | **body 10** |
-  | **Sensors** | **body 5** | body 6 | body 9 |
-
-  Note this corrects the figure `docs/PROGRESSION.md` carried: Hull L4 needs Venus *and* Io, so it
-  gates on body 10 like L3 rather than on body 7. The out-of-order pair is gone; what is left is
-  worse and simpler — **Hull's top two levels are both unbuyable until the last body of the run**,
-  on the one track that answers M24's two-shot machines. A re-authoring pass over `components.js`,
-  not a formula
-- **payout scale**: a clean body clear should buy one meaningful upgrade and a sloppy one nearly.
-  Today a *perfect* Moon chapter pays 300 against a 320 cheapest upgrade, so it buys nothing
-- **a recommended tier per body**, printed at the supply stop, with pad width and machine damage tuned
-  against *that* lander rather than a stock one. This is the mechanism that makes upgrades the price
-  of entry; nothing currently tells the game what the player should be flying
-- **Hull answers the two-shot rule** — either it reaches L3 (+25%, which does buy the third shot), or
-  machine damage drops to ~45. `enemies-tests.js` currently asserts a third shot against a hull the
-  player cannot reach
+**One item is deliberately outstanding**: pad width and machine damage were not tuned against the
+recommended lander, because that is a difficulty change and the M24 question is still open.
 
 ### M29 — the survey bodies become content
 
@@ -892,14 +916,14 @@ that needs none of the conversation that produced this plan.
 
 ### Handover
 
-*Rewritten 2026-08-20, after the session that ran M27 — the ten-body ladder.*
+*Rewritten 2026-08-21, after the session that ran M27 (the ten-body ladder), god mode and M28.*
 
 **The first prompt for a new session:**
 
-> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then `docs/PROGRESSION.md`, then the M27
-> section of `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything. Then build
-> **M28 — the material re-cut and the economy**, which is specified under "Next task". Do the income
-> floor check first, before tuning anything.
+> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then `docs/PROGRESSION.md`, then the M27 and
+> M28 sections of `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything. Then ask
+> Tom for the playtest answers under "Next task" — three questions no test here can answer — and
+> build **M29** once they are in.
 
 That shape matters more than the wording: read the state, then *measure* the state, then build.
 Every milestone here that went well started from a number, and every one that went badly started
@@ -923,6 +947,14 @@ command tells you both that the game still works and what a player currently mee
 
 ### What this session did
 
+- **M28** — the economy under the ladder. The floor check found that M13's anti-frustration debrief
+  had not paid out since M24 (banked, then wiped on the next line); the material costs were re-cut
+  for both ordering and *scale*, because every L4 rung wanted more of one material than a single
+  visit can produce; and a recommended tier is printed at the supply stop. **Two of the brief's four
+  items closed as "already true, the record was stale"** — the payout clears the cheapest rung on
+  every profile, and Hull L2 already buys the third shot
+- **god mode** — a test switch in settings: any body startable, bottomless pot, stamped into the
+  playtest log header so a cheated run cannot be read as a normal one
 - **M27** — the ten-body ladder. `PLANET_ORDER` is all ten, difficulty-sorted; no replay; shuttles
   attrit; the hangar unblocked from four capped tracks (Sensors unbuyable) to **all five reaching
   L4**. Four faults found on the way, all in the M27 baseline section: a saturating route forecast,
@@ -950,6 +982,11 @@ command tells you both that the game still works and what a player currently mee
   and that 70% is a **floor** measured by a pilot that does not dodge — not what a person meets. And
   **no automated test in this project can measure the visibility change at all**, because the pilot
   flies on state rather than on what is drawn. Both fixtures stayed byte-identical through it.
+- **A document is an instrument too, and this one had drifted.** M28 opened with three figures from
+  `docs/PROGRESSION.md` — the payout is an order of magnitude short, Hull caps where 112 dies in two,
+  Hull L4 gates on Io — and **all three were wrong when re-measured**. Two of them had already sent
+  M27 and M28 briefs off in the wrong direction. The audit was honest when written; the code moved
+  under it. Re-measure the doc before building from it, exactly as you would re-measure the game.
 - **A debug hook reimplemented the rule it was meant to run, and drifted.** `__settleNow` decided
   the post-landing state itself, against `LEVELS.length` — the twelve *classic* missions — so on an
   expedition it skipped banking, the blueprint grants and the whole chapter-clear branch. A scripted
@@ -978,11 +1015,17 @@ command tells you both that the game still works and what a player currently mee
 - **A test can encode a decision rather than a property.** M24 replaced `telegraph >= 0.8` and
   `shot.speed < 400` — those were M12's *answer*, not its rule. The rule was the reaction window
   between lock and hit, and it is asserted as that now. If a test blocks a deliberate change, ask
-  which of the two it is before deleting it.
+  which of the two it is before deleting it. **M28 found three more**, one of which had escaped into
+  the documentation: `Math.ceil(150 / damage)` asserted "a hull upgrade buys a third shot" against
+  150, a hull no level produces, and `docs/PROGRESSION.md` built a recommendation on the wrong
+  conclusion. The other two hardcoded a material name and a price that the re-cut moved.
 
 ### Open with Tom
 
-- **M27 is done; M28 and M29 are planned and not started.** The plan is under "Next task".
+- **M27 and M28 are done; M29 is planned and not started.** The plan is under "Next task".
+- **The next move is Tom's, not the code's.** Three questions, all open since M24 and all listed
+  under "Next task": is it hard or unfair, does the ladder ramp, is Venus a wall or a brick. God mode
+  exists to make answering them quick.
 - **Two things M27 measured that are Tom's calls, not the code's.** The machine count barely moves
   down the ladder and moves the wrong way where it does — every survey body caps at 3 while the
   authored Moon fields 4 and Mars 5 — and **Enceladus, at position 5, has no eligible enemy sets at

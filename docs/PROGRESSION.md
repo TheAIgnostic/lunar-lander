@@ -7,11 +7,15 @@ Written because Tom lost the overview after M24–M26 changed the run shape thre
 the audit found a blocker that no test catches: **four of the five hangar tracks cannot be climbed
 at all on the three-body ladder M25 shipped.**
 
-> **Status, after M27 (2026-08-20): the blocker is cleared.** The ladder is ten bodies and all five
-> tracks reach L4 — Sensors could not be bought at all before. Everything below about *why* the
-> hangar was nailed shut is history now; everything about the economy, the material **ordering** and
-> the survey bodies is still live and is M28–M29. The sections that have been overtaken are marked.
-> The measured state of the ladder is the M27 section of `test/BASELINE.md`.
+> **Status, after M27 and M28 (2026-08-21): the hangar and the economy are both fixed.** The ladder
+> is ten bodies, all five tracks reach L4, the material costs are re-cut for order *and* scale, and
+> M13's anti-frustration floor pays out again. What is left is **content** (M29) and a human
+> playtest. The measured state is the M27 and M28 sections of `test/BASELINE.md`.
+>
+> **Three figures below were wrong when M28 re-measured them**, and two had already sent a brief off
+> in the wrong direction. They are corrected in place and marked. This document was honest when it
+> was written and the code moved under it — **re-measure it before building from it**, the same way
+> you would re-measure the game.
 
 **Re-measure before trusting any number here.** Every figure below is reproducible with the
 snippets in the last section.
@@ -114,14 +118,23 @@ after: landing gear, engine, thrusters, hull and sensors all reach **L4**. The g
 there to build this — survives intact, and the refusals now name a body the player is going to
 visit ("Needs 40 more Conductive ice salts", Europa, body 2).
 
-**Hull matters most here.** M24 set machine damage at exactly half a stock hull, and
-`test/enemies-tests.js` asserts that a hull upgrade buys a third shot. Capped at L2 (+12%), 112 hull
-still dies in two — so the assertion passes against a 150-hull figure the player cannot actually
-reach. Either the materials are re-cut, or the damage wants to be ~45.
+**Hull matters most here** — and the claim this document made about it was also wrong. It said that
+at L2 (+12%), "112 hull still dies in two". It does not: 112 − 50 − 50 = 12, alive, and the third
+shot kills. M28 measured every level:
 
-That is still true after M27, in a different shape: Hull is now buyable to L4, but **both of its top
-two levels gate on Venus, the last body of the run**. See the corrected table under "the material
-map", below.
+| hull | max | dies on hit |
+| --- | ---: | ---: |
+| L1 stock | 100 | **2** |
+| L2 | 112 | **3** |
+| L3 / L4 | 125 / 140 | 3 |
+
+The error came from `test/enemies-tests.js`, which asserted `Math.ceil(150 / damage)` — and **150 is
+not a hull any level produces**. A test encoding a figure rather than a property, the same fault M24
+found twice in that same file. The test now derives the hull from the component table. **No damage
+change was needed**, and the "either re-cut the materials or drop damage to ~45" choice was never a
+real one.
+
+What *was* true: Hull L2 gated on Mars. M28 moved it to Titan, body 3.
 
 ### Why it happened
 
@@ -137,7 +150,7 @@ Tom's position, recorded 2026-08-20: he did not intend to exclude the other bodi
 
 ---
 
-## The economy is an order of magnitude short
+## ~~The economy is an order of magnitude short~~ — WRONG, corrected by M28
 
 | | |
 | --- | ---: |
@@ -147,13 +160,40 @@ Tom's position, recorded 2026-08-20: he did not intend to exclude the other bodi
 | landing gear L2 | 320 salvage |
 | full hangar | 12,840 salvage ≈ **24 body clears** |
 
-**A perfect first chapter buys nothing.** That is the single worst number in the system, and it is
-what Tom hit in playtest. A whole three-body expedition funds roughly four level-2 upgrades, so the
-curve where a player accumulates enough to comfortably take the next body currently takes several
-complete runs to appear.
+**"A perfect first chapter buys nothing" was this document's headline claim and it is false.** The
+figures above are right; the conclusion drawn from them is not, because it compared the pay against
+**Landing Gear at 320 rather than the cheapest rung on the board at 260**. Tom's real 300-salvage
+Moon clear bought Attitude Thrusters L2 with change.
+
+M28 measured it properly, across three play profiles — sloppy is the near pad with mixed grades and
+no ore collected, clean is the deep pad every time:
+
+| body | sloppy | normal | clean |
+| --- | ---: | ---: | ---: |
+| Moon / Mars | **300** | 435 | 563 |
+| Europa | 361 | 496 | 603 |
+| every survey body | 314 | 469 | 711 |
+
+Every profile on every body clears the cheapest rung. **The payout was not changed**, because the
+measurement said it did not need to be. What *was* broken is below.
 
 Research is healthier — ~85 data per body against a 40–95 cheapest node, so about one skill per body
 — but skills are wiped on death, so it never compounds.
+
+### What actually was broken: the floor, and the material *scale*
+
+**M13's anti-frustration debrief had not paid out since M24.** It transmits 60 salvage and 40
+research on a failed run so that "a run that ends badly still ends with a decision" — and M24 made
+death empty `meta.banked`. The floor was banked by `bankRun` and zeroed by `wipeForDeath` on the next
+line. M27 made it critical by removing replay, since it is now the only income a run that dies early
+leaves behind. Fixed by paying it *through* the wipe.
+
+**And every L4 rung was unbuyable in one run.** Materials are wiped on death and each body is visited
+once per run, so a rung is only ever buyable if a single visit funds its whole material cost. One
+visit yields **~50 on a normal run and ~90 on a clean one** — the ~470 sweep-everything ceiling is
+reached 33 times in 300 by the encounter audit. Against that, gear L4 wanted 160 Ilmenite, engine L4
+140 Iron-oxide, hull L4 130 Sulfur-resistant. The whole Landing Gear track wanted **290 Ilmenite out
+of one Moon visit**. Every cost is 25–50 now.
 
 ---
 
@@ -221,30 +261,27 @@ on. Scheduled as M27.
 | 9 | Pluto | 3.12 | cold and darkness | survey |
 | 10 | Venus | **10.48** | the wall — dense drag, heaviest | survey |
 
-### The material map must be re-cut against it
+### The material map — re-cut by M28
 
-This is not automatic, and M27 did not do it — restoring the bodies made the materials reachable,
-but not well-ordered. **Measured against the shipped ladder**, the body each level first becomes
-buyable on:
+M27 made the materials reachable; M28 made them well-ordered. The rule was **every track's L2 from
+bodies 1–3, L3 from 3–6, L4 from 6–10, with Hull's L2 earlier than Mars**, and it now holds — asserted
+in `components-tests.js` against `PLANET_ORDER`, so a change to the ladder fails there rather than
+quietly nailing a track shut again.
 
-| track | L2 | L3 | L4 |
-| --- | ---: | ---: | ---: |
-| Landing gear | body 1 | body 2 | body 4 |
-| Engine & tanks | body 1 | body 4 | body 8 |
-| Attitude thrusters | body 1 | body 3 | body 6 |
-| **Hull** | **body 4** | **body 10** | **body 10** |
-| **Sensors** | **body 5** | body 6 | body 9 |
+| track | L2 | L3 | L4 | was |
+| --- | ---: | ---: | ---: | --- |
+| Landing gear | body 1 | body 3 | body 6 | 1 / 2 / 4 |
+| Engine & tanks | body 1 | body 4 | body 8 | 1 / 4 / 8 |
+| Attitude thrusters | body 2 | body 3 | body 7 | 1 / 3 / 6 |
+| **Hull** | **body 3** | body 4 | body 10 | **4 / 10 / 10** |
+| **Sensors** | **body 2** | body 5 | body 9 | **5 / 6 / 9** |
 
-**This corrects an error in the earlier draft of this document.** It said Hull L3 gates on Venus
-while L4 gates on Io (body 7), an impossible order. Hull L4 in fact needs Venus *and* Io, so it
-gates on body 10 like L3. The out-of-order pair does not exist; what does is worse and simpler —
-**Hull's top two levels are both unbuyable until the last body of the run**, on the one track that
-answers two-shot machines. The figure was read off the M25 three-body order, where the positions
-were different. Re-measure before trusting, including this document.
+All five tracks are buyable by **body 3**, where before Hull waited for Mars and Sensors for
+Enceladus at body 5. Costs were re-cut for *scale* as well as order — see the section above.
 
-The rule it needs, unchanged: **every track's L2 from bodies 1–3, L3 from bodies 3–6, L4 from bodies
-6–10**, with Hull's L2 pulled earlier than Mars. Three tracks already comply. A re-authoring pass
-over `components.js`, not a formula.
+*(An earlier draft of this section said Hull L3 gated on Venus while L4 gated on Io, an impossible
+order. Hull L4 needed Venus* and *Io, so both gated on body 10. That figure had been read off the M25
+three-body order. It is moot now, and it was the third wrong number this document handed to a brief.)*
 
 ---
 
@@ -290,7 +327,7 @@ placement. Without it this model does not work.
    effectively thirty lives. It wants **+1 per body cleared, capped at 3**, so losses accumulate down
    the ladder.
 
-### The risk this creates, and it is the big one
+### The risk this creates, and it is the big one — checked by M28
 
 **Removing replay removes the player's only recovery mechanism.** Under M25 a player short of salvage
 could re-fly a cleared body and grind their way to an upgrade. Without that, income per run is bounded
@@ -302,6 +339,15 @@ a floor: every run, however badly it goes, has to leave the player measurably st
 or the loop deadlocks. M13's anti-frustration debrief is the existing hook for this and should be
 re-tuned rather than re-invented. **Verify this before anything else in M28 is tuned.**
 
+**M28 did that check first, and the floor was not holding — it had never fired.** The debrief was
+banked and then zeroed by `wipeForDeath` on the next line, so since M24 a lost run had left exactly
+nothing. It pays through the wipe now: the worst run the game allows — three landers thrown away on
+moon-1, zero missions cleared — leaves 60 salvage and 40 research, worth one skill rank. A run that
+dies at body 3 leaves 5 permanent upgrades.
+
+The floor holds. What the guess got wrong was *which* number was broken: the payout scale was fine
+all along, and the two things that were not are the debrief and the material scale.
+
 ## Suggested order of work
 
 Ranked by how much each moves toward "upgrades are the price of entry". The first was blocking and is
@@ -312,15 +358,13 @@ Now scheduled as **M27–M29** in `ROADMAP_STATUS.md`. In short:
 1. ~~**Restore all ten bodies to the ladder** (M27).~~ **Done.** The materials became reachable by
    being on the route rather than by being repointed, all five tracks now reach L4, and the inverted
    ramp is fixed because the order is difficulty-sorted.
-2. **Re-cut the materials and the payout** (M28). With the bodies reachable the re-cut is about
-   *ordering* rather than unblocking: every track's L2 from bodies 1–3, L3 from 3–6, L4 from 6–10,
-   Hull's L2 earlier than Mars. Payout rescaled so a clean body clear buys one meaningful upgrade.
-3. **Give each body a recommended tier and print it at the supply stop** (M28). Tune pad width and
-   machine damage against *that* lander rather than a stock one. This is the mechanism that converts
-   "upgrades are nice" into "upgrades are required"; nothing currently tells the game what the player
-   is supposed to be flying.
-4. **Let Hull answer the two-shot rule** (M28) — either it reaches L3 (+25%, which does buy the third
-   shot), or machine damage drops to ~45.
+2. ~~**Re-cut the materials and the payout** (M28).~~ **Done** — ordering *and* scale. The payout
+   needed no change; the material costs did.
+3. ~~**Give each body a recommended tier and print it at the supply stop** (M28).~~ **Printed.** The
+   other half — tuning pad width and machine damage against that lander — is **deliberately still
+   open**, because it is a difficulty change and *is it hard or is it unfair?* is unanswered.
+4. ~~**Let Hull answer the two-shot rule** (M28).~~ **It always did.** Hull L2 buys the third shot;
+   the claim otherwise came from a test that encoded 150, a hull no level produces.
 5. **Make the seven survey bodies into content** (M29), held until the re-cut ladder has been played,
    because the balance will move.
 
