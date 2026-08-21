@@ -3,6 +3,7 @@
 import { clamp, DEG } from './util.js';
 import { LANDING, evaluateLanding, capsFor } from './landing.js';
 import { applyForces, freshStatus, freshEnv } from './forces.js';
+import { amountOf } from './input.js';
 
 export const SHIP = {
   thrust: 130,        // px/s^2 along the nose vector
@@ -292,16 +293,27 @@ export class Ship {
     if (this.hitFlash > 0) this.hitFlash = Math.max(0, this.hitFlash - dt);
     if (this.hullBurn > 0) this.hullBurn = Math.max(0, this.hullBurn - dt);
     const hasFuel = this.fuel > 0;
-    this.thrusting = input.thrust && hasFuel;
-    this.rcsLeft = input.left && hasFuel;
-    this.rcsRight = input.right && hasFuel;
-    this.holding = input.hold && hasFuel && Math.abs(this.spin) > 0.02;
+    // What the pilot is asking for, as a magnitude rather than a switch. A key
+    // answers 1 or 0; a trigger answers anything between. The flight model does
+    // not fork on which - it multiplies, and 1.0 multiplies to nothing.
+    const throttleIn = hasFuel ? amountOf(input, 'thrust') : 0;
+    const leftIn = hasFuel ? amountOf(input, 'left') : 0;
+    const rightIn = hasFuel ? amountOf(input, 'right') : 0;
+    // The three flags stay *booleans* derived from the magnitudes, because a
+    // dozen consumers read them - audio, particles, the HUD, thermal, the gear
+    // cue, the debug overlay - and not one of them wants a float.
+    this.thrusting = throttleIn > 0;
+    this.rcsLeft = leftIn > 0;
+    this.rcsRight = rightIn > 0;
+    this.holding = amountOf(input, 'hold') > 0 && hasFuel && Math.abs(this.spin) > 0.02;
     this.direct = settings.steering === 'direct';
 
+    // Partial throttle costs proportionally less. Holding attitude is a button
+    // and not an axis, so it costs what it always did.
     let burn = 0;
-    if (this.thrusting) burn += this.spec.burnMain;
-    if (this.rcsLeft) burn += this.direct ? this.spec.burnSide : this.spec.burnRcs;
-    if (this.rcsRight) burn += this.direct ? this.spec.burnSide : this.spec.burnRcs;
+    if (this.thrusting) burn += this.spec.burnMain * throttleIn;
+    if (this.rcsLeft) burn += (this.direct ? this.spec.burnSide : this.spec.burnRcs) * leftIn;
+    if (this.rcsRight) burn += (this.direct ? this.spec.burnSide : this.spec.burnRcs) * rightIn;
     if (this.holding && !this.direct) burn += this.spec.burnHold;
     this.fuel = Math.max(0, this.fuel - burn * dt);
 
@@ -316,8 +328,8 @@ export class Ship {
     if (this.direct) {
       // DIRECT mode: the side thrusters translate instead of rotating, and the
       // hull holds itself upright. Left means left, with no attitude to fly.
-      if (this.rcsLeft) this.vx -= sideAuth * dt;
-      if (this.rcsRight) this.vx += sideAuth * dt;
+      if (this.rcsLeft) this.vx -= sideAuth * leftIn * dt;
+      if (this.rcsRight) this.vx += sideAuth * rightIn * dt;
       this.spin *= Math.pow(0.86, dt * 60);
       this.angle += this.spin * dt;
       this.angle -= this.angle * Math.min(1, dt * 7);   // ease back to level
@@ -325,8 +337,8 @@ export class Ship {
     } else {
       // CLASSIC mode: side burners are attitude control.
       const dir = settings.invertRotation ? -1 : 1;
-      if (this.rcsLeft) this.spin -= rcsAuth * dir * dt;
-      if (this.rcsRight) this.spin += rcsAuth * dir * dt;
+      if (this.rcsLeft) this.spin -= rcsAuth * dir * leftIn * dt;
+      if (this.rcsRight) this.spin += rcsAuth * dir * rightIn * dt;
       if (this.holding) {
         const damp = Math.sign(this.spin) * Math.min(Math.abs(this.spin), 6 * dt);
         this.spin -= damp;
@@ -354,11 +366,10 @@ export class Ship {
     }
 
     // Linear
-    const throttleTarget = this.thrusting ? 1 : 0;
-    this.throttle += (throttleTarget - this.throttle) * Math.min(1, dt * 14);
+    this.throttle += (throttleIn - this.throttle) * Math.min(1, dt * 14);
     if (this.thrusting) {
-      this.vx += this.noseX * mainThrust * dt;
-      this.vy += this.noseY * mainThrust * dt;
+      this.vx += this.noseX * mainThrust * throttleIn * dt;
+      this.vy += this.noseY * mainThrust * throttleIn * dt;
     }
     this.vy += level.gravity * dt;
 
@@ -470,20 +481,25 @@ export class Ship {
       this.throttle *= Math.pow(0.02, dt);
     } else if (this.input) {
       const hasFuel = this.fuel > 0;
-      this.thrusting = this.input.thrust && hasFuel;
-      this.rcsLeft = this.input.left && hasFuel;
-      this.rcsRight = this.input.right && hasFuel;
+      const throttleIn = hasFuel ? amountOf(this.input, 'thrust') : 0;
+      const leftIn = hasFuel ? amountOf(this.input, 'left') : 0;
+      const rightIn = hasFuel ? amountOf(this.input, 'right') : 0;
+      this.thrusting = throttleIn > 0;
+      this.rcsLeft = leftIn > 0;
+      this.rcsRight = rightIn > 0;
       let burn = 0;
-      if (this.thrusting) burn += this.spec.burnMain;
-      if (this.rcsLeft || this.rcsRight) burn += this.spec.burnRcs;
+      if (this.thrusting) burn += this.spec.burnMain * throttleIn;
+      // One charge for the attitude thrusters however many are lit, which is
+      // what this line has always said; the harder-held of the two sets it.
+      if (this.rcsLeft || this.rcsRight) burn += this.spec.burnRcs * Math.max(leftIn, rightIn);
       this.fuel = Math.max(0, this.fuel - burn * dt);
-      this.throttle += ((this.thrusting ? 1 : 0) - this.throttle) * Math.min(1, dt * 14);
+      this.throttle += (throttleIn - this.throttle) * Math.min(1, dt * 14);
       if (this.thrusting) {
-        this.vx += this.noseX * this.spec.thrust * this.thermalDerate * dt;
-        this.vy += this.noseY * this.spec.thrust * this.thermalDerate * dt;
+        this.vx += this.noseX * this.spec.thrust * this.thermalDerate * throttleIn * dt;
+        this.vy += this.noseY * this.spec.thrust * this.thermalDerate * throttleIn * dt;
       }
-      if (this.rcsLeft) this.spin -= this.spec.rcsAccel * this.rcsStiffness * 0.5 * dt;
-      if (this.rcsRight) this.spin += this.spec.rcsAccel * this.rcsStiffness * 0.5 * dt;
+      if (this.rcsLeft) this.spin -= this.spec.rcsAccel * this.rcsStiffness * 0.5 * leftIn * dt;
+      if (this.rcsRight) this.spin += this.spec.rcsAccel * this.rcsStiffness * 0.5 * rightIn * dt;
     }
 
     this.vy += level.gravity * dt;

@@ -40,7 +40,7 @@ Everything under `src/` is a plain ES module, loaded directly in the browser and
 | `src/debug.js` | F3 telemetry overlay, F4 landing-envelope bars, F5 enemy ranges | M0/M12 |
 | `src/particles.js` | pooled particles, debris, rings, floating text | — |
 | `src/audio.js` | synthesized engines, impacts, chimes | — |
-| `src/input.js` | rebindable key map, touch, and the intent object the sim reads | —/M13 |
+| `src/input.js` | rebindable key map, touch, and the 0..1 intent the sim reads | —/M13/M30 |
 | `src/levels.js` | the original 12 classic missions, endless generator, world palettes | — |
 | `src/util.js` | math, seeded RNG, `safeStore` | — |
 | `serve.js` | the dev server, `no-store` so an edit always reaches the browser | M13 |
@@ -151,6 +151,20 @@ now. The general rule: if a hazard has a boundary, draw the boundary — which s
 vents, fountains, sinking-air columns and magnetic anomalies that have a *place* rather than a level.
 Every hollow hazard named here before M29 is implemented, and the check that used to be advice is a
 test now (see the rule above).
+
+**The input contract is a magnitude, and the keyboard is its degenerate case.** Since M30 the
+simulation reads `amountOf(input, 'thrust')` — a number in 0..1 — rather than a boolean, and
+multiplies by it. A key and a touch button answer **exactly** 1.0 or **exactly** 0.0, and
+`x * 1.0 === x` under IEEE-754, so widening the contract could not move a keyboard flight: proved by
+flying every mission through both trees and comparing 29.5M raw 64-bit doubles, zero differences.
+**Two flight models is the fault this project has been burned by three times** — `__settleNow`
+reimplementing the settle, the autopilot drifting three milestones behind its own control law, Mars
+running at double drag — so an analog trigger widens the number and never forks the law.
+
+The exactness is load-bearing and is asserted in `settings-tests.js` rather than left to the
+fixtures, because **the physics fixture compares to four decimal places** and reads "unchanged" with
+a held key returning 0.9999999. `this.thrusting` / `rcsLeft` / `rcsRight` stay **booleans** derived
+from the magnitudes: a dozen consumers read them and none wants a float.
 
 **Steering is the one setting that is allowed to change the simulation, and there are three.**
 Everything on the settings screen is presentation-only *except* this, which has always been true
@@ -549,8 +563,11 @@ The MVP is complete and measured (`test/BASELINE.md`, M13 section). What the nex
   number: taking the deposits that lie on the fuel road is comfortable (236/300 landings, 27–55%
   left), but sweeping every deposit lands 156/300 and 0/20 on `mars-2` and `europa-4`. Written for a
   900 px traverse, now flown across 2,000–2,600 px with a road and an ore field in between.
-- **Controller support does not exist.** Keyboard remapping does, and every flight control is
-  rebindable, but there is no gamepad backend to remap.
+- **Controller support: the contract is widened, the backend is not built.** M30 stage 1 changed what
+  the simulation reads from a boolean to a **0..1 magnitude** (`Input.amount()`, and `amountOf()` for
+  the plain objects the pilot and the fixtures pass), so a trigger can arrive without `ship.js`
+  changing again. There is still no gamepad backend, no pad binding and no pad in the settings screen.
+  Stages 2-5 are in `ROADMAP_STATUS.md` and are **held** on two balance calls only Tom can make.
 - **Achievements** are deliberately not built. The spec gates them behind stable progression, and
   the statistics they would be built on only started being recorded in M13.
 - **The numbers to tune** live in config objects: `COMBAT` in `enemies.js`, `ABILITY` in

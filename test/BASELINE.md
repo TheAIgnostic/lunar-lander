@@ -3059,3 +3059,111 @@ identical with and without.
 - **It is still absent on about one seed in four** on maps with no vantage, so it is a surprise
   rather than a fixture. Deliberate, and worth knowing when it does not turn up.
 - **Whether body 3 is early enough.** It is one authored line per mission to pull it earlier still.
+
+---
+
+## M30 stage 1 — the input contract widens (2026-08-21)
+
+Analog controller support, staged so that the first step is *provable*. The simulation used to read
+booleans — `input.thrust` on or off. It now reads a **0..1 magnitude**, with the keyboard as the
+degenerate case. The flight model does not fork, and this section is the measurement that says so.
+
+**Nothing about the game changed in this step, and that is the whole point.** Stage 1 ships no
+gamepad, no new setting and no new behaviour. It moves the contract so that stage 2 can plug a
+trigger into it without touching `ship.js` again.
+
+### The arithmetic the design rests on
+
+The keyboard produces **exactly** 1.0 and **exactly** 0.0, so every multiplication it causes is
+`x * 1.0`. Re-measured here against this codebase's own constants rather than taken from the plan —
+real nose vectors across the full angle range, every thrust and derate combination, the RCS and side
+authorities, both timesteps, plus a random sweep over twenty-four orders of magnitude and the
+IEEE-754 edge cases:
+
+| checked | changed by `* 1.0` |
+| ---: | ---: |
+| **6,633,498** multiplications | **0** |
+| 1,000,000 additions of `0` | 0 |
+
+### The gate: bit-identical, not fixture-identical
+
+Both fixtures read **unchanged**, but that is a weaker statement than the claim and it is worth being
+precise about why. **The physics fixture compares to four decimal places** (`toFixed(4)`) and the
+flight fixture to `outcome/grade/fuelLeft/simSecs`. Those are tolerances, not identity.
+
+Proved directly instead, by flying both trees — `HEAD` and the widened one — and comparing **raw
+64-bit doubles**:
+
+| check | flights | 64-bit values | differences |
+| --- | ---: | ---: | ---: |
+| scripted input, 5 level types × 3 steering modes × both invert settings × 3 seeds | 90 | 1,840,320 | **0** |
+| **every mission through the real autopilot**, 3 seeds × 3 routes | 558 | 29,505,039 | **0** |
+
+Per substep, not per phase — a difference that cancels before the next sample is still a difference.
+
+**The first attempt at this proof was wrong, and the way it was wrong is the finding.** A scripted
+harness that drops the lander onto the ground never reaches `settle()` at all: nothing in it acts on
+the `'crash'`/`'land'` event `step()` returns, so the lander falls *through* the surface and
+`touchdown` is never opened. It reported 90 clean cases while covering **zero settle substeps** — and
+`settle()` is half of what stage 1 changed. The physics fixture's own script does not land either.
+Only the real autopilot does. The second table above is the one that counts: **295 landings and 8,629
+settle substeps** exercised.
+
+### What the fixtures would not have caught
+
+Mutation-tested rather than assumed. With `Input.amount()` returning `0.9999999` for a held key —
+a smoothed throttle, the single most likely way this design gets broken later:
+
+| | verdict |
+| --- | --- |
+| `node test/physics-fixture.js` | **"unchanged"** |
+| `node test/settings-tests.js` | 5 failures |
+
+The 4-decimal fixture cannot see it. That is why the *exactness* is asserted in `settings-tests.js`
+rather than left to the fixtures: the day a held key stops answering exactly 1.0, every figure
+recorded in this file quietly stops measuring the game it was measured against, and no rounded
+fixture says a word.
+
+The other mutation — `ship.js` taking the amount and then ignoring it, which is a contract that does
+nothing — fails 2 assertions. A widening that silently dropped the number would otherwise pass every
+fixture in the repo, because the keyboard's number is 1.
+
+### What changed, in code
+
+Nine expressions in `ship.js`, in `step()` and `settle()`, each an inserted `* amount`. Plus
+`Input.amount()` and a free `amountOf(input, action)` — because the simulation is flown by three
+different things and only one of them is an `Input`: the browser passes the real device, `pilot.js`
+passes a plain boolean object, and a test may now pass a number. `ship.js` asks one question and
+never learns which answered.
+
+`this.thrusting` / `rcsLeft` / `rcsRight` **stay booleans** derived from the magnitudes. A dozen
+consumers read them — audio, particles, the HUD, `thermal`, the gear cue, the debug overlay — and not
+one wants a float.
+
+### Verified in the browser too, which is the only place the device path runs
+
+Every node test passes a plain object, so `amountOf`'s *device* branch — the one real players use —
+runs nowhere in the suite. Flown at `localhost` against the real `Input`: a real `keydown` on SPACE
+reads exactly 1, one second of burn spends exactly 9.0 fuel (`burnMain`), release reads exactly 0 and
+coasting spends nothing. Seven missions flown through the browser autopilot came back **identical
+line for line to the same seven flown at `HEAD`**, checked by stashing the change and re-running.
+
+### What did not move
+
+Both fixtures unchanged. Full suite green: 10 unit suites, both sweeps, the build. Campaign crossing
+**642/800 (80%)**, at-once distribution 0: 63.1% · 1: 25.9% · 2: 9.5% · 3: 1.4% · 4: 0.1%, deep-route
+engagement 751/800 — every audit figure identical to the run taken before the first edit.
+
+`settings-tests.js` 50 → 82 assertions.
+
+### Open for Tom, and stage 2 does not start until they are answered
+
+Both are balance decisions rather than code, and both follow from the widening rather than from
+anything a gamepad adds:
+
+- **Analog is strictly more precise than binary**, so a controller player will land better than a
+  keyboard player on the same mission. Precedent says this is fine — the game already ships three
+  steering modes of different difficulty and lets the player choose — but it should be a decision.
+- **Partial throttle costs proportionally less fuel**, so hovering is cheaper on budgets authored for
+  full-or-nothing burns. Measured here: half throttle burns exactly half. Worth watching on
+  `mars-2` and `europa-4`, the two tightest, rather than pre-emptively retuned.

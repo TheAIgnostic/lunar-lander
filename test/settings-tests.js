@@ -4,7 +4,7 @@
 // The rule these tests exist to hold: an accessibility setting changes how the
 // game is *presented*, never how it behaves. A player who turns the shake off
 // must be flying exactly the same simulation as one who leaves it on.
-import { Input, ACTIONS, DEFAULT_KEYS, keyLabel } from '../src/input.js';
+import { Input, ACTIONS, DEFAULT_KEYS, keyLabel, amountOf } from '../src/input.js';
 import { DEFAULT_SETTINGS, Ship, SHIP, STEERING, STEERING_MODES } from '../src/ship.js';
 import { defaultMeta, loadMeta, saveMeta } from '../src/save.js';
 import { readFileSync } from 'node:fs';
@@ -315,6 +315,125 @@ function makeInput() {
     check(`${name}: god mode still holds the window open`,
       /!meta\.godMode/.test(handler(name)));
   }
+}
+
+// ---------------------------------------------------------------------------
+// The input contract is a magnitude, and the keyboard is its degenerate case.
+//
+// M30 widened what the simulation reads from a boolean to a 0..1 amount so that
+// an analog trigger can arrive without the flight model forking - two flight
+// models being the fault this project has been burned by three times. The whole
+// design rests on one arithmetic fact: the keyboard produces *exactly* 1.0 and
+// *exactly* 0.0, and `x * 1.0 === x` under IEEE-754, so widening the contract
+// cannot move a keyboard flight by a single ulp.
+//
+// Both fixtures are the milestone's gate, but neither is this claim: the
+// physics fixture compares to four decimal places and the flight fixture to
+// `outcome/grade/fuelLeft/simSecs`. Those are tolerances. What is asserted here
+// is the exactness the tolerances rest on, because the day `amount()` starts
+// returning a smoothed 0.999 for a held key, every recorded figure in
+// `test/BASELINE.md` quietly stops measuring the game it was measured against
+// and no rounded fixture will say so.
+{
+  const input = makeInput();
+
+  // 1. Exactly 1 and exactly 0 - not 1.0000001, not `true`, not -0.
+  for (const a of ['thrust', 'left', 'right', 'hold']) {
+    input._press(DEFAULT_KEYS[a][0]);
+    check(`amount(${a}) is exactly 1 while held`, Object.is(input.amount(a), 1), String(input.amount(a)));
+    input._release(DEFAULT_KEYS[a][0]);
+    check(`amount(${a}) is exactly 0 while released`, Object.is(input.amount(a), 0), String(input.amount(a)));
+  }
+
+  // 2. It never disagrees with `held()`. Two sources of truth for "is the
+  //    booster on" is how the HUD ends up lit while the engine is off.
+  for (const a of ACTIONS) {
+    for (const on of [false, true]) {
+      if (on) input._press(DEFAULT_KEYS[a][0]);
+      check(`amount and held agree on ${a} (${on})`, (input.amount(a) > 0) === input.held(a));
+      if (on) input._release(DEFAULT_KEYS[a][0]);
+    }
+  }
+
+  // 3. Touch is a button too, so it answers 1 or 0 like a key does.
+  input.touch.thrust = true;
+  check('a touch button reads exactly 1', Object.is(input.amount('thrust'), 1));
+  input.touch.thrust = false;
+
+  // 4. `amountOf` is what `ship.js` actually calls, and it meets three shapes:
+  //    the real device, the plain boolean object `test/pilot.js` rewrites every
+  //    step, and a number for a test that wants a partial throttle with no
+  //    device at all. A `true` must become exactly 1 or the fixtures move.
+  check('amountOf reads a device', Object.is(amountOf(input, 'thrust'), 0));
+  check('amountOf turns true into exactly 1', Object.is(amountOf({ thrust: true }, 'thrust'), 1));
+  check('amountOf turns false into exactly 0', Object.is(amountOf({ thrust: false }, 'thrust'), 0));
+  check('amountOf treats a missing action as 0', Object.is(amountOf({}, 'thrust'), 0));
+  check('amountOf survives no input at all', Object.is(amountOf(null, 'thrust'), 0));
+  check('amountOf takes a number at its word', amountOf({ thrust: 0.37 }, 'thrust') === 0.37);
+  check('amountOf clamps above 1', amountOf({ thrust: 4 }, 'thrust') === 1);
+  check('amountOf clamps below 0', Object.is(amountOf({ thrust: -3 }, 'thrust'), 0));
+}
+
+// And the property the two facts above add up to: a flight flown on booleans
+// and the same flight flown on the numbers 1 and 0 are the same flight, to the
+// bit. This is the fixtures' claim stated at full precision - and it is stated
+// here rather than left in a scratchpad because it is the invariant stage 2
+// has to not break when a real trigger starts feeding these numbers.
+{
+  const view = new DataView(new ArrayBuffer(8));
+  const bits = (x) => { view.setFloat64(0, x); return view.getBigUint64(0); };
+  const terrain = new Terrain(MOON_LEVELS[0], 4242);
+  // Awkward on purpose: burn, tilt, coast, counter-tilt, hold, burn.
+  const phase = (t) => ({
+    thrust: t < 1.2 || (t >= 3.0 && t < 4.2) || t >= 5.4,
+    left: t >= 0.8 && t < 2.2,
+    right: t >= 3.6 && t < 4.8,
+    hold: t >= 4.8 && t < 5.4,
+  });
+  const fly = (numeric, mode) => {
+    const ship = new Ship();
+    ship.reset(1500, 600, 200);
+    ship.applyLoadout(null);
+    const dt = 1 / 120;
+    const trace = [];
+    for (let i = 0; i < Math.round(7 / dt); i++) {
+      const t = i * dt;
+      const p = phase(t);
+      const inp = numeric
+        ? { thrust: p.thrust ? 1 : 0, left: p.left ? 1 : 0, right: p.right ? 1 : 0, hold: p.hold ? 1 : 0 }
+        : p;
+      ship.step(dt, inp, MOON_LEVELS[0], terrain, t, { steering: mode, invertRotation: false });
+      for (const v of [ship.x, ship.y, ship.vx, ship.vy, ship.angle, ship.spin, ship.fuel, ship.throttle]) trace.push(bits(v));
+    }
+    return trace;
+  };
+  for (const mode of STEERING_MODES) {
+    const a = fly(false, mode), b = fly(true, mode);
+    let differing = 0;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) differing++;
+    check(`booleans and exact 1/0 fly identically in ${mode}, to the bit`,
+      differing === 0, `${differing} of ${a.length} values differ`);
+  }
+
+  // The other half of the same property: the magnitude must actually *reach*
+  // the physics. A widening that silently ignored the number would pass every
+  // check above and every fixture, and would be a contract that does nothing.
+  const burnFor = (amount) => {
+    const ship = new Ship();
+    ship.reset(1500, 600, 200);
+    ship.applyLoadout(null);
+    const dt = 1 / 120;
+    for (let i = 0; i < 120; i++) {
+      ship.step(dt, { thrust: amount, left: 0, right: 0, hold: 0 }, MOON_LEVELS[0], terrain, i * dt,
+        { steering: 'pro', invertRotation: false });
+    }
+    return { spent: 200 - ship.fuel, vy: ship.vy };
+  };
+  const full = burnFor(1), half = burnFor(0.5), none = burnFor(0);
+  check('half throttle burns about half the fuel',
+    Math.abs(half.spent - full.spent / 2) < 1e-9, `${half.spent} vs ${full.spent / 2}`);
+  check('half throttle gives less than full acceleration', half.vy > full.vy && half.vy < none.vy,
+    `full ${full.vy} half ${half.vy} none ${none.vy}`);
 }
 
 console.log(`\n  ${pass} passed, ${fail} failed`);

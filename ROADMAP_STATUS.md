@@ -974,6 +974,24 @@ scheduled until the MVP is stable — the spec says the same.
   - **both fixtures byte-identical**, sanctuary 20/20 on all 40 armed missions, and the way home is
     unchanged on all three new placements
 
+- [x] **M30 stage 1 — the input contract widens** (this commit)
+  - the simulation reads a **0..1 magnitude** instead of a boolean, so an analog trigger can arrive
+    without the flight model forking. `Input.amount()`, a free `amountOf(input, action)` for the
+    plain objects the pilot and the fixtures pass, and nine inserted `* amount` in `ship.js`
+  - **no gamepad, no new setting, no new behaviour** - the whole value of this step is that it is
+    provable, and it is committed on its own so that the proof stands alone
+  - both fixtures unchanged, and separately **29,505,039 raw 64-bit values compared across 558
+    flights of every mission through both trees, zero differences** - 295 landings, 8,629 `settle()`
+    substeps
+  - **the first version of that proof was wrong and reported success**: a scripted harness that drops
+    the lander never opens `touchdown` at all, because nothing acts on the event `step()` returns and
+    the lander falls through the ground. Zero settle substeps, while half of what changed lives in
+    `settle()`. Only the real autopilot lands
+  - **a 4-decimal fixture cannot see a smoothed keyboard.** With `amount()` returning `0.9999999`,
+    `physics-fixture.js` still prints "unchanged"; the exactness is asserted in `settings-tests.js`
+    instead, 50 → 82
+  - **stage 2 is held** on two balance calls only Tom can make - see "Next task"
+
 ## Decisions (Tom, 2026-08-16)
 
 1. **Gravity** — compressed mapping is the *baseline*, then a per-body hand-tuned offset so each
@@ -991,7 +1009,63 @@ None.
 
 ## Next task
 
-**M30 — analog controller support.** Decided with Tom, 2026-08-21.
+**M30 stage 2 — the gamepad backend.** Stage 1 is done and committed on its own; the two questions
+below it are **for Tom, and stage 2 does not start until they are answered.**
+
+### Stage 1 — done, and it changed nothing, which was the point
+
+The input contract is a 0..1 magnitude now instead of a boolean, and the flight model did not fork.
+`Input.amount()` plus a free `amountOf(input, action)`, and nine inserted `* amount` in `ship.js`.
+No gamepad, no new setting, no new behaviour.
+
+**Proved rather than hoped**, because both fixtures are weaker than the claim: the physics fixture
+compares to four decimal places and the flight fixture to `outcome/grade/fuelLeft/simSecs`. Both read
+"unchanged", and separately every mission was flown through both trees comparing **raw 64-bit
+doubles — 29,505,039 values across 558 flights, zero differences**, including 295 landings and 8,629
+`settle()` substeps. Full measurement in `test/BASELINE.md`, M30 stage 1.
+
+Two things worth carrying forward:
+
+- **The first version of that proof was wrong and reported success.** A scripted harness that drops
+  the lander never reaches `settle()` — nothing acts on the event `step()` returns, so the lander
+  falls *through* the ground and `touchdown` never opens. It covered **zero settle substeps** while
+  half of what stage 1 changed lives there. The physics fixture's script does not land either. Only
+  the real autopilot does.
+- **A 4-decimal fixture cannot see a smoothed keyboard.** With `amount()` returning `0.9999999` for a
+  held key, `physics-fixture.js` still prints "unchanged". The exactness is asserted in
+  `settings-tests.js` instead (50 → 82 assertions), because that is the one way this design gets
+  quietly broken later.
+
+### Two things for Tom — stage 2 is held on these
+
+Both are balance decisions and not code, and both follow from stage 1 rather than from anything a
+gamepad adds:
+
+1. **Analog is strictly more precise than binary**, so a controller player will land better than a
+   keyboard player on the same mission. Precedent says fine — the game already ships three steering
+   modes of different difficulty and lets the player choose — but it should be a decision, not a side
+   effect.
+2. **Partial throttle costs proportionally less fuel**, which makes hovering cheaper on budgets
+   authored for full-or-nothing burns. Measured: half throttle burns exactly half. Worth *watching*
+   on `mars-2` and `europa-4`, the two tightest, rather than pre-emptively retuned.
+
+### Stages 2-5, unchanged from the plan below
+
+2. **The gamepad backend.** `pollGamepad()` once per frame from the main loop (the API is poll-only),
+   filling a third source ORed into `held()` and `amount()`. Deadzone, and a response curve worth
+   tuning — linear is usually wrong for a throttle.
+3. **Binding and the settings screen.** Pad controls as pseudo-keys — `pad:6`, `axis:1+` — in the
+   existing string binding map, so `rebind()`, the save format and the settings UI keep working.
+4. **One-shot actions.** `ability` fires from `keydown` today, so the pad needs edge detection.
+5. **Hot-plug and pad choice**, and the quirk that a pad often will not appear until it is touched.
+
+Test at the **mapping seam**: fake pad in, intent out. `settings-tests.js`. Do not test the physics
+through a gamepad — the physics was tested by stage 1's fixtures being unmoved.
+
+---
+
+**M30 — analog controller support.** Decided with Tom, 2026-08-21. *(The plan as written; stage 1 is
+now done, see above.)*
 
 ### The architecture question, answered
 
