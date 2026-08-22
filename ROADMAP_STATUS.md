@@ -1108,65 +1108,118 @@ None.
 
 ## Next task
 
-**M30 is done.** Nothing is scheduled. What follows is what M30 left open and what was already queued.
+**M31-M36 — finish the loadout and the trees, and make every one of them do something.**
+Planned 2026-08-22 at Tom's request. **Enemies are deferred to v1 by his call**, so nothing here
+touches the roster.
 
-### M30, as shipped
+The goal is the spec's section 18 line — ten actives, ten passives, thirty skill nodes — with the
+standing condition that **a thing sold must be delivered**. This project has shipped three hollow
+things (`hazardLead`, the Gyro's spin damping, `spinDampBonus`) and each was found by accident.
 
-Analog controller support, in two commits: the contract widened (stage 1, provable and committed on
-its own), then the gamepad behind it (stages 2-5). Full measurement in `test/BASELINE.md`.
+### What the audit found before planning, and it changes the shape
 
-**Tom's two balance calls, 2026-08-21, taken before stage 2 was built:**
+**Six of the eighteen missing skills cannot be built as written.** They name systems this build does
+not have, and two of them contradict decisions Tom has already made. This is the part a plan that
+just said "18 nodes" would have got wrong:
 
-1. **Analog precision is accepted.** A controller player will land better than a keyboard player on
-   the same mission, and that is fine for the same reason three steering modes of different
-   difficulty are fine. No compensation, no second balance pass.
-2. **The fuel budgets are not retuned.** Partial throttle costs proportionally less, so hovering is
-   cheaper. Left alone and **watched on `mars-2` and `europa-4`**, the two tightest — the standing
-   rule, which is that nothing moves without a specific complaint to aim at.
+| node | the spec asks for | reality here |
+| --- | --- | --- |
+| Thermal Reclaimer | cooling restores module **energy** | actives have **charges**, not energy. No energy exists |
+| Combat Overdrive | faster weapon **recharge** | same — there is nothing to recharge |
+| Redundant Feed Lines | shortens **engine-stall / fuel-leak** status | neither status exists; the channels are heat, cold, corrosion, radiation, charge |
+| Universal Couplings | modules **cost fewer materials to craft** | there is no crafting. Blueprints are earned and free |
+| Rapid Refit | changing the loadout **costs nothing** | it already costs nothing — this is a no-op as written |
+| Navigation Forecast | reveal a hidden hazard **+ one route reroll per sector** | the reveal is buildable; **the reroll contradicts the fixed ladder** (decision 1 and 3, M27) |
 
-### What M30 left open, and the first is a real gap
+Four more depend on a module that does not exist yet, so they are ordered after it: **Autonomous
+Repair** needs Repair Nanites; **Shaped Charges**, **Ordnance Fabricator** and **Hardpoint
+Calibration** need the Kinetic Bomb Rack.
 
-- ~~**A pad cannot work the menus.**~~ **Done — M30b** gave it the interface keys and **M30c** the
-  selection cursor. A pad plays the game start to finish: stick or d-pad to move, A to confirm, B or
-  START to go back, triggers and stick to fly. The cursor is general rather than per-screen, so the
-  hangar, the route card and the outfit screen got it without knowing about it.
-  - ~~The keyboard still has no cursor.~~ **M30d** gave it the arrow keys, which are flight controls
-    in the air and inert on every overlay screen. `g.padFocus` became `g.uiFocus`: a cursor two
-    devices drive should not be named for one of them.
-- **The curve is reasoned, not tuned.** `PAD.curve` 1.5 is argued from where the hover point lands,
-  which is arithmetic; whether it *feels* right is not. Four levers: `curve`, `deadzone`, `saturate`,
-  `triggerFloor`.
-- **One line is unverified by anything but a real pad.** `requestAnimationFrame` never fires in the
-  agent's browser pane (`document.hidden` is true even fronted), so the poll and the sim were driven
-  directly and the `input.pollGamepad()` call inside `frame()` is confirmed by reading the served
-  source, not by running it. A controller on your machine closes that in about ten seconds.
-- **The bindings assume the Standard Gamepad mapping.** A pad the browser does not normalise reports
-  raw indices and the labels read `PAD 12`. Nothing breaks; it stops being readable.
+### The balance finding that makes this safe, and it is the reason to do it
 
-### Still queued, unchanged
+**Research is wiped on death.** A typical run reaches body 3-4 and banks about **298 research** before
+losing it, while the twelve built nodes cost **2,410** for every rank. So a player never owns the
+tree; they buy three to five nodes per run and lose them.
 
-- **Six of the spec's eight enemy designs remain** — Coil Cannon, Patrol Drone, Mortar Platform, Magnetic Mine,
-  Solar Sentry, Shielded Guardian. Three machines are *built*, but only two of them are the spec's:
-  the **Mast Sniper is Tom's own design and is not on that roster**, so it does not reduce it. Both
-  documents used to say "three of eight" and then name six, which does not add up.
-  M29 measured that on a low-gravity body the machine *type* decides
-  almost everything and the count decides almost nothing, so **more designs is the only real lever
-  left on the combat ramp**. Read M29e's findings first: a machine is not finished when it draws and
-  fires, `range` is not the lever it looks like, and reach costs twice what vantage does.
-- **Moving landing platforms** (Europa 5, Io 5) — `padAt` and the landing check become time-aware.
-- **Eleven modules and 18 skill nodes remain** against the spec's roster, all of them absent rather
-  than broken — every built node and module works. **Two bodies have no specialist module at all**:
-  Titan (thick air, gliding) and Venus (dense drag, acid), whose whole identity is the thing nothing
-  answers. **`Aero-Brake Foil` serves both**, which makes it the highest-value single module left.
-  The two missing component tracks are **Power Core** and **Utility Hardpoint**.
-- **The landing bands and the fuel budgets** still await human data, and are still parked.
-- **`hazardLead` is sold and not delivered** — Sensors **L3** costs 1,650 salvage, **3 tech cores**
-  and 40 Silica nanograins, describes itself as *"Hazard trajectory prediction"*, and nothing reads
-  the key. Its `predict`/`beacon` bumps do work, so the rung is not inert, but the feature it is
-  named for does not exist. It is **the only one of the game's 33 effect keys with no reader**.
-  Either draw where a hazard is going — the vents, plumes, sinking air and radiation sweeps all move
-  on a cycle already, so the data is there — or re-describe the rung around what it does deliver.
-  Do not quietly delete it: it is the only step between Sensors L2 and L4.
+That means **adding 18 nodes adds choice, not power.** The same 298 research buys the same handful,
+drawn from a much wider board. The same holds for modules: blueprints are permanent, but there is one
+active slot and one passive slot, so ten of each is ten ways to specialise rather than ten stacking
+bonuses.
+
+**This is the cheapest large improvement left in the game**, and it is cheap precisely because the
+economy already bounds it.
+
+---
+
+### M31 — the gate, then the six passives
+
+**The gate goes in first, because everything after it depends on the gate being honest.**
+`loadout-tests.js` currently asserts that a declared effect key is *read by some file*. That is how
+`hazardLead` passed for three milestones once a comment mentioned it, and it is not the same claim as
+"fitting this changes anything". Raise the bar: **fitting a module or buying a node must move a
+measured outcome in a flown mission** — `flyMission` already takes `{ loadout }` and `{ ability }`.
+
+Then all six missing passives, which are the cheapest work in the plan because every one of them
+scales a channel that already exists:
+
+| module | scales | already exists as |
+| --- | --- | --- |
+| Ablative Acid Skin | corrosion build-up | `corrosion` status channel, Venus |
+| Thermal Sink | heat build and fall | `heat` channel, `heatRise`/`heatFall` |
+| Cryo Insulation | cold build-up | `cold` channel, Pluto |
+| Plume Vanes | lateral force from vents | `plumes` force + `disturbanceResist` |
+| Atmospheric Control Surfaces | glide authority, wind rotation | `glide` and `windChannels` forces |
+| Salvage Magnet | pickup radius | `terrain.collect(x, y, radius = 62)` — **already a parameter** |
+
+**Ends with Titan and Venus no longer printing "nothing specialised yet"** on the expedition card,
+which is the visible half of M30g.
+
+### M32 — the three actives that need no new system
+
+- **Aero-Brake Foil** — a drag/glide multiplier the atmosphere force reads. **Build this one first:**
+  it is the only unbuilt module that serves *both* Titan and Venus, the two bodies with nothing.
+- **Repair Nanites** — hull over a duration. `_applyWhileActive` already runs per substep and
+  `ship.js:657` already has the clamped heal `repairOnLanding` uses.
+- **Optical Cloak** — a flag `enemies.js` checks before entering `track`. The state machine is
+  already `idle → track → telegraph → recover`.
+
+### M33 — the two actives that are real features
+
+- **Kinetic Bomb Rack** — a ship-launched, gravity-affected projectile with a blast. New physics, but
+  `enemies.js` already owns shots and `damageEnemy`. The one with genuine risk: a weapon that can
+  kill the player near their own pad needs the M12 telegraph discipline applied to the *player's*
+  ordnance.
+- **Countermeasure Flare** — retargets drones and lights the ground. Touches the drone's target
+  selection and the darkness channel.
+
+**Both unlock three combat skills**, which is why they come before M35.
+
+### M34 — the nine skills that need nothing new
+
+Phoenix Protocol · Fourth Shuttle · Emergency Arrest · RCS Finesse · Surface Adaptation · Steady
+Hands · Counter-Battery Logic · Twin-Link Control · Navigation Forecast *(the reveal half only)*.
+
+Two are worth knowing about before writing them:
+
+- **RCS Finesse** was a dead node before M30 and is real now. "Smaller minimum side-thruster pulses"
+  means nothing to a key that answers 1 or 0 — it means something to an analog stick. It is a
+  **pad-only** improvement and should say so.
+- **Fourth Shuttle** touches the attrition curve the whole run model rests on (decision 4). Gate it
+  behind five bodies cleared, as the spec says, and measure a run length before and after.
+
+### M35 — the four that waited, and the six that need Tom
+
+Autonomous Repair, Shaped Charges, Ordnance Fabricator and Hardpoint Calibration land once M32-M33
+exist. The six in the table at the top need a decision each — see "Open with Tom".
+
+### M36 — measure what eleven modules and eighteen nodes did
+
+Nothing in M31-M35 may retune balance; this is where it is looked at, once, with everything in.
+Re-run the encounter audit and the campaign crossing, and compare against **642/800 (80%)** and the
+at-once distribution recorded at M30. Expect the crossing to rise: that is the point of a loadout,
+and the question is whether it rises too far.
+
+---
 
 ### Tom's decisions (2026-08-20) — constraints, not options
 
@@ -1298,26 +1351,34 @@ turret redrawn, the Mast Sniper built, and a soundbed for the title screen.*
 
 **The first prompt for a new session:**
 
-> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then `docs/PROGRESSION.md`, then the **M29**
-> and **M30** sections of `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything — it
-> takes a few minutes and it is how every milestone here that went well started.
+> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then `docs/PROGRESSION.md`, then the **M30**
+> sections of `test/BASELINE.md` (M30 through M30g — that is one session's work and it is the state
+> you are inheriting). Run `./test/run-all.sh 20` before writing anything; it takes a few minutes and
+> it is how every milestone here that went well started.
 >
-> **Nothing is scheduled.** M30 finished analog controller support and the queue is what is under
-> "Next task": the five unimplemented enemy designs are the most valuable thing left, and the one
-> real gap M30 left is that **a pad cannot work the menus** — it flies the lander and fires the
-> module, and pausing, confirming and backing out are still keyboard. That was left out on purpose
-> because it needs a design call from Tom about what confirms and what moves a selection. Ask him
-> before building it.
+> Then build **M31**, the first of the M31-M36 plan under "Next task": finishing the active modules,
+> the passive modules and the skill trees so that all thirty-plus of them do something. **Enemies are
+> deferred to v1 — Tom's call — so do not touch the roster.**
 >
-> Two standing rules for this repo. **Measure before you decide** — every milestone here that went
-> badly started from an assumption, and M30 alone found a proof that reported success while covering
-> **zero** of the code it was meant to prove, and two mutations that survived a test suite written
-> specifically to catch them. And **do not retune balance without a specific complaint to aim at**;
-> Tom's "balance seems good" unparked four items, it did not open them.
+> **Build the gate before the content.** M31 starts by raising `loadout-tests.js` from "a declared
+> effect key is read by some file" to "fitting this changes a measured outcome in a flown mission".
+> The weaker check is how `hazardLead` passed for three milestones, and the plan adds eleven modules
+> and eighteen nodes on top of it. `flyMission` already takes `{ loadout }` and `{ ability }`.
 >
-> One thing worth internalising from M30 before you write a test: **a passing test is not evidence
-> that it bites.** Break the code on purpose and check the test notices. Both of the real faults in
-> that milestone were found that way and neither was found by reading.
+> **Do not plan from the spec alone — six of the eighteen missing skills cannot be built as written**,
+> and the table under "Next task" says which and why. Two of them contradict decisions Tom has
+> already made. They are listed under "Open with Tom" and need an answer each before M35.
+>
+> Three standing rules for this repo. **Measure before you decide** — every milestone that went badly
+> started from an assumption. **Do not retune balance without a specific complaint to aim at**; M31-M35
+> add content and M36 is the only place a number moves. And **a passing test is not a test that
+> bites**: break the code on purpose and check the test notices. Every real fault in the M30 session
+> was found that way or by looking at the screen, and none by reading.
+>
+> One thing about the instrument: `./test/run-all.sh` **cannot see a rendering fault**, because no
+> node test draws. A screenshot found six expedition cards printing `[object Object]`, and the only
+> self-inflicted bug of the session was a draw call reaching for a variable it never had. Look at the
+> game, not only at the numbers about the game.
 
 **What is different about the state you are inheriting.** For most of this project's history the
 standing problem was that nobody had played the thing. That is no longer true — **Tom playtests
@@ -1343,11 +1404,27 @@ command tells you both that the game still works and what a player currently mee
 
 ### What this session did
 
-- **M30 — analog controller support**, in two commits. The input contract widened from a boolean to a
-  0..1 magnitude (provable, and committed on its own), then the gamepad behind it: polling, an analog
-  response curve, pad controls as pseudo-keys in the existing binding map, edge-detected one-shots,
-  and hot-plug. `ship.js` did not change between the two. **A pad still cannot work the menus**, which
-  is the one real gap and is outside the decided plan.
+- **M30 — analog controller support**, in two commits: the input contract widened from a boolean to a
+  0..1 magnitude (provable, committed on its own, 29.5M raw doubles compared with zero differences),
+  then the gamepad behind it. `ship.js` did not change between them.
+- **M30a — the Pulse Laser could not reach what it answers.** Tom reported it firing nothing on the
+  pad; it was not the pad. Every machine outranged it, so **one press in five did nothing**. 430 → 520
+  after a 6,400-flight sweep.
+- **M30b/c/d — the pad works the interface**, then a **selection cursor** for lists, then the arrow
+  keys on the same cursor. A screenshot taken to check the focus ring found **six expedition cards
+  printing `weather: [object Object]`**.
+- **M30e — the audit.** Flight assist was silent on **42 of 50 missions**; every instrument
+  understated the player's landing gear by up to **72%**; six dead exports removed.
+- **M30f — every skill works**, but `hazardLead` is sold and not delivered, and the guard for it had
+  gone quiet because **two comments mentioned the key**.
+- **M30g — the route cards recommended 10 modules that do not exist**, four bodies recommending two
+  apiece. Derived from the modules' own `good` lists now.
+
+**The through-line of the whole session, worth carrying:** M29 fixed a name-indexes-a-table fault in
+`BUILDERS` and asserted it. Three *more* readers of those same names were wrong and stayed wrong —
+the route card printed them, flight assist looked them up under the wrong spelling, and the module
+recommendations named a roster that does not exist. **Fixing a fault class in one table does not fix
+it in the others.**
 
 *The session before this one ran M29 through M29h:*
 
@@ -1462,6 +1539,23 @@ the record, since every one of them is now a number somebody may want to move ag
   flight and left menu navigation out on purpose, because what confirms and what moves a selection is
   a design call. And `PAD.curve` is argued from where the hover point lands, which is arithmetic —
   whether it *feels* right is the one thing only a controller in a hand can say.
+- **Six skill nodes need re-specifying before they can be built** (M35). Each names a system this
+  build does not have, and the cheap answer is usually to re-point the node at something that exists
+  rather than to build the system underneath it:
+  1. **Thermal Reclaimer** and **Combat Overdrive** want module *energy*; actives have *charges* and a
+     *cooldown*. Re-point them at cooldown (a purge shortens it / an overdrive removes it briefly), or
+     build an energy pool — which is also what the missing **Power Core** component track wants, so
+     one decision covers both.
+  2. **Redundant Feed Lines** shortens an engine-stall or fuel-leak status. Neither exists. Either
+     re-point it at a channel that does (heat is the closest), or drop the node.
+  3. **Universal Couplings** discounts crafting. There is no crafting — blueprints are earned and
+     free. Most likely a drop, or re-point at material costs in the hangar.
+  4. **Rapid Refit** makes a loadout change free. It already is. Re-point at the *window* — letting
+     one change happen mid-expedition would be a real ability, and it reverses M29d deliberately.
+  5. **Navigation Forecast** is half buildable: revealing the card's hidden hazard works today
+     (`hiddenHazard` and `incomplete` already exist). **The other half — a route reroll — contradicts
+     the fixed ladder**, which is decision 1 and 3 and the thing the attrition curve rests on. Build
+     the reveal, drop the reroll, unless the ladder decision itself is reopening.
 - **Which steering mode is right for you, and for Ian.** M29c split it: CLASSIC settles the rotation
   when you let go, PRO CLASSIC (IAN) is the law you have both been flying. The numbers say the tuned
   mode should feel like pointing the nose rather than fighting momentum, but a control scheme is the
