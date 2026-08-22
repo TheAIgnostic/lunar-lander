@@ -1960,7 +1960,73 @@ Two files carry **39% of the codebase**, and that is the whole finding:
 `test/physics-fixture.js` and `test/flight-fixture.js` untouched, which is a complete verification
 that needs none of the conversation that produced this plan.
 
+### Handover — back to playing
+
+*Written 2026-08-22, after the second audit session. **The audit phase is closed on Tom's call** —
+"no more bug fixes", and "leave this for now until something comes up at playing."*
+
+**The state**: content-complete, published on both remotes at `03ddfa4` — `origin` and `rogue`,
+`main` and `v2`, all four level. **2,406 assertions across 12 suites**, both fixtures `unchanged`,
+crossing 641/800, deep-route engagement 751/800, `./macos/build.sh` self-test passing.
+
+**Two audit sessions found sixteen faults between them and every one was in a blind spot
+`docs/AUDIT.md` had already named.** That is the doc's central claim tested twice and holding. But
+the second session's five were a weight class below the first's eleven: no crashes, nothing that
+costs a lander, and the heaviest of them — a status warning that fired after the damage had started —
+is the only one a player would have felt. Diminishing returns, honestly reported, and **the decision
+that follows from it is Tom's: stop hunting, start playing.**
+
+**So the next session does not go looking.** It starts from a symptom.
+
+**The first prompt for a new session:**
+
+> Repo: `/Users/tomsteiner/Desktop/lunar-lander` (branch `v2`, published on `main`, both mirrored to
+> the `rogue` remote).
+>
+> Something came up while playing. **Start from the symptom, not from a sweep** — the audit phase is
+> closed and speculative bug-hunting is explicitly not the job.
+>
+> Read `docs/ARCHITECTURE.md` for what owns what. `docs/AUDIT.md` is **reference now, not an
+> itinerary**: go to it when a symptom points at one of the three blind spots it names (no node test
+> executes the game loop, none draws, none listens), and read §5 before "fixing" anything that looks
+> wrong — it is a list of decisions, not defects.
+>
+> **The playtest log is the first place to look.** `__log()` in the console dumps the trace, and the
+> settings screen copies and exports the same thing. Crash lines now name what actually killed you —
+> `reason=shot`, `reason=eruption`, `reason=acid` — rather than the `reason=impact` every death used
+> to report.
+>
+> Run `./test/run-all.sh 20` before and after. Both fixtures must print `unchanged`, and the
+> encounter-audit figures should hold at **641/800** and **751/800** — if one moves, say which and
+> why. `./test/mutate.sh` is still how you prove a fix is actually covered: **zero failures is the
+> finding, not the result.**
+>
+> `./macos/build.sh` is the only check that executes the game loop, and it **revokes access to
+> `~/Desktop` until the app is relaunched** — run it after committing, never before.
+>
+> **End the session by writing what you found where the next person will look.** A finding that lives
+> only in `git log` is a finding the next session repeats.
+
+**Two things left open, both Tom's to decide rather than a next session's to fix:**
+
+- **`docs/AUDIT.md` lead 5 and `test/BASELINE.md` contradict each other about `hazardLead`.** The
+  lead calls it "sold, not delivered — the player is charged for it"; `BASELINE.md` records it as a
+  design decision. Both cannot be right, and it prints a `GAP` line on every gate run either way.
+- **`t-ability` is the only touch button never hidden**, and with nothing fitted in slot one it is
+  completely inert — no sound, no ring, no text. The other three utility buttons hide on exactly that
+  test. Either the M16 dead-button rule has a hole in it or the primary control is a deliberate
+  exception; `index.html`'s comment reads like the latter, so it was left alone.
+
+**What the second audit left genuinely untouched**, if a symptom ever points that way: `AUDIT.md`
+lead 3 (verify the *pre-existing* source-grep assertions still bite — the five new ones were checked
+by mutation, the old ones were not) and lead 4 (`level.__forces` is currently safe but nothing
+enforces it).
+
 ### Handover — more bug fixing
+
+> **Superseded by "Handover — back to playing" above.** Kept as the record of what the second audit
+> was sent in to do. **Do not take its prompt**: it says "the job is unchanged: keep auditing", and
+> the job has since changed.
 
 *Written 2026-08-22, after the first audit session found eleven faults in a published, fully green
 game.*
