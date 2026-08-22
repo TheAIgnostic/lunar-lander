@@ -28,10 +28,10 @@ Everything under `src/` is a plain ES module, loaded directly in the browser and
 | `src/route.js` | the ten-body ladder, the next-body card, the progress trail, checkpoint rule | M9/M27 |
 | `src/components.js` | 5 component tracks, `deriveLoadout` / `deriveFull`, purchase rules, the recommended tier | M10/M11/M28 |
 | `src/skills.js` | 3 skill trees, `deriveSkills`, purchase and gating rules | M11 |
-| `src/modules.js` | 5 active + **9 passive** modules, each active's firing `cue`, the blueprint grant rule | M11/M12/M31 |
+| `src/modules.js` | **8 active + 9 passive** modules, each active's firing `cue`, the blueprint grant rule | M11/M12/M31/M32 |
 | `src/enemies.js` | enemy roster, placement around the prize, telegraphs, projectiles, damage, rewards | M12/M14 |
 | `src/objectives.js` | the optional objectives: conditions judged at touchdown, and six cargo recoveries | M14/M15 |
-| `src/abilities.js` | the active-module runtime: charges, duration, cooldown, effects | M12 |
+| `src/abilities.js` | the active-module runtime: charges, duration, cooldown, effects, teardown | M12/M32 |
 | `src/render.js` | the world: background, terrain, ship, dust, beacons, trajectory, hangar ship | —/M12/M15/M23 |
 | `src/drawkit.js` | the shared drawing vocabulary: palette, type, `throb`, tint helpers, HUD panels | M23 |
 | `src/enemydraw.js` | machines, telegraphs, wrecks, shots, the laser and the shield | M23 |
@@ -220,6 +220,36 @@ Three rules came out of building it, and each cost a wrong first answer:
   `threat` is unchanged, so M30a's figures still describe the same policy.
 - **A rounded trace is a tolerance, not a flight.** `x` to the pixel hid a purge that cut a cold soak
   from 68% to 32% and restored attitude authority from 0.838 to 1.000.
+
+**An active must let go of the lander, and that is a rule about every active
+rather than about each one.** A module writes fields on the ship — `anchor`,
+`shieldActive`, `beaconBoost`, `airBrake`, `cloaked` — and the M31 beacon leak is what
+says the teardown needs a test rather than a habit: a channel that is written and never read cannot
+be *seen* to leak, so the leak becomes a bug on the day it gets a reader. `enemies-tests.js`
+snapshots the lander, runs each module out, runs one step of physics and requires the ship back, with
+a named list of what a module is meant to leave behind. Stated per-module first, which mutation
+testing showed was worth nothing — leaving `airBrake` at 2.6 or `cloaked` at true for a whole mission
+raised zero failures. As a property it also covers the modules that already existed, and the ones
+that do not exist yet. `env` is deliberately not exempted: `applyForces` owns it and resets it every
+step, so the honest test is to run the step that restores it.
+
+**A cloak is one predicate, at the top.** `_stepEnemy` resolves `ship && !ship.cloaked ? ship : null`
+once, and everything below reads that — movement, the sight check, the lead point, the shot. Wired
+into `_sees` alone it would have left drones chasing and ramming a lander they cannot see, because
+**ramming never goes through the sight check**. Shots already in the air are untouched on purpose: a
+cloak breaks targeting, it does not erase a bullet.
+
+**A limitation stated as a threshold can be a device split.** The Optical Cloak's "strong thrust
+disrupts it" tested as `throttle > 0.75` would mean *any* thrust on a keyboard, which answers exactly
+1.0 — a module that works on a gamepad and not without one. It drains the timer in proportion to the
+throttle instead, which reads the same on both devices and scales with what the player is actually
+holding. Generalise it: **anything that thresholds the input magnitude has to be checked against the
+keyboard's two values first.**
+
+**A module whose whole effect is an absence needs to be visible.** Nothing happening is
+indistinguishable from the module having failed, so a cloaked lander is drawn translucent and a
+deployed foil is drawn as a foil. Same rule as "if a hazard has a boundary, draw the boundary", from
+the player's side of it.
 
 **A thing sold must also be obtainable, and nobody had asked.** Five of the nine modules had no grant
 path at all — Ray Shield, Magnetic Anchor, Thermal Purge, Ice Cleats and Hardened Radar were

@@ -1186,14 +1186,25 @@ against a bite at 55–60: **on the two bodies that declare heat, heat never bit
 would scale a channel with no consequence, which is the `hazardLead` fault with a new name. It waits
 on the number — see "Open with Tom".
 
-### M32 — the three actives that need no new system
+### M32 — the three actives that need no new system (done, this commit)
 
-- **Aero-Brake Foil** — a drag/glide multiplier the atmosphere force reads. **Build this one first:**
-  it is the only unbuilt module that serves *both* Titan and Venus, the two bodies with nothing.
-- **Repair Nanites** — hull over a duration. `_applyWhileActive` already runs per substep and
-  `ship.js:657` already has the clamped heal `repairOnLanding` uses.
-- **Optical Cloak** — a flag `enemies.js` checks before entering `track`. The state machine is
-  already `idle → track → telegraph → recover`.
+Shipped as planned. **Every body on the ladder now has an active it can be told to take**, and Titan
+and Venus — which had neither slot filled before M31 — have both. Figures in the M32 section of
+`test/BASELINE.md`.
+
+- **Aero-Brake Foil** — `ship.airBrake`, read by `atmosphere` *and* `glide`, because a deployed
+  surface both drags and spoils lift. It multiplies `level.drag`, so "poor in vacuum" is arithmetic
+  rather than a special case.
+- **Repair Nanites** — hull over five seconds, stopped dead by a fresh wound, which is the spec's
+  limitation and half the module.
+- **Optical Cloak** — one predicate at the top of `_stepEnemy`, so a drone's *movement* loses you as
+  well as its aim. Ramming never went through the sight check, so a narrower fix would have left the
+  most dangerous machine unchanged.
+
+**Five mutations raised zero failures on the first pass**, and each was a real hole — two teardown
+leaks, the drone ram, the nanites' interruption and the foil's lift half. The teardown check is a
+property of *every* active now rather than a check per module, which also caught the anchor and the
+M31 beacon leak.
 
 ### M33 — the two actives that are real features
 

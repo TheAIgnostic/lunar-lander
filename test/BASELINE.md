@@ -3735,7 +3735,7 @@ Counted against the spec's own "Full 1.0 target" (section 18), not against inten
 | 50 missions | **50** | — |
 | seven component tracks at four levels | 5 tracks (all reach L4) | **2 tracks** |
 | all 30 skill nodes | 12 (3 trees × 4) | **18 nodes** |
-| ten active modules | 5 | **5** |
+| ten active modules | 5 | **5** |   ← 8 / **2** after M32
 | ten passive modules | 4 | **6** |   ← 9 / **1** after M31
 | full eight-enemy roster | 2 of the roster, + 1 original | **6 designs** |
 | materials, blueprints, checkpoints, save migration, accessibility | done | — |
@@ -3916,7 +3916,8 @@ broken.
 | Flight | RCS Finesse, Surface Adaptation, Emergency Arrest, Navigation Forecast, Steady Hands, Fourth Shuttle |
 
 **Active modules — 5 of 10 missing:** Kinetic Bomb Rack, Optical Cloak, Repair Nanites,
-Countermeasure Flare, Aero-Brake Foil.
+Countermeasure Flare, Aero-Brake Foil.  *(**2 of 10 after M32** — the Kinetic Bomb Rack and the
+Countermeasure Flare, which are M33.)*
 
 **Passive modules — 6 of 10 missing:** Ablative Acid Skin, Thermal Sink, Cryo Insulation, Plume
 Vanes, Atmospheric Control Surfaces, Salvage Magnet.  *(**1 of 10 after M31** — only the Thermal
@@ -4190,3 +4191,140 @@ run taken before the first edit: campaign crossing **642/800 (80%)**, at-once di
 optional kit and nothing baseline could move.
 
 `loadout-tests.js` 150 → **285**, `forces-tests.js` 133 → **147**, `route-tests.js` 124 → **126**.
+
+## M32 — the aero-brake, the nanites and the cloak (2026-08-22)
+
+Three actives that needed no new system, built against the M31 gate. Every one had to change a flown
+mission on a body its own `good` field claims before it counted as built.
+
+| module | what it reads | flown |
+| --- | --- | --- |
+| **Aero-Brake Foil** | `ship.airBrake`, in `atmosphere` *and* `glide` | TITAN 5/5 home, 2/5 deep · VENUS 5/5 home, 1/5 deep |
+| **Repair Nanites** | hull, over five seconds | MARS 2/5 home, 2/5 deep · VENUS 1/5 deep |
+| **Optical Cloak** | `ship.cloaked`, at one predicate in `_stepEnemy` | TITAN 4/5 both · PLUTO 2/5 · GANYMEDE 1/5 home, 3/5 deep |
+
+**Every body on the ladder now has an active it can be told to take.** Titan and Venus had neither
+slot filled before M31 and have both after M32:
+
+```
+LUNA       PULSE LASER      / FUEL RECYCLER        GANYMEDE   SENSOR PULSE     / GYRO STABILIZER
+EUROPA     RAY SHIELD       / ICE CLEATS           IO         RAY SHIELD       / (none)
+TITAN      AERO-BRAKE FOIL  / CONTROL SURFACES     MERCURY    THERMAL PURGE    / (none)
+MARS       SENSOR PULSE     / HARDENED RADAR       PLUTO      SENSOR PULSE     / FUEL RECYCLER
+ENCELADUS  MAGNETIC ANCHOR  / GYRO STABILIZER      VENUS      AERO-BRAKE FOIL  / ABLATIVE ACID SKIN
+```
+
+Io and Mercury are the two left without a passive, and both are waiting on the same thing: the
+Thermal Sink, held since M31 because heat does not bite on either of them.
+
+### One field, two readers, because that is what a surface does
+
+`ship.airBrake` multiplies drag in `atmosphere` and divides lift in `glide`. It **multiplies**
+`level.drag` rather than adding to it, so the spec's *"poor in vacuum"* falls out of the arithmetic —
+`0 × 2.6` is 0 — instead of being a special case somebody has to remember to write.
+
+Measured live in the browser on titan-3, deployed at 130 px/s:
+
+| | before | after 0.5 s |
+| --- | ---: | ---: |
+| ground speed | 129.8 | **108.8** |
+| lift | 4.21 | **1.14** |
+
+### The cloak is one predicate, and the reason it is one predicate
+
+```js
+const target = ship && !ship.cloaked ? ship : null;
+```
+
+At the top of `_stepEnemy`, so a drone's movement, a gun's sight check, its lead point and its shot
+all see the same nothing. Wired only into `_sees` it would have left the most dangerous machine in
+the game behaving exactly as before, because **ramming never goes through the sight check at all**.
+
+Verified in the real game on ganymede-5, parked 240 px from a turret with two machines engaging:
+
+```
+before the cloak   recover, recover, idle, idle, idle
++1 s               recover, recover, idle, idle, idle
++3 s               recover, idle,    idle, idle, idle
++4 s               idle,    idle,    idle, idle, idle
+```
+
+Shots already in the air are deliberately untouched. A cloak breaks targeting; it does not erase a
+bullet that has left the barrel.
+
+**`cloakDrain` is the spec's "strong thrust disrupts it" as a cost rather than a switch**, and that
+is a device-parity decision rather than a taste one. The keyboard answers exactly 1.0 or 0.0, so
+"strong thrust" tested as a threshold means *any* thrust on a key — the module would work on a pad
+and be useless without one. Draining the timer with the throttle scales with whatever the player is
+actually holding and reads the same on both: about 6 s coasting, about 2 s under a full burn.
+
+### Both are on screen, because an absence is not feedback
+
+The whole of the cloak is that the machines stop reacting, and *nothing happening* is
+indistinguishable from the module having failed. So the lander goes translucent and breathes, and
+burning brings it back toward solid — the same thing the drain is doing to the timer, said in the
+one place the player is already looking.
+
+Measured on the hull region, in pixels:
+
+| | ink | of solid |
+| --- | ---: | ---: |
+| uncloaked | 3,389,854 | 100% |
+| cloaked, coasting | 2,283,162 | **67%** |
+| cloaked, full burn | 3,916,290 | 116% — the exhaust plume *is* the give-away |
+
+It never goes fully invisible: you still have to fly it. The foil draws as two swept surfaces off the
+hull, and only while `airBrake > 1`, which is the same value the forces read.
+
+### Five mutations raised zero failures, and every one was a real hole
+
+This is the whole reason for doing it, and it is the second milestone running in which the first
+pass of a test suite proved less than it looked like it proved.
+
+| mutation | before | after |
+| --- | ---: | ---: |
+| the foil never falls away when it ends | **0** | 1 |
+| the cloak never falls away when it ends | **0** | 1 |
+| a drone rams you through the cloak | **0** | 2 |
+| nanites are never interrupted by a hit | **0** | 1 |
+| the foil's lift half removed | **0** | 1 |
+| nanites heal past the hull maximum | 0 | 1 |
+| the atmosphere ignores the foil | 1 | 1 |
+| machines see through the cloak | 2 | 4 |
+| burning no longer spends the cloak | 2 | 2 |
+| nanites heal nothing | 1 | 2 |
+| **the anchor leaks** (an M12 module) | 0 | 1 |
+| **the pulse's beacon gain leaks** (the M31 bug) | 0 | 1 |
+
+**The teardown check is stated as a property of every active, not per module.** Snapshot the lander,
+run the module out, run one step of physics, and require the ship back — with an explicit list of
+what each module is *meant* to leave behind (the nanites' hull, the purge's gauges). Written that way
+it covers the anchor and the M31 beacon leak as well, and it covers a module built next year that
+nobody has written a test for yet.
+
+`env` is deliberately **not** exempted even though two modules write it. `applyForces` owns that
+object and resets every channel at the top of each step, so the honest test is to run the step that
+restores it. The first version exempted `env` wholesale and would have missed a module leaking a
+channel `applyForces` does not reset.
+
+### And the drone rig had to be rebuilt before it measured anything
+
+A seeker drone holds a **195 px** standoff ring and rams at **44 px**, so a drone only ever rams a
+lander that flew into *it*. The first version of the ram test sat 60 px away, watched the drone back
+off to its ring, and proved nothing — the mutation that lets a drone chase a cloaked lander raised
+zero failures against it. It is two checks now: parked on top of a machine for the ram path, and
+420 px out for the shadowing, which is the behaviour the ram is only a consequence of.
+
+### What did not move
+
+**Both fixtures byte-identical.** Full suite green, every encounter-audit figure identical: campaign
+crossing **642/800 (80%)**, at-once distribution 0: 63.1% · 1: 25.9% · 2: 9.5% · 3: 1.4% · 4: 0.1%,
+deep-route engagement 751/800.
+
+`loadout-tests.js` 285 → **304**, `enemies-tests.js` 99 → **125**.
+
+**17 modules now, against one blueprint per body cleared.** 13 of 17 after a full ladder and the rest
+on the next run, which the gate asserts. Worth watching rather than changing: a typical run reaches
+body 3–4, so it is three or four blueprints a run and roughly five runs to hold everything. That is
+the only progression that compounds across deaths, so a slow drip is the design — but it is now slow
+enough to be a decision somebody should take deliberately.
