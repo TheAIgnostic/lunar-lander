@@ -54,6 +54,33 @@ function syncSize() {
   if (cw !== W || ch !== H || dpr !== DPR) resize();
 }
 window.addEventListener('resize', resize);
+
+/**
+ * **An uncaught error goes in the playtest log**, because the log is what Tom
+ * pastes into chat and a crash is the one thing it could never describe.
+ *
+ * M35 deleted a variable out from under the kill handler and every machine
+ * destroyed in the real game threw for two commits. The report that found it
+ * read *"game crashed after shooting the pulse laser"* with **0 events** in the
+ * log — because the trace is in memory and reloading after a crash clears it,
+ * so the one event worth having was the one that could not be recorded.
+ *
+ * Recording it costs nothing and cannot change a flight: `gamelog` is never
+ * read back by the game, which is the rule it was built under. `once` is
+ * deliberate — a throw inside the frame loop repeats every frame, and 400
+ * identical entries would push the rest of the sitting out of the buffer.
+ */
+window.addEventListener('error', (e) => {
+  Log.log('ERROR', {
+    message: (e.message || 'unknown').slice(0, 200),
+    at: `${String(e.filename || '').split('/').pop()}:${e.lineno || 0}`,
+    state: g.state,
+    mission: (g.level && g.level.id) || '-',
+  });
+}, { once: true });
+window.addEventListener('unhandledrejection', (e) => {
+  Log.log('ERROR', { message: String((e.reason && e.reason.message) || e.reason).slice(0, 200), state: g.state });
+}, { once: true });
 resize();
 
 // ------------------------------------------------------------------ level setup

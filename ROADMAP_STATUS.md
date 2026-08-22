@@ -1106,6 +1106,30 @@ scheduled until the MVP is stable — the spec says the same.
 
 None.
 
+## Done: M38a — a crash writes itself into the playtest log
+
+Tom's report of the M38 bug read: *"game crashed after shooting the pulse laser"*, with a log that
+said **`0 events`**. The trace lives in memory, and reloading after a crash clears it — so the one
+event worth having was the only one that could never be recorded, and the log could say nothing about
+the very thing it exists for.
+
+An uncaught error is logged now, with the message, the file and line, the game state and the mission
+it happened on. It is `once` on purpose: a throw inside the frame loop repeats every frame, and 400
+identical entries would push the rest of the sitting out of a 400-entry buffer. Logging it cannot
+change a flight — `gamelog` is never read back by the game, which is the rule it was built under.
+
+```
+0001   7.3s  mission-start  mission=moon-4 planet=LUNA seed=4242 ... active=pulse-laser+ray-shield
+0002   7.3s  ERROR          message=Uncaught Error: ... at=main.js:427 state=play mission=moon-4
+```
+
+**The diagnosis that prompted it, for the record.** Reproduced exactly by putting the bug back:
+`ReferenceError: bonus is not defined` at `combatEffect`, thrown on the **first kill** — so the game
+froze the moment the laser destroyed anything. Already fixed in M38, and the published `main` build
+was never affected: the fault only ever existed on `v2`.
+
+---
+
 ## Done: M38 — the blast ring is the real ring, and a bug that had shipped
 
 **Tom:** *"kinetic bomb rack needs to do more damage within its radius to destroy guns. it is
