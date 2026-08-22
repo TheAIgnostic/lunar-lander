@@ -329,7 +329,7 @@ export function flyMission(level, terrain, opts = {}) {
   let legStarted = 0;
   const landing = makeControl(ship, terrain, level, opts);
   let control = road.length ? makeCruise(ship, terrain, level, road[0]) : landing;
-  const input = { thrust: false, left: false, right: false, hold: false, arrest: 0 };
+  const input = { thrust: false, left: false, right: false, hold: false, arrest: 0, overdrive: 0 };
   const pads = terrain.pads;
   const target = opts.padIndex != null ? pads[opts.padIndex]
     : pads.reduce((a, b) => (b.mult > a.mult ? b : a), pads[0]);
@@ -385,6 +385,15 @@ export function flyMission(level, terrain, opts = {}) {
     // the loadout granted it - so every recorded figure in `test/BASELINE.md`
     // is untouched by this existing.
     input.arrest = ship.arrestLeft > 0 && ship.vy > 30 && ship.canArrest(level, terrain) ? 1 : 0;
+    // **Combat Overdrive**, pressed the way a player presses it: when something
+    // is aiming at you and the module you would answer it with is spent or
+    // still cooling. That is the moment the recharge is worth the engine bill,
+    // and it is deliberately *not* "press it the instant it is available",
+    // which would measure the ceiling rather than the experience. Inert without
+    // the node - `overdriveLeft` is 0 unless the loadout granted it.
+    input.overdrive = ship.overdriveLeft > 0 && ship.overdrive <= 0
+      && field && field.engaged > 0
+      && abilities && abilities.equipped && !abilities.ready ? 1 : 0;
     if (abilities) {
       if (abilities.ready && abilityCue({ ship, field, terrain, level, targetMid, halfPad })) {
         if (abilities.trigger(ship)) { abilityStats.fires++; burstBeam = false; }

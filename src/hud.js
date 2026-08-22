@@ -22,26 +22,16 @@ import { keyLabel } from './input.js';
  * every fault this project has recorded. Neither of these touches the
  * simulation; that is asserted separately.
  */
-export const STEADY = { after: 2, noise: 0.3 };
-
-/** Has the lander been flown still long enough for Steady Hands to settle it? */
-export function steadyNow(ship) {
-  return ((ship.loadout && ship.loadout.steadyHands) || 0) > 0
-    && (ship.steadySecs || 0) >= STEADY.after;
-}
-
 export function instrumentNoise(ship) {
   const rad = ship.statusLevels ? ship.statusLevels.radiation : 0;
   const resist = (ship.loadout && ship.loadout.noiseResist) || 1;
-  return clamp(rad / 100, 0, 1) * (ship.env && ship.env.shielded ? 0.25 : 1) * resist
-    * (steadyNow(ship) ? STEADY.noise : 1);
+  return clamp(rad / 100, 0, 1) * (ship.env && ship.env.shielded ? 0.25 : 1) * resist;
 }
 
 /** The signed, swimming lie `falseRadar` puts on the readouts. */
 export function instrumentDrift(ship) {
   return ((ship.env && ship.env.instrumentError) || 0)
-    * ((ship.loadout && ship.loadout.noiseResist) || 1)
-    * (steadyNow(ship) ? STEADY.noise : 1);
+    * ((ship.loadout && ship.loadout.noiseResist) || 1);
 }
 
 export function drawHUD(ctx, W, H, g) {
@@ -222,6 +212,9 @@ export function drawHUD(ctx, W, H, g) {
   if (threats) drawThreatPanel(ctx, W, H, g, s);
   if (g.abilities && g.abilities.equipped) drawAbilityPanel(ctx, W, H, g, s);
   if (ship.arrestLeft > 0 || ship.arrestFired > 0) drawArrestCue(ctx, W, H, g, s);
+  if (ship.overdriveLeft > 0 || ship.overdrive > 0 || ship.overheat > 0) {
+    drawOverdriveCue(ctx, W, H, g, s);
+  }
 
   // ---- off-screen pad chevrons
   drawPadPointers(ctx, W, H, g);
@@ -436,6 +429,48 @@ function drawArrestCue(ctx, W, H, g, s) {
     ctx.font = `600 ${9 * s}px ${FONT}`;
     ctx.fillStyle = ready ? 'rgba(255,179,71,0.8)' : 'rgba(150,168,185,0.45)';
     ctx.fillText(ready ? keyLabel(g.arrestKey || 'f') : '—', x + w - 12, y + 17 * s);
+  }
+  ctx.textAlign = 'left';
+}
+
+/**
+ * **Combat Overdrive, and the bill.**
+ *
+ * The window and the penalty are the same control seen at three moments, so
+ * they are one panel rather than two: READY while the charge is unspent,
+ * OVERDRIVE with the seconds left while it runs, and ENGINE HOT with the
+ * seconds owed afterwards. A capstone whose cost arrived invisibly would be a
+ * trap, and the derate is the one thing here a player cannot feel directly -
+ * the engine is simply weaker and nothing says why.
+ *
+ * Read straight off the ship's own timers, the same values `engineThrust` and
+ * `Abilities` read, rather than a copy of the rule.
+ */
+function drawOverdriveCue(ctx, W, H, g, s) {
+  const { ship } = g;
+  const running = ship.overdrive > 0;
+  const hot = !running && ship.overheat > 0;
+  const w = 118 * s;
+  const h = 26 * s;
+  const x = 16;
+  // Stacked above the arrest cue when both are carried, so neither is hidden.
+  const arrestShown = ship.arrestLeft > 0 || ship.arrestFired > 0;
+  const y = H - h - 16 - (g.abilities && g.abilities.equipped ? 58 * s : 0)
+    - (arrestShown ? (h + 6) : 0);
+  panel(ctx, x, y, w, h, running ? 'rgba(95,245,255,0.6)'
+    : hot ? 'rgba(255,90,90,0.45)' : 'rgba(95,245,255,0.32)');
+  ctx.font = `700 ${10 * s}px ${FONT}`;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = running ? '#ccfbff' : hot ? RED : CYAN;
+  ctx.fillText(running ? 'OVERDRIVE' : hot ? 'ENGINE HOT' : 'OVERDRIVE', x + 12, y + 17 * s);
+  ctx.textAlign = 'right';
+  ctx.font = `600 ${9 * s}px ${FONT}`;
+  if (running || hot) {
+    ctx.fillStyle = running ? 'rgba(204,251,255,0.85)' : 'rgba(255,90,90,0.8)';
+    ctx.fillText(`${(running ? ship.overdrive : ship.overheat).toFixed(1)}s`, x + w - 12, y + 17 * s);
+  } else {
+    ctx.fillStyle = 'rgba(95,245,255,0.75)';
+    ctx.fillText(keyLabel(g.overdriveKey || 'g'), x + w - 12, y + 17 * s);
   }
   ctx.textAlign = 'left';
 }

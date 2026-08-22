@@ -4,6 +4,48 @@
 // something to act on; M12 gave it enemies, a weapon and a shield, so every
 // node here now changes a value the simulation reads. The gate itself remains,
 // because a body with no hostile systems should not be selling threat analysis.
+//
+// ===========================================================================
+// **FIVE NODES PER TREE. Tom's decision, 2026-08-22, and it replaces the
+// spec's thirty.** Do not add a sixth to any tree without reopening it.
+// ===========================================================================
+//
+// Section 10 of the brief asks for ten nodes in each of three trees. M34 built
+// Flight & Survival out to that ten and Tom looked at the result on the screen:
+// the Flight column ran off the bottom while Technician stopped a third of the
+// way down, and the verdict was *"we have way too many skills, there should
+// only be 5 in each path"*. M35 cut eight and built two.
+//
+// **The shape is the rule, and every tree has it: T1, T1, T2, T3, T4.** Two
+// cheap entry nodes, then one identity per tier, then a capstone standing
+// behind the tier-3. That is a ladder rather than a shopping list, and it is
+// what makes five nodes a design instead of a trim - before M35, Technician had
+// **no tier 3 at all** (it jumped from small percentages straight to a 280-cost
+// capstone) and Combat had **no tier 4 at all**. Neither hole was about the
+// count, and cutting to five did not fix either one; building
+// `autonomous-repair` and `combat-overdrive` did.
+//
+// The arithmetic that says five is enough: every rank of all fifteen costs
+// **2,525** research and a typical run banks about **298** before losing it, so
+// a player buys three to five nodes a run whether the board holds fifteen or
+// thirty. Past the point where every tier is covered, more nodes is variety
+// with a sharply falling return - and each one is another thing that has to be
+// proved delivered. The spec's thirty is a count; the ladder above is structure.
+//
+// **What was cut, and why it is not coming back** (the full reasoning is in
+// `ROADMAP_STATUS.md` under "M35"): Salvage Drone, RCS Finesse, Environmental
+// Seals, Inertial Dampers, Navigation Forecast, Steady Hands, Energy on Kill
+// and Counter-Battery Logic. Each was the **only** thing selling its effect
+// key, so the mechanic underneath went with it rather than being left orphaned
+// for the loadout gate to find - except Inertial Dampers, whose
+// `disturbanceResist` is still sold by the Gyro Stabilizer, the Control
+// Surfaces and a hangar rung, and so cost nothing at all to remove.
+//
+// Nine further nodes in the brief were **never built**, and five of those name
+// systems this build does not have (module energy, engine-stall status,
+// crafting costs, a loadout change that is already free). They are recorded
+// under "Superseded by the five-node board" in `ROADMAP_STATUS.md`. Do not
+// build one because the spec lists it.
 
 export const TREES = {
   technician: {
@@ -19,14 +61,30 @@ export const TREES = {
       { id: 'black-box', name: 'Black-Box Recovery', tier: 2, ranks: 2, cost: 80, requires: ['field-patching'],
         describe: (r) => `Recover ${25 * r}% of cargo lost in a crash`,
         effect: (r) => ({ cargoRecovery: 0.25 * r }) },
-      { id: 'salvage-drone', name: 'Salvage Drone', tier: 2, ranks: 2, cost: 90, requires: ['fuel-mix'],
-        describe: (r) => `Missions pay ${10 * r}% more salvage`,
-        effect: (r) => ({ salvageBonus: 1 + 0.10 * r }) },
+      // **Technician's tier 3, and it had none until M35.** The tree ran T1, T1,
+      // T2, T2, T4 - so a player specialising into it had nothing at all
+      // between "+5% fuel" and a 280-cost capstone that one run cannot fund.
+      // That was the hole, and it was not the node count.
+      //
+      // **Half of what the spec asks for.** The other half - *"unlocks the
+      // Repair Nanites active module"* - names the crafting/unlock economy the
+      // brief assumed and this build does not have: modules are not bought or
+      // built, they are blueprints handed over for clearing a body, and
+      // `nextBlueprint` guarantees every one inside two runs. A skill handing
+      // one over early would be a second grant path competing with the only
+      // progression that survives a death, which is a decision about the
+      // blueprint drip rather than a skill node.
+      { id: 'autonomous-repair', name: 'Autonomous Repair', tier: 3, ranks: 1, cost: 100, requires: ['black-box'],
+        describe: () => 'Repair Nanites rebuild hull 20% faster',
+        effect: () => ({ repairRate: 1.2 }) },
       // The capstone, and the only thing in the game that gives a shuttle back
       // after it is gone. Once per expedition, so it buys one mistake and not a
       // habit - and the hold is lost with the lander, per the spec, so it never
       // turns a bad run into a profitable one.
-      { id: 'phoenix-protocol', name: 'Phoenix Protocol', tier: 4, ranks: 1, cost: 280, requires: ['black-box'],
+      //
+      // It stands behind the tier-3 rather than the tier-2 since M35, which is
+      // the ladder every tree has now.
+      { id: 'phoenix-protocol', name: 'Phoenix Protocol', tier: 4, ranks: 1, cost: 280, requires: ['autonomous-repair'],
         describe: () => 'Once an expedition, a lost shuttle comes back at 35% hull — without its cargo',
         // The number *is* the hull it comes back on, so the blurb and the
         // behaviour cannot drift apart - the same reason `sensor-pulse` reveals
@@ -44,32 +102,24 @@ export const TREES = {
       { id: 'reinforced-struts', name: 'Reinforced Struts', tier: 1, ranks: 3, cost: 50,
         describe: (r) => `Landing envelope ${8 * r}% wider`,
         effect: (r) => ({ gearTier: 1 + 0.08 * r }) },
-      { id: 'env-seals', name: 'Environmental Seals', tier: 2, ranks: 2, cost: 85, requires: ['reserve-tank'],
-        describe: (r) => `Heat, cold and radiation build ${15 * r}% more slowly`,
-        effect: (r) => ({ hazardResist: 1 - 0.15 * r }) },
-      { id: 'inertial-dampers', name: 'Inertial Dampers', tier: 2, ranks: 2, cost: 95, requires: ['reinforced-struts'],
-        describe: (r) => `Gusts and plumes rotate you ${15 * r}% less`,
-        effect: (r) => ({ disturbanceResist: 1 - 0.15 * r }) },
-      // **A pad-only node, and it says so.** "Smaller minimum side-thruster
-      // pulses" means nothing to a key, which answers exactly 1.0 - and
-      // `1 ** anything === 1`, so this is *arithmetically* inert on a keyboard
-      // rather than merely unhelpful. It shapes the fractional half of the
-      // range a stick lives in. Dead before M30 widened the input contract.
-      { id: 'rcs-finesse', name: 'RCS Finesse', tier: 1, ranks: 2, cost: 45,
-        describe: (r) => `Analog attitude control is finer near centre (rank ${r}). Stick only`,
-        effect: (r) => ({ rcsFinesse: 1 + 0.35 * r }) },
+      // **Cut in M35, and this is the record of the three that were here.**
+      // Environmental Seals (`hazardResist`), Inertial Dampers
+      // (`disturbanceResist`) and RCS Finesse (`rcsFinesse`) went when the tree
+      // came down to five. Inertial Dampers cost nothing to remove - the Gyro
+      // Stabilizer, the Control Surfaces and a hangar rung all still sell
+      // `disturbanceResist` - while the other two took their mechanic with
+      // them. Two more went at tier 3: Navigation Forecast (`hazardReveal`,
+      // which printed the hazard an expedition card was holding back) and
+      // Steady Hands (`steadyHands`, which settled the instruments after two
+      // still seconds). All five were real and all five worked; the tree simply
+      // does not have room for them at five nodes, and what it kept is one
+      // identity per tier.
       { id: 'surface-adaptation', name: 'Surface Adaptation', tier: 2, ranks: 2, cost: 85, requires: ['reinforced-struts'],
         describe: (r) => `${20 * r}% more hold on ice and on slopes`,
         effect: (r) => ({ gripBonus: 1 + 0.20 * r, slopeGrip: 1 + 0.20 * r }) },
       { id: 'emergency-arrest', name: 'Emergency Arrest', tier: 3, ranks: 1, cost: 120, requires: ['surface-adaptation'],
         describe: () => 'One panic burn a mission: a hard braking pulse, low, upright, and expensive',
         effect: () => ({ arrest: 1 }) },
-      { id: 'nav-forecast', name: 'Navigation Forecast', tier: 3, ranks: 1, cost: 100, requires: ['reserve-tank'],
-        describe: () => 'Expedition cards name the hazard they were holding back',
-        effect: () => ({ hazardReveal: 1 }) },
-      { id: 'steady-hands', name: 'Steady Hands', tier: 3, ranks: 1, cost: 95, requires: ['env-seals'],
-        describe: () => 'Fly still for two seconds and the instruments stop lying to you',
-        effect: () => ({ steadyHands: 1 }) },
       // **The one node that touches the attrition curve** the whole run model
       // rests on (M27, decision 4), so it is gated on having cleared five
       // bodies rather than on research alone - by which point a player has met
@@ -94,19 +144,50 @@ export const TREES = {
       { id: 'shield-harmonics', name: 'Shield Harmonics', tier: 2, ranks: 1, cost: 90, requiresFeature: 'enemies', requires: ['capacitor'],
         describe: () => 'Ray Shield also holds off heat, cold and radiation',
         effect: () => ({ shieldHazard: 1 }) },
-      { id: 'energy-on-kill', name: 'Energy on Kill', tier: 2, ranks: 1, cost: 100, requiresFeature: 'enemies', requires: ['threat-analysis'],
-        describe: () => 'Destroying a threat returns a module charge',
-        effect: () => ({ energyOnKill: 1 }) },
-      // The spec's other half of this - "reduces return-fire energy cost" -
-      // wants module *energy*, which this build does not have and which is one
-      // of the six nodes waiting on a decision. What is built is the half that
-      // exists: a shot that misses tells you who took it.
-      { id: 'counter-battery', name: 'Counter-Battery Logic', tier: 2, ranks: 1, cost: 85, requiresFeature: 'enemies', requires: ['threat-analysis'],
-        describe: () => 'A near miss paints the machine that fired it',
-        effect: () => ({ counterBattery: 1 }) },
-      { id: 'twin-link', name: 'Twin-Link Control', tier: 3, ranks: 1, cost: 110, requiresFeature: 'enemies', requires: ['capacitor'],
+      // **Cut in M35**: Energy on Kill (`energyOnKill`, which returned a charge
+      // for a kill) and Counter-Battery Logic (`counterBattery`, which painted
+      // the machine that missed you). Both worked; the tree came down to five
+      // and kept one identity per tier. Counter-Battery was already only half
+      // its spec line - the other half wanted module energy - and the charge
+      // Energy on Kill gave back is now the capstone's business.
+      { id: 'twin-link', name: 'Twin-Link Control', tier: 3, ranks: 1, cost: 110, requiresFeature: 'enemies', requires: ['shield-harmonics'],
         describe: () => 'The beam arcs to a second machine for a third of the damage',
         effect: () => ({ twinLink: 0.35 }) },
+      // **The Combat capstone, and this tree had none until M35** - the only
+      // one of the three with nothing at tier 4, while Flight had the Fourth
+      // Shuttle and Technician the Phoenix Protocol.
+      //
+      // **Re-pointed from energy onto cooldown, and that is Tom's call, not a
+      // liberty.** The spec asks for *"five seconds of faster weapon recharge
+      // and stronger shielding, followed by an engine-heat penalty"*, and
+      // "recharge" means an energy pool this build does not have: an active has
+      // charges and a **cooldown**. Building the pool underneath one node was
+      // offered and declined - it is a milestone of its own, and it is what the
+      // unbuilt Power Core component track wants too. On the cooldown the same
+      // sentence is buildable to the letter, and all three clauses are:
+      //
+      //   recharge   the equipped module's cooldown drains `OVERDRIVE.recharge`
+      //              times faster, so a spent module comes back inside the window
+      //   shielding  a Ray Shield raised during it starts with a bigger pool,
+      //              and one already up is topped up to match
+      //   the cost   `ship.overheat` seconds of a real thrust derate afterwards
+      //
+      // **The penalty is a derate rather than a heat gauge, and that is
+      // measured rather than stylistic.** `ship.thermalDerate` is reset to 1 by
+      // `applyForces` every step and written only by the `thermal` force, so
+      // raising `statusLevels.heat` costs nothing at all on the eight bodies
+      // that do not declare heat - and M31 measured that on the two that do it
+      // peaks at 10-31% against a bite of 55-60, so it would cost nothing there
+      // either. A penalty that is free on ten bodies out of ten is the
+      // `hazardLead` fault upside down. The overdrive supplies its own heat.
+      //
+      // A rebindable action like Emergency Arrest (`g`, `pad:5`), once per
+      // mission, for the same reason: `ACTIONS` is derived from `DEFAULT_KEYS`,
+      // so the settings screen, the rebind rules, the save format and the pad
+      // all learn about it without being told.
+      { id: 'combat-overdrive', name: 'Combat Overdrive', tier: 4, ranks: 1, cost: 260, requiresFeature: 'enemies', requires: ['twin-link'],
+        describe: () => 'Once a mission: five seconds of instant recharge and a stronger shield, then the engine derates',
+        effect: () => ({ overdrive: 1 }) },
     ],
   },
 };
@@ -151,8 +232,10 @@ export const ADDITIVE = new Set([
   // M34's flags and fractions. Each is "how much of a thing you did not have",
   // so zero is the absence and two sources should add reach rather than
   // multiply two fractions into less than either.
-  'arrest', 'hazardReveal', 'steadyHands', 'extraShuttle', 'phoenix',
-  'counterBattery', 'twinLink',
+  'arrest', 'extraShuttle', 'phoenix', 'twinLink',
+  // M35's capstone. "How many overdrives you did not have", so zero is the
+  // absence and a second source would add one rather than multiply.
+  'overdrive',
   // How much attitude authority a control surface gives you over lift. Zero is
   // "no foil fitted", so it accumulates rather than multiplying - a second
   // source of it should add reach, and multiplying two fractions would take it
@@ -164,13 +247,13 @@ export const ADDITIVE = new Set([
 export function deriveSkills(purchased = {}) {
   const out = {
     burnMain: 1, burnRcs: 1, fuelCapacity: 1, gearTier: 1,
-    repairOnLanding: 0, cargoRecovery: 0, salvageBonus: 1,
-    hazardResist: 1, disturbanceResist: 1,
+    repairOnLanding: 0, cargoRecovery: 0,
+    disturbanceResist: 1,
     weaponPower: 1, shieldCapacity: 1,
-    threatWarning: 0, shieldHazard: 0, energyOnKill: 0,
-    rcsFinesse: 1, gripBonus: 1, slopeGrip: 1,
-    arrest: 0, hazardReveal: 0, steadyHands: 0, extraShuttle: 0, phoenix: 0,
-    counterBattery: 0, twinLink: 0,
+    threatWarning: 0, shieldHazard: 0,
+    gripBonus: 1, slopeGrip: 1,
+    arrest: 0, extraShuttle: 0, phoenix: 0, twinLink: 0,
+    repairRate: 1, overdrive: 0,
   };
   for (const node of ALL_NODES) {
     const rank = Math.min(node.ranks, purchased[node.id] || 0);

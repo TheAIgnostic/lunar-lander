@@ -402,9 +402,8 @@ function combatEffect(e) {
       particles.ring(e.x, e.y, 150, 0.4, '#ffb347');
       // Destroying a machine pays salvage. It is never required, and never
       // enough on its own to replace a landing.
-      const bonus = Math.round(e.reward * ((g.loadout && g.loadout.salvageBonus) || 1));
-      particles.text(e.x, e.y - 24, `+${bonus} SALVAGE`, '#ffb347', 17);
-      g.combatSalvage = (g.combatSalvage || 0) + bonus;
+      particles.text(e.x, e.y - 24, `+${e.reward} SALVAGE`, '#ffb347', 17);
+      g.combatSalvage = (g.combatSalvage || 0) + e.reward;
       meta.stats.threatsDestroyed++;
       Log.log('kill', { salvage: bonus });
       break;
@@ -658,8 +657,7 @@ function onLand() {
     });
     g.run.coreDrought = reward.cores ? 0 : (g.run.coreDrought || 0) + 1;
     if (reward.pityCore) particles.text(ship.x, ship.y - 92, 'TECH CORE RECOVERED', '#5ff5ff', 20);
-    const bonus = (g.loadout && g.loadout.salvageBonus) || 1;
-    reward.salvage = Math.round(reward.salvage * bonus) + (g.combatSalvage || 0);
+    reward.salvage += (g.combatSalvage || 0);
     // The objective pays on top, and only when it was actually met.
     if (objective && objective.reward) {
       reward.salvage += objective.reward.salvage || 0;
@@ -985,6 +983,7 @@ function frame(now) {
 
 function draw() {
   g.arrestKey = input.bindings.arrest && input.bindings.arrest[0];
+  g.overdriveKey = input.bindings.overdrive && input.bindings.overdrive[0];
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   if (!g.level) {
     ctx.fillStyle = '#05060c';
@@ -1023,7 +1022,6 @@ function draw() {
   drawEnemies(ctx, g.field, ship, g.time, {
     ...present,
     threatWarning: !!(g.loadout && g.loadout.threatWarning),
-    counterBattery: !!(g.loadout && g.loadout.counterBattery),
     showPaths: Debug.showEnemyPaths,
   });
   R.drawShip(ctx, ship, g.time, cam);

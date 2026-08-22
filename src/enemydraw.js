@@ -48,10 +48,6 @@ export function drawEnemies(ctx, field, ship, time, opts = {}) {
     else if (type.kind === 'ground') drawTurret(ctx, e, type, time, opts);
     else drawDrone(ctx, e, type, time, opts);
     drawTelegraph(ctx, e, type, time, opts);
-    // Counter-Battery Logic marks the machine that just missed you, beside the
-    // machine rather than with the lethal warnings - what it answers is "which
-    // one was that", and the answer belongs on the thing itself.
-    if (opts.counterBattery && e.painted > 0) drawPainted(ctx, e, type, time);
     if (e.hp < e.maxHp) drawEnemyHealth(ctx, e, type);
     if (opts.contrast) drawThreatMark(ctx, e, type);
     if (opts.showPaths) drawEnemyRange(ctx, e, type);
@@ -398,29 +394,6 @@ function drawWreck(ctx, e, type) {
   ctx.restore();
 }
 
-/**
- * Counter-Battery Logic: the machine whose shot just went past you, marked.
- *
- * Drawn as a bracket rather than a ring, because a ring is what a *telegraph*
- * is and this is the opposite message - not "it is about to fire" but "that is
- * the one that already did". It fades with `e.painted`.
- */
-function drawPainted(ctx, e, type, time) {
-  const r = type.radius + 14;
-  ctx.save();
-  ctx.translate(e.x, e.y);
-  ctx.globalAlpha = clamp(e.painted / 1.6, 0, 1) * 0.9;
-  ctx.strokeStyle = AMBER;
-  ctx.lineWidth = 2;
-  for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-    ctx.beginPath();
-    ctx.moveTo(sx * r, sy * r - sy * 7);
-    ctx.lineTo(sx * r, sy * r);
-    ctx.lineTo(sx * r - sx * 7, sy * r);
-    ctx.stroke();
-  }
-  ctx.restore();
-}
 
 /** The locked aim line and the closing ring: everything the player gets to react to. */
 function drawTelegraph(ctx, e, type, time, opts) {

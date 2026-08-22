@@ -32,7 +32,7 @@ matters most is which survive a death, because that is the whole risk structure 
 | | buys | costs | on death | full cost |
 | --- | --- | --- | --- | ---: |
 | **Hangar** (`components.js`) | 5 tracks × 3 levels | salvage **+ body-specific material**, and **tech cores on L3/L4** (M29) | **kept** | 12,840 salvage |
-| **Skills** (`skills.js`) | 3 trees × 4 nodes, ranked | research data | **wiped** | 1,555 data |
+| **Skills** (`skills.js`) | 3 trees × **5 nodes**, ranked | research data | **wiped** | **2,885 data** (M35) |
 | **Loadout** (`modules.js`) | 1 active + 1 passive slot | nothing — blueprints are earned | blueprints **kept** | 5 active, **9 passive** (M31) |
 
 `Save.wipeForDeath` is the authority: it clears `purchasedSkills`, `banked` and the opened map, and
@@ -201,6 +201,14 @@ measurement said it did not need to be. What *was* broken is below.
 
 Research is healthier — ~85 data per body against a 40–95 cheapest node, so about one skill per body
 — but skills are wiped on death, so it never compounds.
+
+> **M35 (2026-08-22): the board is fifteen nodes, not thirty, and this is the arithmetic behind it.**
+> Every rank of all fifteen costs **2,885** research and a typical run banks about **298** before
+> losing it, so a player buys **three to five nodes a run whether the board holds fifteen or thirty**.
+> Adding nodes past the point where every tier is covered adds variety, not power — and each one is
+> another thing that has to be proved delivered. The cheapest path to a capstone is **515 / 515 / 505**
+> data in the three trees, which emerged from the shared T1-T1-T2-T3-T4 shape rather than being tuned.
+> The decision and the full reasoning are in `ROADMAP_STATUS.md` under "Tom's decisions", item 5.
 
 ### What actually was broken: the floor, and the material *scale*
 

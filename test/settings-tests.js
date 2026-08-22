@@ -17,6 +17,34 @@ const check = (n, c, e = '') => { if (c) pass++; else { fail++; console.log(`  F
 
 console.log('settings, bindings and the logbook');
 
+{
+  // **Every rebindable action has a name on the CONTROLS screen, and every name
+  // is for a real action.**
+  //
+  // `ACTIONS` is derived from `DEFAULT_KEYS`, which is what lets a new control
+  // reach the settings screen, the rebind rules, the save format and the pad
+  // with nothing added. The one thing it does *not* carry is the human label,
+  // and the miss is **silent**: the row appears, the binding works, and the
+  // title reads `undefined`. M34's Emergency Arrest shipped exactly like that
+  // and no test could see it, because no node test draws.
+  //
+  // Same shape as `BUILDERS` in M29 and `flightAssist`'s tips after it: a name
+  // in one place indexing a table in another. Asserted in both directions, from
+  // the source, because `screens.js` needs a browser to import.
+  const src = readFileSync(new URL('../src/screens.js', import.meta.url), 'utf8');
+  const block = src.slice(src.indexOf("case 'keys': {"));
+  const table = block.slice(block.indexOf('const names = {'), block.indexOf('};'));
+  const named = [...table.matchAll(/(\w+):\s*'/g)].map((m) => m[1]);
+  for (const a of ACTIONS) {
+    check(`the CONTROLS screen names "${a}"`, named.includes(a),
+      'the row will render its title as undefined');
+  }
+  for (const n of named) {
+    check(`the CONTROLS screen names something real: "${n}"`, ACTIONS.includes(n),
+      'a label for an action that no longer exists');
+  }
+}
+
 /** A stand-in for `window` that records what was bound to it. */
 function fakeTarget() {
   const handlers = {};

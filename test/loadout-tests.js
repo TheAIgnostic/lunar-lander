@@ -635,9 +635,6 @@ const WITNESS = {
       for (let i = 0; i < 900 && !ship.landed; i++) ship.step(1 / 120, idle, level, terrain, i / 120);
       return +(ship.hull / ship.hullMax).toFixed(4);
     } },
-  hazardResist: { how: 'flight',
-    measure: (on) => timeToStatus(on ? only('hazardResist', 0.6) : STOCK,
-      [{ type: 'radiation', period: 15, duty: 0.45, rate: 30 }], 'radiation') },
   disturbanceResist: { how: 'flight', measure: (on) => +gustPeak(on ? only('disturbanceResist', 0.6) : STOCK).toFixed(4) },
   spinDampBonus: { how: 'flight',
     measure: (on) => {
@@ -650,46 +647,13 @@ const WITNESS = {
       return +Math.abs(ship.spin).toFixed(6);
     } },
   // ---- M34's nine nodes -----------------------------------------------------
-  rcsFinesse: { how: 'flight',
-    // **A quarter-deflection stick, which is the only input this can touch.**
-    // Measured at 1.0 as well, below, because "keyboard-neutral" is the claim
-    // the node is sold on.
-    measure: (on) => +spinFrom(on ? only('rcsFinesse', 1.7) : STOCK, 0.25).toFixed(6) },
   arrest: { how: 'flight',
     measure: (on) => +arrestRun(on ? only('arrest', 1) : STOCK).vy.toFixed(4) },
-  steadyHands: { how: 'instrument',
-    measure: (on) => {
-      const ship = new Ship();
-      ship.applyLoadout(on ? only('steadyHands', 1) : STOCK);
-      ship.reset(0, 0, 100);
-      ship.statusLevels.radiation = 80;
-      ship.env.instrumentError = 0.5;
-      ship.steadySecs = 4;                      // flown still for four seconds
-      return +(instrumentNoise(ship) + instrumentDrift(ship)).toFixed(6);
-    } },
-  hazardReveal: { how: 'instrument',
-    // A body whose card is holding something back, asked both ways. The rng is
-    // pinned, so the *draw* is identical and only the printing differs - which
-    // is the property the implementation rests on.
-    measure: (on) => {
-      // Seed 7 is one where the card *does* hold something back — the roll is
-      // the rng's first value, so a seed either withholds on every eligible
-      // body or on none, and 4242 (this file's usual) is one of the nones.
-      for (const id of PLANET_ORDER) {
-        const plain = planetCard(id, 1, makeRng(7));
-        if (!plain.incomplete) continue;
-        const shown = planetCard(id, 1, makeRng(7), { reveal: on });
-        return `${shown.hazards.join(',')}|${shown.incomplete}`;
-      }
-      return 'no body withholds anything';
-    } },
   extraShuttle: { how: 'economy',
     measure: (on) => newRun('LUNA', 1, 3 + (on ? 1 : 0)).maxShuttles },
   phoenix: { how: 'economy',
     // What a lost shuttle comes back on. Zero is "it does not come back".
     measure: (on) => (on ? only('phoenix', 0.35) : STOCK).phoenix || 0 },
-  counterBattery: { how: 'instrument',
-    measure: (on) => paintedInk(on) },
   twinLink: { how: 'flight',
     measure: (on) => +twinLinkRun(on ? only('twinLink', 0.35) : STOCK).toFixed(3) },
 
@@ -839,18 +803,44 @@ const WITNESS = {
     measure: (on) => timeToStatus(on ? only('shieldHazard', 1) : STOCK,
       [{ type: 'cold', coldRate: 30 }], 'cold', 40,
       (s) => { s.shieldActive = true; s.shieldFactor = 0.15; s.shieldHazard = !!(s.loadout.shieldHazard); }) },
-  energyOnKill: { how: 'flight',
+  // ---- M35's two --------------------------------------------------------
+  //
+  // `repairRate` is measured by **running the nanites** rather than reading the
+  // spec back: the node multiplies the module's own declared `repairPerSecond`,
+  // so a witness that read the loadout key would pass even if `abilities.js`
+  // ignored it - which is exactly how `beacon` sat hollow across three sellers.
+  repairRate: { how: 'flight',
     measure: (on) => {
-      const lo = on ? only('energyOnKill', 1) : STOCK;
-      const { ship, field } = machineRig(lo);
-      const a = new Abilities('pulse-laser', lo);
-      let returned = 0;
-      for (let i = 0; i < 2400; i++) {
-        if (a.ready) a.trigger(ship);
-        for (const ev of a.update(1 / 120, { ship, field })) if (ev.kind === 'charge-returned') returned++;
-      }
-      return returned;
+      const ship = new Ship();
+      ship.applyLoadout(on ? only('repairRate', 1.2) : STOCK);
+      ship.reset(500, 300, 120);
+      ship.hull = Math.round(ship.hullMax * 0.4);
+      const a = new Abilities('repair-nanites', on ? only('repairRate', 1.2) : STOCK);
+      a.trigger(ship);
+      for (let i = 0; i < 240; i++) a.update(1 / 120, { ship });
+      return +ship.hull.toFixed(6);
     } },
+  // The capstone, measured on the **engine** - the half a player pays rather
+  // than the half they spend. Pressed, run out, and then asked what the main
+  // engine is worth, which is `engineThrust()`: the one rule both thrust sites
+  // read. A witness that checked `ship.overdrive` would only prove a timer runs.
+  overdrive: { how: 'flight',
+    measure: (on) => {
+      const level = MOON_LEVELS[3];
+      const terrain = new Terrain(level, 1000);
+      const ship = new Ship();
+      ship.applyLoadout(on ? only('overdrive', 1) : STOCK);
+      const start = spawnFor(level, terrain);
+      ship.reset(start.x, start.y - 300, ship.tankFor(level.fuel));
+      const set = { steering: 'pro', invertRotation: false };
+      const press = { thrust: false, left: false, right: false, hold: false, arrest: 0, overdrive: 1 };
+      const idle = { ...press, overdrive: 0 };
+      ship.step(1 / 120, press, level, terrain, 0, set);
+      // Far enough past the window that the bill is what is being measured.
+      for (let i = 1; i < 120 * 6; i++) ship.step(1 / 120, idle, level, terrain, i / 120, set);
+      return +ship.engineThrust().toFixed(6);
+    } },
+
   // ---- flight, declared by an active module rather than by the loadout ----
   anchorGrip: { how: 'flight',
     measure: (on) => withEffect('magnetic-anchor', { anchorGrip: on ? 6 : 1.2 },
@@ -894,11 +884,6 @@ const WITNESS = {
     }) },
 
   // ---- economy -----------------------------------------------------------
-  salvageBonus: { how: 'economy',
-    measure: (on) => Math.round(missionReward({
-      grade: 'PERFECT', padMultiplier: 3, fuelLeft: 50, maxFuel: 100,
-      rareMaterial: 'Ore', firstClear: true, padTier: 1,
-    }).salvage * (on ? 1.2 : 1)) },
   cargoRecovery: { how: 'economy',
     measure: (on) => {
       const haul = { ...freshHaul(), salvageSafe: 100, salvageCargo: 100, materials: { Ore: 40 } };
@@ -1004,6 +989,34 @@ const WITNESS = {
   for (const g of gaps) console.log(`  GAP   ${g} - sold to the player, not yet delivered`);
 }
 
+{
+  // **One engine rule, one implementation - asserted structurally, because a
+  // second thrust site is invisible to every behavioural test there is.**
+  //
+  // `spec.thrust` is what the lander was built with and `engineThrust()` is
+  // what it can deliver after engine heat and a Combat Overdrive bill have had
+  // their say. There are two places that burn the main engine - flight, and the
+  // recovery burn while a touchdown is still sliding - and M35 found the second
+  // one uncovered: pointing it back at the raw `spec.thrust` raised **zero
+  // failures** in every suite, because the sliding path is narrow enough that
+  // nothing flies it. A third site added later would be the same silent hole.
+  //
+  // So the claim is about the source: outside `engineThrust` itself, nothing in
+  // `ship.js` multiplies the raw thrust or reads the derate. That is the same
+  // shape as M24's constant-encoding assertions - state the rule where it can
+  // be checked, rather than hoping a flight happens to cross it.
+  const text = readFileSync(new URL('../src/ship.js', import.meta.url), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  const body = text.slice(text.indexOf('engineThrust()'), text.indexOf('tankFor('));
+  const outside = text.replace(body, '');
+  check('only engineThrust() reads the engine derate',
+    !/\bthermalDerate\b/.test(outside.replace(/this\.thermalDerate = 1;/, '')),
+    'a second place derates the engine - fold it into engineThrust()');
+  check('and nothing else touches the raw spec thrust at all',
+    !/spec\.thrust\b/.test(outside),
+    'a second thrust site - it will not see heat or an overdrive bill');
+}
+
 // ---------------------------------------------------------------------------
 section('3. turning it on moves the simulation');
 
@@ -1107,14 +1120,14 @@ section('3. turning it on moves the simulation');
     }
     return peak;
   };
+  // Inertial Dampers was the skill half of this and was cut in M35; the key it
+  // sold is still sold by the Gyro Stabilizer, the Control Surfaces and a
+  // hangar rung, which is exactly why removing that node cost nothing.
   const noDamp = gustAfter(deriveFull({}, deriveSkills({}), {}));
-  const skillDamp = gustAfter(deriveFull({}, deriveSkills({ 'inertial-dampers': 2 }), {}));
   const gyro = gustAfter(deriveFull({}, deriveSkills({}), derivePassive('gyro-stabilizer')));
-  const both = gustAfter(deriveFull({}, deriveSkills({ 'inertial-dampers': 2 }), derivePassive('gyro-stabilizer')));
-  check('inertial-dampers shrinks the gust', skillDamp < noDamp * 0.95, `${noDamp.toFixed(1)} -> ${skillDamp.toFixed(1)}`);
+  const foil = gustAfter(deriveFull({}, deriveSkills({}), derivePassive('atmospheric-control-surfaces')));
   check('the gyro passive shrinks the gust', gyro < noDamp * 0.95, `${noDamp.toFixed(1)} -> ${gyro.toFixed(1)}`);
-  check('and the two together shrink it further still', both <= Math.min(skillDamp, gyro) + 0.01,
-    `skill ${skillDamp.toFixed(1)} gyro ${gyro.toFixed(1)} both ${both.toFixed(1)}`);
+  check('and so does the control surface', foil < noDamp * 0.99, `${noDamp.toFixed(1)} -> ${foil.toFixed(1)}`);
 
   // --- hazardResist: does exposure build more slowly?
   //
@@ -1135,9 +1148,6 @@ section('3. turning it on moves the simulation');
     return Infinity;
   };
   const rawRads = timeToRads(deriveFull({}, deriveSkills({}), {}));
-  const sealed = timeToRads(deriveFull({}, deriveSkills({ 'env-seals': 2 }), {}));
-  check('env-seals slows hazard build-up', Number.isFinite(rawRads) && sealed > rawRads * 1.1,
-    `${rawRads.toFixed(1)}s -> ${sealed.toFixed(1)}s to 40% exposure`);
 
   // And a raised Ray Shield should slow it far harder than the skill does.
   const shielded = (() => {
@@ -1156,8 +1166,13 @@ section('3. turning it on moves the simulation');
     }
     return Infinity;
   })();
-  check('a raised Ray Shield holds off radiation harder than the skill',
-    shielded > sealed, `skill ${sealed.toFixed(1)}s vs shield ${shielded === Infinity ? 'never' : shielded.toFixed(1) + 's'}`);
+  // Compared against **bare exposure** since M35. It used to be compared against
+  // Environmental Seals, and when that node was cut the comparison would have
+  // silently lost its counterpart - so the claim is stated against the thing it
+  // is really about: standing in a radiation sweep with nothing raised.
+  check('a raised Ray Shield holds off radiation',
+    shielded > rawRads * 1.5,
+    `bare ${rawRads.toFixed(1)}s vs shield ${shielded === Infinity ? 'never' : shielded.toFixed(1) + 's'}`);
 
   // --- gripBonus: does the lander slide less on ice?
   const slide = (loadout) => {
@@ -1177,35 +1192,6 @@ section('3. turning it on moves the simulation');
   const cleats = slide(deriveFull({}, deriveSkills({}), derivePassive('ice-cleats')));
   check('ice-cleats shortens the slide on Europa', cleats < bare * 0.95,
     `${bare.toFixed(0)} px -> ${cleats.toFixed(0)} px`);
-}
-
-{
-  // --- RCS Finesse: both burners, and the exactness the "stick only" claim rests on
-  //
-  // Mutation-tested into existence. The first version pushed only the right
-  // burner, so dropping the shaping from the *left* line raised nothing at all -
-  // half a node, silently uncovered.
-  for (const side of ['left', 'right']) {
-    const spin = (loadout, amount) => {
-      const { ship, terrain, level } = rig(loadout);
-      ship.y = terrain.heightAt(ship.x) - 520;
-      const input = { thrust: 0, left: 0, right: 0, hold: 0, [side]: amount };
-      for (let i = 0; i < 60; i++) ship.step(1 / 120, input, level, terrain, i / 120);
-      return Math.abs(ship.spin);
-    };
-    const fine = only('rcsFinesse', 1.7);
-    check(`rcs-finesse feathers a quarter-deflection ${side} burner`,
-      spin(fine, 0.25) < spin(STOCK, 0.25) * 0.8,
-      `${spin(STOCK, 0.25).toFixed(4)} -> ${spin(fine, 0.25).toFixed(4)} rad/s`);
-    // **The claim the node is sold on**: a key answers exactly 1 or exactly 0,
-    // and `Math.pow` returns those unchanged, so a keyboard player is not
-    // holding a worse lander. Asserted to the bit rather than to a tolerance.
-    check(`and leaves a held ${side} key bit-identical`,
-      spin(fine, 1) === spin(STOCK, 1),
-      `${spin(STOCK, 1)} vs ${spin(fine, 1)}`);
-    check(`and an untouched ${side} control at exactly zero`,
-      spin(fine, 0) === spin(STOCK, 0));
-  }
 }
 
 {
@@ -1309,14 +1295,10 @@ section('3. turning it on moves the simulation');
 }
 
 {
-  // --- salvageBonus and cargoRecovery reach the economy
-  const paid = (bonus) => Math.round(missionReward({
-    grade: 'PERFECT', padMultiplier: 3, fuelLeft: 50, maxFuel: 100,
-    rareMaterial: 'Ore', firstClear: true, padTier: 1,
-  }).salvage * bonus);
-  const eff = deriveSkills({ 'salvage-drone': 2 });
-  check('salvage-drone raises what a mission pays', paid(eff.salvageBonus) > paid(1),
-    `${paid(1)} -> ${paid(eff.salvageBonus)}`);
+  // --- cargoRecovery reaches the economy
+  //
+  // Salvage Drone was the other half of this and was cut in M35; a mission's
+  // pay is what the mission is worth now, with no skill scaling it.
   const haul = { ...freshHaul(), salvageSafe: 100, salvageCargo: 100, materials: { Ore: 40 } };
   const lostBare = settleHaul(haul, { completed: false, recovered: 0 });
   const lostBox = settleHaul(haul, { completed: false, recovered: deriveSkills({ 'black-box': 2 }).cargoRecovery });
@@ -1439,29 +1421,6 @@ section('3. turning it on moves the simulation');
     check('a spent module says so rather than sitting dead', a.blocker === 'SPENT' && a.trigger(ship) === false);
   }
 
-  // energy-on-kill returns the charge
-  {
-    const loadout = deriveFull({}, deriveSkills({ capacitor: 3, 'threat-analysis': 1, 'energy-on-kill': 1 }), {});
-    const level = { ...MOON_LEVELS[3], enemyBudget: 1, enemySets: ['sentry-turret'] };
-    const terrain = new Terrain(level, 4242);
-    const f = new EnemyField(level, terrain, 4242);
-    const ship = new Ship();
-    ship.applyLoadout(loadout);
-    ship.reset(0, 0, level.fuel);
-    if (f.enemies.length) {
-      const e = f.enemies[0];
-      ship.x = e.x + 80; ship.y = e.y - 60;
-      const a = new Abilities('pulse-laser', loadout);
-      a.trigger(ship);
-      const after = a.charges;
-      let returned = false;
-      for (let i = 0; i < 1200 && !returned; i++) {
-        for (const ev of a.update(1 / 120, { ship, field: f })) if (ev.kind === 'charge-returned') returned = true;
-        if (!a.active && a.ready) { a.trigger(ship); }
-      }
-      check('energy-on-kill returns a charge when a threat dies', returned && a.charges >= after);
-    }
-  }
 }
 
 {
@@ -1639,15 +1598,10 @@ section('4. fitting it changes a flown mission');
 const NOT_IN_FLIGHT = {
   // --- M34. Four of the nine change what you are shown or what a *run* is,
   // and one changes something a boolean pilot cannot express.
-  'rcs-finesse': 'shapes the fractional half of an analog stick, and a key answers exactly 1 or 0',
-  'nav-forecast': 'prints what an expedition card was holding back',
-  'steady-hands': 'settles the instruments; the lander flies the same either way',
-  'counter-battery': 'marks the machine that missed you',
   'fourth-shuttle': 'changes how many shuttles a run carries, not how one is flown',
   'phoenix-protocol': 'gives one back after the flight it was lost on',
   'sensor-pulse': 'clears the weather - what you can see, not where you go',
   'hardened-radar': 'instruments only, and presentation may never reach the simulation',
-  'salvage-drone': 'changes what a mission pays, not how it is flown',
   'black-box': 'changes what survives a crash, after the flight is over',
   'threat-analysis': 'draws the tracking arc; the machines behave identically',
 };
@@ -1663,8 +1617,6 @@ const NOT_IN_FLIGHT = {
 const NODE_RIG = {
   'fuel-mix': { body: 'LUNA', route: 'home' },
   'reserve-tank': { body: 'LUNA', route: 'home' },
-  'inertial-dampers': { body: 'MARS', route: 'home' },                 // gusts
-  'env-seals': { body: 'EUROPA', route: 'home' },                      // radiation
   // **Every one of these four was measured, not guessed.** The first pass put
   // them all on the Moon's deep route and read four of them as inert; a scan of
   // all ten bodies against both routes found each one a place where it is
@@ -1673,7 +1625,6 @@ const NODE_RIG = {
   'reinforced-struts': { body: 'VENUS', route: 'home' },               // the wall lands hard
   'field-patching': { body: 'MARS', route: 'home', enemies: true },    // hull to give back
   capacitor: { body: 'LUNA', route: 'deep', ability: 'pulse-laser' },
-  'energy-on-kill': { body: 'ENCELADUS', route: 'deep', ability: 'pulse-laser' },
   // Ganymede's field raises `charge`, which the shield only covers once
   // Harmonics is bought. On Io - the body the *shield* claims - heat never
   // reaches its bite point for this pilot, so there is nothing to hold off.
@@ -1684,6 +1635,17 @@ const NODE_RIG = {
   'surface-adaptation': { body: 'EUROPA', route: 'home' },
   'emergency-arrest': { body: 'VENUS', route: 'home' },
   'twin-link': { body: 'LUNA', route: 'deep', ability: 'pulse-laser' },
+  // M35. Both need a module to act on, which is what a Combat capstone and a
+  // nanites multiplier are: the nanites need a lander that has been hurt, and
+  // the overdrive needs a spent module and something still shooting.
+  // **The way home, and it was measured rather than guessed.** The deep route
+  // read 0/5 - at the prize pad with machines up, four flights in five end as a
+  // crash and a crash is insensitive to 20% more hull knitted back. Scanned
+  // across five bodies and both routes: MARS/home 2/5, LUNA/deep 2/5,
+  // EUROPA/home 2/5, VENUS/deep 1/5, TITAN 1/5 either way. MARS is what the
+  // nanites themselves claim, so that is where the node is asked.
+  'autonomous-repair': { body: 'MARS', route: 'home', ability: 'repair-nanites', enemies: true },
+  'combat-overdrive': { body: 'LUNA', route: 'deep', ability: 'pulse-laser', enemies: true },
 };
 
 const FLIGHT_SEED = 4242;

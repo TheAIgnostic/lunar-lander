@@ -23,12 +23,6 @@ import { spawnFor } from './spawn.js';
 /** Tunables. Every number a designer might want to argue about lives here. */
 export const COMBAT = {
   shipRadius: 17,          // collision radius used for enemy fire
-  // A shot passing inside this counts as a near miss, and paints its firer for
-  // `paintFor` seconds. 64 px is under four ship radii - close enough that the
-  // player felt it go by, which is what makes the mark an answer to something
-  // rather than a general-purpose enemy highlighter.
-  nearMiss: 64,
-  paintFor: 1.6,
   spawnSafeRadius: 430,    // no enemy may sit this close to the lander's start
   sanctuaryMargin: 140,    // extra clearance beyond reach around the safe pad
   muzzleSafe: 56,          // a shot may never appear closer than this to the ship
@@ -677,7 +671,6 @@ export class EnemyField {
 
     const seen = target ? this._sees(e, type, target) : null;
     e.alert = clamp(e.alert + (seen ? dt * 2.5 : -dt * 1.2), 0, 1);
-    if (e.painted > 0) e.painted = Math.max(0, e.painted - dt);
 
     // Out of ammo is out of the fight, permanently. It still stands there and
     // still tracks nothing - drawn dark, so a player who counted the shots can
@@ -857,19 +850,6 @@ export class EnemyField {
       }
       const hitGround = p.y >= this.terrain.heightAt(p.x);
       const hitRoof = this.terrain.ceiling && p.y <= this.terrain.ceilingAt(p.x);
-      // **A near miss, and who took it.** A shot that passes close and does not
-      // connect paints its firer for a moment - Counter-Battery Logic. The mark
-      // is set here whatever the loadout says, because a machine being *marked*
-      // is a fact about the world; whether the player is shown it is
-      // `enemydraw`'s decision and the skill's. Keeping the two apart is what
-      // stops a presentation feature reaching into the simulation.
-      if (ship && p.from != null) {
-        const near = Math.hypot(p.x - ship.x, p.y - ship.y);
-        if (near < COMBAT.nearMiss) {
-          const firer = this.enemies.find((e) => e.id === p.from);
-          if (firer) firer.painted = Math.max(firer.painted || 0, COMBAT.paintFor);
-        }
-      }
       if (p.life <= 0 || p.x < 0 || p.x > level.width || hitGround || hitRoof) {
         if (hitGround || hitRoof) events.push({ kind: 'spark', x: p.x, y: p.y });
         this.shots.splice(i, 1);

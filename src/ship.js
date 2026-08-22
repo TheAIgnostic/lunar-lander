@@ -124,6 +124,37 @@ export const ENVELOPE = envelopeFor(1);
  * arrival into a good one and a genuine disaster into a merely bad one. It is
  * deliberately not enough to rescue a full-speed dive.
  */
+/**
+ * **Combat Overdrive** - the Combat tree's capstone, once per mission.
+ *
+ * The spec asks for *"five seconds of faster weapon recharge and stronger
+ * shielding, followed by an engine-heat penalty"*. "Recharge" means a module
+ * energy pool this build does not have, so it is re-pointed onto the
+ * **cooldown**, which it does (Tom's call, M35). All three clauses survive:
+ * `Abilities` drains its cooldown `recharge` times faster and starts a shield
+ * with `shield` times the pool, and afterwards the engine derates.
+ *
+ * **The penalty is a derate rather than a heat gauge, and that is measured.**
+ * `ship.thermalDerate` is reset to 1 by `applyForces` every step and written
+ * only by the `thermal` force, so raising `statusLevels.heat` costs exactly
+ * nothing on the eight bodies that do not declare heat - and M31 measured that
+ * on the two that do, heat peaks at 10-31% against a bite of 55-60, so it would
+ * cost nothing there either. A penalty that is free on ten bodies out of ten is
+ * a thing sold and not delivered, upside down. The overdrive brings its own.
+ *
+ * `derate` is 0.72 against the heat channel's own floor of 0.55 at full soak:
+ * worse than a warm engine and not as bad as a cooked one, for four seconds
+ * against five of overdrive - so the window is worth more than the bill, which
+ * is what makes it a capstone rather than a trap.
+ */
+export const OVERDRIVE = {
+  duration: 5,          // seconds of it, per the spec
+  recharge: 6,          // how much faster a cooldown drains while it runs
+  shield: 1.6,          // and how much bigger a shield raised inside it starts
+  overheat: 4,          // seconds of derated engine afterwards
+  derate: 0.72,         // and how much thrust is left during them
+};
+
 export const ARREST = {
   maxAltitude: 200,     // px above the ground; higher and there is time to fly
   maxTilt: 0.42,        // rad from upright - about 24 degrees
@@ -203,6 +234,26 @@ export class Ship {
    * tank, and the one skill whose whole effect is the tank could not move a
    * flown mission at all. One rule, one implementation, three callers.
    */
+  /**
+   * **What the main engine is actually good for right now.**
+   *
+   * `spec.thrust` is what the lander was built with; this is what it can
+   * deliver after the weather and the pilot have had their say. Two things
+   * derate it and they compose rather than replacing one another: engine heat
+   * (`thermalDerate`, owned and reset every step by `applyForces`) and the bill
+   * Combat Overdrive leaves behind.
+   *
+   * It is a method because there are **two** thrust sites - flight, and the
+   * recovery burn while a touchdown is still sliding - and they had the derate
+   * open-coded in both. A third one added later would silently fly a
+   * full-strength engine through an overheat, which is the class of fault this
+   * project keeps finding: one rule, one implementation.
+   */
+  engineThrust() {
+    return this.spec.thrust * this.thermalDerate
+      * (this.overheat > 0 ? OVERDRIVE.derate : 1);
+  }
+
   tankFor(missionFuel) {
     return Math.round(missionFuel * ((this.loadout && this.loadout.fuelCapacity) || 1));
   }
@@ -262,7 +313,6 @@ export class Ship {
     // next - the same rule `thermalDerate` and `rcsStiffness` live under.
     this.airBrake = 1;
     this.cloaked = false;
-    this.steadySecs = 0;
     // Emergency Arrest: one per mission, and only when the loadout carries it.
     // Granted in `reset` rather than in `applyLoadout` because `startLevel`
     // calls them in that order - granting in the other would be wiped a line
@@ -270,6 +320,11 @@ export class Ship {
     this.arrestLeft = ((this.loadout && this.loadout.arrest) || 0) > 0 ? 1 : 0;
     this.arrestHeld = false;
     this.arrestFired = 0;
+    // Combat Overdrive, granted the same way and for the same reason.
+    this.overdriveLeft = ((this.loadout && this.loadout.overdrive) || 0) > 0 ? 1 : 0;
+    this.overdriveHeld = false;
+    this.overdrive = 0;          // seconds of the window still running
+    this.overheat = 0;           // and seconds of the bill still owed
     // What the machines chase instead of you, while a flare burns.
     this.decoy = null;
     this.revealed = false;
@@ -409,12 +464,6 @@ export class Ship {
     this.rcsLeft = leftIn > 0;
     this.rcsRight = rightIn > 0;
     this.holding = amountOf(input, 'hold') > 0 && hasFuel && Math.abs(this.spin) > 0.02;
-    // **How long the lander has been flown still**, for Steady Hands. Counted
-    // here because this is the one place that sees every control magnitude, and
-    // read only by the instruments - it multiplies nothing and moves nothing,
-    // which is what keeps the accessibility rule intact in both directions.
-    const quiet = throttleIn < 0.15 && leftIn < 0.15 && rightIn < 0.15;
-    this.steadySecs = quiet ? (this.steadySecs || 0) + dt : 0;
     this.direct = settings.steering === 'direct';
 
     // Partial throttle costs proportionally less. Holding attitude is a button
@@ -430,30 +479,15 @@ export class Ship {
     // 1 unless a force on this level says otherwise, and both lag the force by
     // one substep (1/120 s) because forces are applied at the end of the step -
     // deterministic, and far below anything a player or a fixture can see.
-    // **RCS Finesse, and why it is provably keyboard-neutral.** Raising a
-    // fractional command to a power greater than 1 shrinks it - a stick an
-    // eighth of the way over commands a smaller pulse than it used to, which is
-    // "smaller minimum side-thruster pulses" exactly. And `Math.pow(1, x)` is
-    // **1** and `Math.pow(0, x)` is **0** for any positive x, so the two values
-    // a key can produce come back untouched by IEEE-754 rather than by
-    // convention. That is what makes "stick only" a testable claim instead of a
-    // note in a blurb: `settings-tests.js` asserts the exactness, and the node
-    // is excused from the flown gate because a boolean pilot cannot see it.
-    //
-    // It shapes only the spin term. `rcsLeft`/`rcsRight` stay derived from the
-    // raw magnitude, so a feathered input still counts as firing a thruster for
-    // the audio, the particles and the fuel.
-    const fine = (this.loadout && this.loadout.rcsFinesse) || 1;
-    const feather = (v) => (fine > 1 ? Math.pow(v, fine) : v);
     const rcsAuth = this.spec.rcsAccel * this.rcsStiffness;
     const sideAuth = this.spec.sideThrust * this.rcsStiffness;
-    const mainThrust = this.spec.thrust * this.thermalDerate;
+    const mainThrust = this.engineThrust();
 
     if (this.direct) {
       // DIRECT mode: the side thrusters translate instead of rotating, and the
       // hull holds itself upright. Left means left, with no attitude to fly.
-      if (this.rcsLeft) this.vx -= sideAuth * feather(leftIn) * dt;
-      if (this.rcsRight) this.vx += sideAuth * feather(rightIn) * dt;
+      if (this.rcsLeft) this.vx -= sideAuth * leftIn * dt;
+      if (this.rcsRight) this.vx += sideAuth * rightIn * dt;
       this.spin *= Math.pow(0.86, dt * 60);
       this.angle += this.spin * dt;
       this.angle -= this.angle * Math.min(1, dt * 7);   // ease back to level
@@ -461,8 +495,8 @@ export class Ship {
     } else {
       // CLASSIC mode: side burners are attitude control.
       const dir = settings.invertRotation ? -1 : 1;
-      if (this.rcsLeft) this.spin -= rcsAuth * dir * feather(leftIn) * dt;
-      if (this.rcsRight) this.spin += rcsAuth * dir * feather(rightIn) * dt;
+      if (this.rcsLeft) this.spin -= rcsAuth * dir * leftIn * dt;
+      if (this.rcsRight) this.spin += rcsAuth * dir * rightIn * dt;
       if (this.holding) {
         const damp = Math.sign(this.spin) * Math.min(Math.abs(this.spin), 6 * dt);
         this.spin -= damp;
@@ -504,6 +538,28 @@ export class Ship {
     // Fired on the **edge** of the control, like the ability button: held down
     // it must not drain the tank, and a player who mashes it should get one
     // pulse rather than a continuous burn.
+    // **Combat Overdrive.** Fired on the edge like the arrest and the ability
+    // button, once a mission, and it refuses nothing - unlike the arrest, there
+    // is no state in which pressing it is wrong, only moments when it is
+    // wasted. The window and the bill are counted here because this is the one
+    // place that runs every substep; what they *do* is `abilities.js` (the
+    // module) and `applyForces` (the engine), each in the file that owns it.
+    const odIn = amountOf(input, 'overdrive') > 0;
+    const odEdge = odIn && !this.overdriveHeld;
+    this.overdriveHeld = odIn;
+    if (odEdge && this.overdriveLeft > 0 && this.overdrive <= 0 && this.overheat <= 0) {
+      this.overdriveLeft--;
+      this.overdrive = OVERDRIVE.duration;
+    }
+    if (this.overdrive > 0) {
+      this.overdrive = Math.max(0, this.overdrive - dt);
+      // The bill is armed while the window runs, so it lands the instant the
+      // window closes rather than needing a second place to notice.
+      if (this.overdrive <= 0) this.overheat = OVERDRIVE.overheat;
+    } else if (this.overheat > 0) {
+      this.overheat = Math.max(0, this.overheat - dt);
+    }
+
     const arrestIn = amountOf(input, 'arrest') > 0;
     const arrestEdge = arrestIn && !this.arrestHeld;
     this.arrestHeld = arrestIn;
@@ -640,8 +696,9 @@ export class Ship {
       this.fuel = Math.max(0, this.fuel - burn * dt);
       this.throttle += (throttleIn - this.throttle) * Math.min(1, dt * 14);
       if (this.thrusting) {
-        this.vx += this.noseX * this.spec.thrust * this.thermalDerate * throttleIn * dt;
-        this.vy += this.noseY * this.spec.thrust * this.thermalDerate * throttleIn * dt;
+        const slideThrust = this.engineThrust();
+        this.vx += this.noseX * slideThrust * throttleIn * dt;
+        this.vy += this.noseY * slideThrust * throttleIn * dt;
       }
       if (this.rcsLeft) this.spin -= this.spec.rcsAccel * this.rcsStiffness * 0.5 * leftIn * dt;
       if (this.rcsRight) this.spin += this.spec.rcsAccel * this.rcsStiffness * 0.5 * rightIn * dt;

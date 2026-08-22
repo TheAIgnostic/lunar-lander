@@ -18,9 +18,11 @@ import { sanctuaryPad } from './enemies.js';
 /**
  * Which loadout key answers which status channel.
  *
- * `hazardResist` answers every channel; a **per-channel** key answers one. That
- * is the difference between Environmental Seals, which is general, and the
- * Ablative Acid Skin, which is Venus' answer and does nothing about cold.
+ * **Every mitigation here is per-channel since M35.** The Ablative Acid Skin is
+ * Venus' answer and does nothing about cold. There used to be a general key
+ * answering every channel at once, sold by Environmental Seals, and it went with
+ * that node when the Flight tree came down to five - so what answers a channel
+ * now is kit chosen for that channel, plus the Ray Shield.
  *
  * **Written out rather than built as `channel + 'Resist'`.** The concatenated
  * version worked and was invisible: `loadout-tests.js` searches the source for
@@ -41,7 +43,7 @@ export const CHANNEL_RESIST = {
 export function hazardScale(ship, channel) {
   const l = (ship && ship.loadout) || {};
   const key = CHANNEL_RESIST[channel];
-  const base = (l.hazardResist || 1) * ((key && l[key]) || 1);
+  const base = (key && l[key]) || 1;
   if (!ship.shieldActive) return base;
   const covered = channel === 'radiation' || ship.shieldHazard;
   return covered ? base * (ship.shieldFactor != null ? ship.shieldFactor : 0.15) : base;

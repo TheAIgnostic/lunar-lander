@@ -27,7 +27,7 @@ Everything under `src/` is a plain ES module, loaded directly in the browser and
 | `src/economy.js` | rewards, the carried haul, what a deposit is worth, the transmitted/cargo split, settlement and banking | M9/M15 |
 | `src/route.js` | the ten-body ladder, the next-body card, the progress trail, checkpoint rule | M9/M27 |
 | `src/components.js` | 5 component tracks, `deriveLoadout` / `deriveFull`, purchase rules, the recommended tier | M10/M11/M28 |
-| `src/skills.js` | 3 skill trees (**21 of 30 nodes; Flight complete**), `deriveSkills`, `skillFeatures`, purchase and gating rules | M11/M34 |
+| `src/skills.js` | 3 skill trees, **5 nodes each — Tom's decision, not the spec's 30**, `deriveSkills`, `skillFeatures`, purchase and gating rules | M11/M34/M35 |
 | `src/modules.js` | **10 active + 9 passive** modules, each active's firing `cue`, the blueprint grant rule | M11/M12/M31-M33 |
 | `src/enemies.js` | enemy roster, placement around the prize, telegraphs, projectiles, damage, rewards | M12/M14 |
 | `src/objectives.js` | the optional objectives: conditions judged at touchdown, and six cargo recoveries | M14/M15 |
@@ -270,6 +270,43 @@ object.
 `enemies.js` still knows nothing about modules. A flare pulls **drones only** — a dug-in gun keeps
 shooting at you, which is what stops it being a second cloak — and `_moveDrone` takes what it flies
 at and what it may ram as separate arguments, because ramming never went through the sight check.
+
+**Five skill nodes per tree, in a fixed shape, and it is a decision rather than an unfinished
+count.** Section 10 of the brief asks for ten nodes in each of three trees; M34 built the Flight tree
+out to ten, Tom looked at the screen and said there should be five. Every tree is **T1, T1, T2, T3,
+T4** now, with the capstone standing behind the tier-3 — a ladder rather than a shopping list. The
+shape was the real finding: before M35, Technician had **no tier 3 at all** and Combat had **no tier
+4**, and cutting to five would have fixed neither. `test/skills-tests.js` fails on a sixth node, on a
+wrong tier spread, and on a capstone that does not sit behind its tier-3, because a comment does not
+stop the next session counting to thirty. The nine spec nodes that will not be built are listed in
+`ROADMAP_STATUS.md` under "Superseded by the five-node board"; four of them name **module energy** or
+**crafting**, which is the same finding twice — the brief assumes an economy this build replaced with
+charges, cooldowns and earned blueprints.
+
+**Cutting a node cuts a mechanic, because a node is usually the only thing selling its key.** Seven of
+M35's eight cuts took their implementation with them rather than leaving an orphaned key for the
+loadout gate to fail on. Two consequences outlive them: **status mitigation is per-channel now** —
+nothing answers every channel at once, so what answers one is kit chosen for it plus the Ray Shield —
+and **a route card still holds one hazard back with nothing to reveal it**, which is the card's own
+design and stays. Check what else sells a key before removing the thing that sells it; the one cut
+that cost nothing was Inertial Dampers, because three other things still sell `disturbanceResist`.
+
+**`engineThrust()` is the one rule for what the main engine is worth**, and it is asserted
+structurally because behaviour could not reach it. `spec.thrust` is what the lander was built with;
+`engineThrust()` is what it delivers after engine heat and a Combat Overdrive bill, which **compose**
+rather than replacing one another. There are two burn sites — flight, and the recovery burn while a
+touchdown is still sliding — and pointing the second back at the raw thrust raised **zero failures in
+every suite**, because that path is too narrow for anything to fly. So `loadout-tests.js` asserts the
+source: outside `engineThrust`, nothing in `ship.js` touches `spec.thrust` or reads the derate. A
+third site fails a test instead of silently flying a full-strength engine through an overheat.
+
+**A cost that cannot bite is a thing sold and not delivered, upside down.** Combat Overdrive's
+"engine-heat penalty" was going to raise `statusLevels.heat`, and that would have been **free on all
+ten bodies**: `thermalDerate` is reset to 1 by `applyForces` every step and written only by the
+`thermal` force, so on the eight bodies with no heat hazard the gauge has no consequence at all — and
+on the two that have one, M31 measured heat peaking at 10-31% against a bite of 55-60. The overdrive
+carries its own derate instead. Generalise it: **before charging a player in a currency, check the
+currency spends.**
 
 **A `good` entry is a claim, and this project only claims what it can show.** The Countermeasure
 Flare lights the ground, which matters most on Pluto — the one body with no drones at all, so the

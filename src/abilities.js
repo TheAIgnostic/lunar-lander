@@ -11,6 +11,7 @@
 
 import { clamp } from './util.js';
 import { ACTIVE_MODULES } from './modules.js';
+import { OVERDRIVE } from './ship.js';
 
 export const ABILITY = {
   // px. **Read against what it has to answer, not on its own.** At 430 every
@@ -97,7 +98,11 @@ export class Abilities {
     this.remaining = this.duration;
     // A shield is a pool, not a timer: the duration caps it, damage empties it.
     if (this.id === 'ray-shield') {
-      ship.shieldHp = ABILITY.shieldPool * (this.loadout.shieldCapacity || 1);
+      // **Combat Overdrive's "stronger shielding".** A shield raised inside the
+      // window starts with a bigger pool, which makes the order the player
+      // presses things in a real decision - overdrive first, then raise.
+      const boost = (ship.overdrive || 0) > 0 ? OVERDRIVE.shield : 1;
+      ship.shieldHp = ABILITY.shieldPool * (this.loadout.shieldCapacity || 1) * boost;
       ship.shieldActive = true;
       ship.shieldFactor = this.mod.effect.hazardShield || 0.15;
       // Shield Harmonics is what widens the barrier from radiation alone to
@@ -147,7 +152,14 @@ export class Abilities {
     const events = [];
     if (!this.mod) return events;
     const ship = ctx.ship;
-    if (this.cooldown > 0) this.cooldown = Math.max(0, this.cooldown - dt);
+    // **Combat Overdrive's "faster recharge".** The cooldown is what this build
+    // has in place of the spec's energy pool, so the capstone drains it rather
+    // than refilling something that does not exist. At 6x a spent module is
+    // back inside the five-second window, which is the whole point of it.
+    if (this.cooldown > 0) {
+      const rate = (ship && ship.overdrive > 0) ? OVERDRIVE.recharge : 1;
+      this.cooldown = Math.max(0, this.cooldown - dt * rate);
+    }
     // Ordnance first, and outside the `active` branch: a charge already falling
     // must keep falling after the rack has closed.
     if (this.bombs.length) this._stepBombs(dt, ctx, events);
@@ -236,7 +248,12 @@ export class Abilities {
           break;
         }
         const before = ship.hull;
-        ship.hull = Math.min(ship.hullMax, ship.hull + (this.mod.effect.repairPerSecond || 0) * dt);
+        // Autonomous Repair multiplies the module's **own declared rate**, so
+        // the blurb, the module and the node cannot drift apart - the same
+        // reason the pulse reveals to `revealVisibility` rather than to a 1
+        // written here beside the data.
+        const rate = (this.mod.effect.repairPerSecond || 0) * (this.loadout.repairRate || 1);
+        ship.hull = Math.min(ship.hullMax, ship.hull + rate * dt);
         this.watchHull = ship.hull;
         if (ship.hull > before) events.push({ kind: 'repairing', amount: ship.hull - before });
         break;
@@ -283,15 +300,7 @@ export class Abilities {
             this.arc = null;
           }
         }
-        if (reward) {
-          events.push({ kind: 'kill', enemy: t, reward, x: t.x, y: t.y });
-          // Energy on Kill returns the charge, so clearing a threat pays for
-          // the tool that cleared it.
-          if ((this.loadout.energyOnKill || 0) > 0) {
-            this.charges = Math.min(this.maxCharges, this.charges + 1);
-            events.push({ kind: 'charge-returned' });
-          }
-        }
+        if (reward) events.push({ kind: 'kill', enemy: t, reward, x: t.x, y: t.y });
         break;
       }
       default:
@@ -352,13 +361,7 @@ export class Abilities {
           const d = Math.hypot(e.x - b.x, e.y - b.y);
           if (d > b.radius) continue;
           const reward = field.damageEnemy(e, b.damage * (1 - d / b.radius));
-          if (reward) {
-            events.push({ kind: 'kill', enemy: e, reward, x: e.x, y: e.y });
-            if ((this.loadout.energyOnKill || 0) > 0) {
-              this.charges = Math.min(this.maxCharges, this.charges + 1);
-              events.push({ kind: 'charge-returned' });
-            }
-          }
+          if (reward) events.push({ kind: 'kill', enemy: e, reward, x: e.x, y: e.y });
           hits.push(e);
         }
       }

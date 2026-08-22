@@ -35,6 +35,7 @@ being checked by anything. That is the point of doing it, and it has paid every 
 | M31 | 9 | 0 |
 | M32 | 10 | **5** |
 | M33 | 15 | **6** |
+| M35 | 11 | **2** |
 
 (M31's two zeros were not holes: one was the M30f regression behaving correctly — a comment naming a
 key must *not* silence the gap line — and the other was owned by a different suite. Check which you
@@ -55,6 +56,19 @@ Aim at the **rule**, not the code. Good mutations delete a *decision* somebody t
 - a whole half of an effect: one field read by two places, with one read removed
 
 If you cannot think of a mutation for a line, that is worth noticing on its own.
+
+**And a trap this file has now been caught by after describing it.** M34 recorded that an
+edge-triggered control granted **one** charge cannot be distinguished from a held one — the charge is
+gone either way — and M35's Combat Overdrive walked into the same thing: the mutation that removes the
+edge check raised zero against a rig with one charge. Give the rig two, and hold the control past
+every window that would block a second firing. **Reading a lesson is not the same as having it.**
+
+**Some rules cannot be reached by behaviour at all, and those get a structural check.** M35's second
+zero was the recovery burn that runs while a touchdown is still sliding: a real second caller of
+`engineThrust()`, too narrow a path for any flight in any suite to cross. Rather than build a rig for
+it, `loadout-tests.js` asserts the *source* — outside `engineThrust`, nothing in `ship.js` touches
+`spec.thrust` or the derate. Reach for this when the honest answer to "why does nothing catch it" is
+"nothing goes there", not "nobody wrote the check".
 
 ### When one raises zero
 
@@ -127,6 +141,13 @@ are derived from.
 **§5 — the player can get hold of it.** New modules enter the blueprint pool automatically
 (`nextBlueprint` derives from `good`), and the ladder is simulated to prove it. Five of nine modules
 had no grant path at all until M31 and nobody had asked.
+
+**A skill node also has to fit the board.** `test/skills-tests.js` asserts **five nodes per tree**
+with tiers **T1, T1, T2, T3, T4** and the capstone standing behind the tier-3 — Tom's decision, 2026-08-22,
+recorded in `ROADMAP_STATUS.md` under "Tom's decisions", item 5. Adding a node means removing one.
+And **removing one usually removes a mechanic**: most nodes are the only thing selling their effect
+key, so check what else sells it before deleting the implementation, or the gate fails the other way
+on an orphaned witness.
 
 **An active also needs a `cue`** — when a player would reach for it — declared on the module in
 `modules.js`, not in the test. `threat` / `final` / `status` / `blind` / `hurt` / `overhead`. Under

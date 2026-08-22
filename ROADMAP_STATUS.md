@@ -1108,7 +1108,25 @@ None.
 
 ## Next task
 
-**M31-M36 — finish the loadout and the trees, and make every one of them do something.**
+**M36 — measure what the loadout and the trees did, and move the numbers that need moving.**
+M31-M35 are done. This is the only milestone in the stretch allowed to retune balance, and three
+things are queued for it and should not be touched before it:
+
+- **The heat channel cannot bite** on either body that declares it (measured in M31). The lever is
+  `heatFall` or `heatBite`. Until it moves, the **Thermal Sink** passive stays unbuilt — it is the
+  last of the spec's twenty modules, and Io and Mercury are the only two bodies with no passive at
+  all.
+- **The Fourth Shuttle's effect on run length** is unmeasured, and it touches the attrition curve
+  (decision 4).
+- **Combat Overdrive's window against its bill.** Five seconds at 6x recharge for four seconds at
+  0.72 thrust, authored in M35 and never balanced against a player.
+
+Re-run the encounter audit and the campaign crossing, and compare against **642/800 (80%)** and the
+at-once distribution recorded at M30 — all of which are still identical after M35.
+
+---
+
+## Done: M31-M35 — the loadout, the trees, and the board cut to five
 Planned 2026-08-22 at Tom's request. **Enemies are deferred to v1 by his call**, so nothing here
 touches the roster.
 
@@ -1253,17 +1271,183 @@ reports `hpLeft` now.
 **The Fourth Shuttle's effect on run length is deliberately not measured yet** — it touches the
 attrition curve (decision 4), and M36 is where that is looked at with everything in.
 
-### M35 — the four that waited, and the six that need Tom
+### M35 — five nodes per tree, and the two holes that were not about the count (done, this commit)
 
-Autonomous Repair, Shaped Charges, Ordnance Fabricator and Hardpoint Calibration land once M32-M33
-exist. The six in the table at the top need a decision each — see "Open with Tom".
+**This milestone did not go as planned, and the plan was the thing that was wrong.** It was written
+to build the last nine nodes of the spec's thirty. Tom looked at the skill screen after M34 finished
+the Flight tree at ten and said: *"we have way too many skills, there should only be 5 in each
+path."* So M35 **cut eight nodes and built two**, and the trees are 15 rather than 30.
 
-### M36 — measure what eleven modules and eighteen nodes did
+**The decision is Tom's and it is recorded in three places so it cannot be mistaken for drift** — a
+banner at the top of `src/skills.js`, an assertion in `test/skills-tests.js` that fails on a sixth
+node, and this section. See "Tom's decisions" below, item 5.
 
-Nothing in M31-M35 may retune balance; this is where it is looked at, once, with everything in.
-Re-run the encounter audit and the campaign crossing, and compare against **642/800 (80%)** and the
-at-once distribution recorded at M30. Expect the crossing to rise: that is the point of a loadout,
-and the question is whether it rises too far.
+#### The measurement that decided what to cut
+
+Counting was not the interesting part. The tier structure was:
+
+```
+TECHNICIAN         T1 fuel-mix, field-patching   T2 black-box, salvage-drone   T3 -- none --   T4 phoenix
+FLIGHT & SURVIVAL  T1 x3                         T2 x3                         T3 x3           T4 fourth-shuttle
+COMBAT SYSTEMS     T1 capacitor, threat-analysis T2 harmonics, energy, counter T3 twin-link    T4 -- none --
+```
+
+**Two structural holes, and neither was about the node count.** Technician had **no tier 3 at all**,
+so a player specialising into it had nothing between "+5% fuel" and a 280-cost capstone that one run
+cannot fund. Combat had **no tier 4 at all** — the only tree with no capstone. Trimming to five would
+not have fixed either; building two nodes did.
+
+Every tree is **T1, T1, T2, T3, T4** now, with the capstone standing behind the tier-3, so each is a
+ladder rather than a shopping list. The three capstone paths came out within 10 research of each
+other without being tuned to — **515, 515, 505** — which is the shape doing the work.
+
+| | TECHNICIAN | FLIGHT & SURVIVAL | COMBAT SYSTEMS |
+| --- | --- | --- | --- |
+| **T1** | Fuel-Mix Calibration | Reserve Tank | Capacitor Bank |
+| **T1** | Field Patching | Reinforced Struts | Threat Analysis |
+| **T2** | Black-Box Recovery | Surface Adaptation | Shield Harmonics |
+| **T3** | **Autonomous Repair** (new) | Emergency Arrest | Twin-Link Control |
+| **T4** | Phoenix Protocol | Fourth Shuttle | **Combat Overdrive** (new) |
+
+#### What was cut, and what each cut actually cost
+
+**A cut node is not a cut card.** Seven of the eight were the **only** thing selling their effect
+key, so the mechanic underneath came out with them rather than being left orphaned for the loadout
+gate to find. That is the honest accounting of what "five per tree" costs:
+
+| cut | the mechanic that went with it | lived in |
+| --- | --- | --- |
+| Inertial Dampers | **nothing** — `disturbanceResist` is still sold by the Gyro Stabilizer, the Control Surfaces and a hangar rung | — |
+| Salvage Drone | missions paid more salvage | `main.js` |
+| Environmental Seals | a **general** hazard resistance answering every channel | `forces.js` |
+| Steady Hands | the instruments settled after two still seconds | `hud.js` |
+| Navigation Forecast | expedition cards gave up the hazard they hold back | `screens.js`, `route.js` |
+| Counter-Battery Logic | a near miss painted the machine that fired it | `enemydraw.js`, `main.js`, `enemies.js` |
+| Energy on Kill | a kill returned a module charge | `abilities.js` |
+| RCS Finesse | analog fine control near stick centre | `ship.js` |
+
+Two consequences worth knowing before working on either area. **Mitigation is per-channel now**:
+nothing answers every status channel at once, so what answers a channel is kit chosen for that
+channel plus the Ray Shield. And **a route card still holds one hazard back and nothing reveals it** —
+the withholding is the card's own design and stays; only the reveal is gone.
+
+Two tests had to be repointed rather than deleted, and both are the same shape: a check whose
+comparison lost its counterpart. The Ray Shield's radiation check compared itself against
+Environmental Seals and now states its claim against **bare exposure**, which is what it was ever
+really about. The gust check compared the skill against the gyro and now compares the gyro and the
+control surface against nothing fitted.
+
+#### Autonomous Repair — half of what the spec asks for
+
+*"Unlocks the Repair Nanites active module and improves it by 20%."* The **unlock** half names the
+crafting/unlock economy the brief assumed and this build does not have: modules are blueprints handed
+over for clearing a body, and `nextBlueprint` guarantees every one inside two runs. A skill granting
+one early would be a second grant path competing with the only progression that survives a death —
+a decision about the blueprint drip, not a skill node. Same finding as Universal Couplings.
+
+The 20% is real and is a multiplier on the module's **own declared** `repairPerSecond`, so the blurb,
+the module and the node cannot drift apart.
+
+**Its rig was measured, not guessed, and the first guess was wrong.** MARS/deep read 0/5. At the prize
+pad with machines up, four flights in five end as a crash and a crash is insensitive to 20% more hull
+knitted back — M31's lesson, third time. Scanned across five bodies and both routes:
+
+```
+MARS/home 2/5   LUNA/deep 2/5   EUROPA/home 2/5   VENUS/deep 1/5   TITAN 1/5 either way
+MARS/deep 0/5   VENUS/home 0/5  LUNA/home 0/5     EUROPA/deep 0/5
+```
+
+#### Combat Overdrive — the capstone, re-pointed from energy onto cooldown
+
+*"Once per mission, five seconds of faster weapon recharge and stronger shielding, followed by an
+engine-heat penalty."* "Recharge" means a module **energy pool** this build does not have — an active
+has charges and a cooldown. Building the pool underneath one node was offered and declined; it is a
+milestone of its own and it is what the unbuilt **Power Core** component track wants too. On the
+cooldown every clause of that sentence is buildable, and all three are built:
+
+| clause | built as | measured in the running game |
+| --- | --- | --- |
+| faster recharge | the cooldown drains **6x** faster | 4.12s → 1.12s of cooldown in half a second |
+| stronger shielding | a Ray Shield raised inside it starts at **1.6x** the pool | asserted to 1e-9 |
+| the engine-heat penalty | **4 s** of real thrust derate at **0.72** | 130 → **93.6** thrust, on screen as ENGINE HOT |
+
+**The penalty is a derate rather than a heat gauge, and that is measured rather than stylistic.**
+`ship.thermalDerate` is reset to 1 by `applyForces` every step and written only by the `thermal`
+force, so raising `statusLevels.heat` costs **nothing** on the eight bodies that do not declare heat —
+and M31 measured that on the two that do, heat peaks at 10-31% against a bite of 55-60, so it would
+cost nothing there either. A penalty that is free on ten bodies out of ten is a thing sold and not
+delivered, upside down. The overdrive brings its own heat.
+
+It is a rebindable action (`g`, `pad:5`) like Emergency Arrest, and `settings-tests.js` went 193 →
+197 with no edit at all, because `ACTIONS` is derived from `DEFAULT_KEYS`.
+
+#### One rule, one implementation — and a hole that only a structural check could see
+
+The bill has to reach the engine, and there are **two** places that burn the main engine: flight, and
+the recovery burn while a touchdown is still sliding. Both had the derate open-coded. They read
+`ship.engineThrust()` now — and pointing the sliding one back at the raw `spec.thrust` raised **zero
+failures in every suite**, because that path is narrow enough that nothing flies it.
+
+So the claim is asserted **structurally**, in `loadout-tests.js`: outside `engineThrust()`, nothing in
+`ship.js` touches `spec.thrust` or reads the derate. A third thrust site added later fails a test
+rather than silently flying a full-strength engine through an overheat.
+
+#### Mutation-tested, and one raised zero
+
+| mutation | failures raised |
+| --- | ---: |
+| the node grants no overdrive | 6 |
+| it fires on every press rather than once a mission | 4 |
+| the engine never derates | 4 |
+| autonomous repair is ignored | 3 |
+| the recharge does nothing | 2 |
+| the shield boost does nothing | 2 |
+| the overdrive never charges its bill | 2 |
+| the overheat replaces the weather derate instead of composing | 1 |
+| a sixth node added to a tree | 4 |
+| the sliding burn forgets the derate | 0 → **1** after the structural check |
+| **held rather than edge-triggered** | **0** → 1 after the rig was rebuilt |
+
+**The zero is the finding.** With the single charge the node grants, "fires on the edge" and "fires
+while held" are indistinguishable — the charge is gone either way. **That is exactly the trap M34
+recorded on Emergency Arrest, walked into again by the person who wrote it down.** The rig gives the
+lander two charges and holds the control past the window *and* the bill, which is the first moment a
+second firing becomes possible at all.
+
+#### And one pre-existing bug, found by looking at the screen
+
+The CONTROLS screen titled **Emergency Arrest as `undefined`**, and had since M34 shipped it. The row
+was there and the binding worked; only the name was missing. `ACTIONS` is derived from
+`DEFAULT_KEYS`, which is what lets a new control reach the settings screen, the rebind rules, the
+save format and the pad with nothing added — and the human label is the one thing that derivation
+does not carry, so the miss is silent. Combat Overdrive inherited it immediately.
+
+**That is `BUILDERS` from M29 in a fourth place**: a name in one table indexing another, failing
+quietly. `settings-tests.js` asserts it in both directions now, from the source, because `screens.js`
+needs a browser to import. 197 → **211**.
+
+It also came with the session's own lesson repeated: the first version of that assertion was spliced
+**inside the `check` helper**, so it never ran — and the mutation that removes a label raised zero.
+Zero failures is the finding, and this time the finding was about the test.
+
+#### What did not move
+
+**Both fixtures byte-identical**, which is the load-bearing result: `rcsFinesse` came out of the
+control path and the general hazard resist out of `forces.js`, and both were arithmetically inert at
+a stock loadout (`Math.pow(v, 1)` is `v`; the resist defaulted to 1). Every encounter-audit figure
+identical: crossing **642/800 (80%)**, at-once 0: 63.1% · 1: 25.9% · 2: 9.5% · 3: 1.4% · 4: 0.1%,
+deep-route engagement 751/800.
+
+`loadout-tests.js` 396 → **350** (fewer keys to witness), `skills-tests.js` 111 → **109**,
+`enemies-tests.js` 149 → **163**, `settings-tests.js` 193 → **211**.
+
+**Every rank of all fifteen costs 2,885 research** against roughly **298** banked in a typical run,
+so a player still buys three to five nodes a run — which is the arithmetic that says fifteen is
+enough. Past the point where every tier is covered, more nodes is variety with a falling return.
+
+### M36 — measure what the loadout and the trees did
+
+See "Next task" at the top of this file.
 
 ---
 
@@ -1277,6 +1461,17 @@ Implemented in M27; kept here because they constrain everything after it too.
 3. **No replay.** A cleared body cannot be re-flown. The supply stop is a supply stop, not a choice.
    This reverses the farming half of M25.
 4. **Shuttles attrit** — `+1` per body cleared capped at 3, not a restore to full.
+
+**5. Five skill nodes per tree, not the spec's ten** *(2026-08-22, implemented in M35)*. Fifteen
+nodes on the board, in a fixed shape: **T1, T1, T2, T3, T4**, with each tree's capstone standing
+behind its tier-3. Tom's words, looking at the screen after M34 finished the Flight tree at ten:
+*"we have way too many skills, there should only be 5 in each path."*
+
+**Do not add a sixth node to a tree.** `test/skills-tests.js` fails on one — the count, the tier
+shape, the capstone, and that every node above tier 1 sits behind a prerequisite. If this decision is
+being reopened, that test changes with it; if it is not, the tree does. The nine nodes of the spec's
+thirty that were never built are listed under "Superseded by the five-node board", with what each one
+names that this build does not have. **Do not build one because the spec lists it.**
 
 The reasoning is recorded in `docs/PROGRESSION.md` under "Decided". Worth knowing that the
 recommendation there was *against* this shape and was wrong: it priced a run at 50 missions, which is
@@ -1391,76 +1586,66 @@ that needs none of the conversation that produced this plan.
 
 ### Handover
 
-*Rewritten 2026-08-22, after the session that ran **M31 through M34** — the loadout gate rebuilt,
-eleven modules and nine skill nodes built, and the test procedures written down.*
+*Rewritten 2026-08-22, after the session that ran **M35** — the skill board cut to five nodes per
+tree on Tom's call, and the two structural holes in it closed.*
 
 **The first prompt for a new session:**
 
-> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then `test/README.md`, then the **M31 to M34**
-> sections of `test/BASELINE.md` — that is one session's work and it is the state you are inheriting.
-> Run `./test/run-all.sh 20` before writing anything; it takes a few minutes and it is how every
-> milestone here that went well started.
+> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then `test/README.md`, then the **M31 to M35**
+> sections of `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything; it takes a few
+> minutes and it is how every milestone here that went well started.
 >
-> Then build **M35**, under "Next task". **Four of its nodes land cleanly** now that the Kinetic Bomb
-> Rack and the Repair Nanites exist — Autonomous Repair, Shaped Charges, Ordnance Fabricator,
-> Hardpoint Calibration. **The other five cannot be built as written and need an answer from Tom
-> each**; they are listed under "Open with Tom" with what each one names that this build does not
-> have. Do not invent the system underneath one to make it fit. If the answers are not in the
-> conversation, build the four, say plainly which five you left and why, and stop there.
+> Then build **M36**, under "Next task". It is the balance pass, and **it is the only milestone in
+> this stretch allowed to move a number.** Three things are queued for it and they are named there.
 >
-> That accounts for nine of the nine nodes left. Navigation Forecast is **not** among them: its
-> reveal half shipped in M34 and its reroll half is dropped, because a route reroll contradicts the
-> fixed ladder.
+> **The skill board is fifteen nodes, five per tree, and that is Tom's decision — not a milestone
+> that ran short.** Section 10 of the brief asks for thirty. Do not build the missing nine; they are
+> listed under "Superseded by the five-node board" with what each one names that this build does not
+> have. `test/skills-tests.js` fails on a sixth node in any tree, and on a tree whose tiers are not
+> **T1, T1, T2, T3, T4** with the capstone behind the tier-3.
 >
 > **Enemies are deferred to v1 — Tom's call — so do not touch the roster.**
 >
 > **The gate is the thing to understand before you add anything.** `loadout-tests.js` will refuse a
 > new effect key with no witness, a module that changes no flown mission on a body its own `good`
-> claims, and a node with nowhere declared to measure it. `test/README.md` §3 is the recipe. It is
-> not an obstacle — it caught three things sold and not delivered in M31 and a wrong constant in M34
-> before it shipped.
+> claims, a node with nowhere declared to measure it, and — since M35 — a second place in `ship.js`
+> that burns the main engine. `test/README.md` §3 is the recipe. It caught three things sold and not
+> delivered in M31, a wrong constant in M34, and in M35 it caught a declared key with nothing wiring
+> it up.
 >
 > Four standing rules, and every one of them was paid for.
 >
-> **Measure before you decide.** Every milestone that went badly started from an assumption. M31
-> dropped a passive because heat cannot bite; M33 dropped a `good` entry because the pilot never
-> connected there; M34 set an arc's reach from a distribution over 664 machines rather than from
-> feel.
+> **Measure before you decide.** M31 dropped a passive because heat cannot bite; M34 set an arc's
+> reach from a distribution over 664 machines; **M35 chose what to cut from the tier structure rather
+> than from the node count, and the two holes it found were not the ones the count would have shown.**
 >
 > **A passing test is not a test that bites.** `./test/mutate.sh <file> <from> <to>` breaks the code
-> on purpose and reports which suites noticed. **Zero failures is the finding, not the result** — it
-> raised zero on 5 of 10 mutations in M32, 6 of 15 in M33 and 5 in M34, and every one was a real
-> hole. Run it on anything you write.
+> on purpose and reports which suites noticed. **Zero failures is the finding, not the result** — and
+> in M35 one of the two zeros was *the exact trap M34 had already written down*, walked into again.
+> Run it on anything you write.
 >
-> **A rig built from whatever the world generated is measuring the world, not the rule.** Three
-> milestones running, the first version of a measurement proved less than it looked like it proved.
-> Place what your claim is about; do not go looking for it.
+> **A rig built from whatever the world generated is measuring the world, not the rule.** Four
+> milestones running. In M35 the first rig for Autonomous Repair read 0/5 because it was flown at the
+> deep pad, where four flights in five end as a crash and a crash is insensitive to almost anything.
 >
-> **Do not retune balance without a specific complaint to aim at.** M31–M35 add content and **M36 is
-> the only place a number moves.** Two things are already queued for it and neither should be touched
-> before then: the heat channel (it cannot bite on either body that declares it) and the Fourth
-> Shuttle's effect on run length.
+> **Do not retune balance without a specific complaint to aim at** — except in M36, which is the
+> complaint.
 >
 > And one thing about the instrument: `./test/run-all.sh` **cannot see a rendering fault**, because
-> no node test draws. Two of the last four milestones introduced a bug every suite passed and the
-> first `__draw()` in a browser threw. Look at the game, not only at the numbers about the game.
+> no node test draws. Look at the game, not only at the numbers about the game.
 
 **What is different about the state you are inheriting.**
 
-The 1.0 module count is **finished**: ten actives and nine passives, every one of them proved to
-change a flown mission on a body it claims, and every one obtainable without god mode — which five
-of the original nine were not, and nobody had asked. The skill trees are **21 of 30** with Flight &
-Survival complete at ten.
+The **1.0 module count is finished at 19 of 20** — ten actives and nine passives, every one proved to
+change a flown mission on a body it claims and every one obtainable without god mode. The twentieth,
+the Thermal Sink, is blocked on the heat number rather than on work, and that number is M36's.
 
-What is left is nine skill nodes, of which **six are blocked on a decision rather than on work**, and
-the balance pass. That makes M35 the first milestone in this stretch that cannot simply be built.
+The **skill board is finished at 15**, and "finished" now means something different from "thirty":
+five per tree, every tier occupied, a capstone on each, and the three capstone paths within 10
+research of each other. Nine spec nodes will not be built and the record says why for each.
 
-Three things are true of the codebase that were not before, and they change how you should work in
-it. `loadout-tests.js` is a **gate** rather than a suite — it will stop you shipping something
-hollow, and it is worth reading before you plan. `test/mutate.sh` and `test/README.md` exist, so the
-practice that has found every real fault is a command rather than a habit. And the standing question
-"does this actually reach the player" now has three separate answers that are all checked: is the
-effect read, does fitting it change a flight, and can the player ever get hold of it.
+What is left is **one balance pass and one passive**. There is no content milestone after M36 in the
+current plan.
 
 ### Reading order
 
@@ -1481,7 +1666,26 @@ effect read, does fitting it change a flight, and can the player ever get hold o
 Then **measure before editing**: `./test/run-all.sh 20`. It ends with the encounter audit, so one
 command tells you both that the game still works and what a player currently meets in it.
 
-### What this session did (2026-08-22, M31–M34)
+### What this session did (2026-08-22, M35)
+
+- **The skill board went from 21 nodes to 15**, five per tree, on Tom's call after he looked at the
+  screen M34 produced. Eight nodes cut, two built.
+- **The two things wrong with the trees were not the count.** Technician had no tier 3 and Combat had
+  no tier 4 — a tree with nothing between small percentages and an unaffordable capstone, and a tree
+  with no capstone at all. Cutting to five would have fixed neither.
+- **Combat Overdrive** is the Combat capstone, re-pointed from the spec's module energy onto the
+  cooldown that exists. All three clauses built and measured in the running game: cooldown 4.12s →
+  1.12s in half a second, a 1.6x shield, and 130 → 93.6 thrust for four seconds afterwards.
+- **A cut node is not a cut card.** Seven of the eight were the only thing selling their effect key,
+  so the mechanic came out too — recorded per-node, because "mitigation is per-channel now" and
+  "nothing reveals a route card's held hazard" are both things a later session would otherwise
+  rediscover as bugs.
+- **The decision is enforced, not just written down.** `test/skills-tests.js` fails on a sixth node,
+  on a wrong tier shape, and on a capstone that does not sit behind its tier-3.
+- **One mutation raised zero, and it was a trap M34 had already documented** — an edge-triggered
+  control with one charge cannot be told apart from a held one. Rig rebuilt with two.
+
+### The session before (2026-08-22, M31–M34)
 
 - **M31 — the gate, then five specialists.** `loadout-tests.js` went from "a declared key is
   mentioned by some file" to a witness table plus a flown differential. It found **three things sold
@@ -1501,7 +1705,7 @@ command tells you both that the game still works and what a player currently mee
   M30–M34 was found by breaking the code on purpose, by looking at the screen, or by a human. None
   was found by reading, and until now the first two were habits rather than tools.
 
-### The session before (2026-08-21, M30–M30g)
+### Earlier (2026-08-21, M30–M30g)
 
 - **M30 — analog controller support**, in two commits: the input contract widened from a boolean to a
   0..1 magnitude (provable, committed on its own, 29.5M raw doubles compared with zero differences),
@@ -1649,25 +1853,13 @@ the record, since every one of them is now a number somebody may want to move ag
   it accumulate) or `heatBite`. **Not touched in M31 — M31-M35 add content and M36 is the only place
   a number moves.** Read alongside it: corrosion on Venus peaks at 42 against a bite of 45, and cold
   crosses on one Pluto mission in five. Only Europa's radiation bites reliably.
-- **Five skill nodes need re-specifying before they can be built, and they are what M35 is blocked
-  on.** Each names a system this build does not have, and the cheap answer is usually to re-point the
-  node at something that exists rather than to build the system underneath it. *(This was six; the
-  buildable half of Navigation Forecast shipped in M34 — see item 5.)*
-  1. **Thermal Reclaimer** and **Combat Overdrive** want module *energy*; actives have *charges* and a
-     *cooldown*. Re-point them at cooldown (a purge shortens it / an overdrive removes it briefly), or
-     build an energy pool — which is also what the missing **Power Core** component track wants, so
-     one decision covers both.
-  2. **Redundant Feed Lines** shortens an engine-stall or fuel-leak status. Neither exists. Either
-     re-point it at a channel that does (heat is the closest), or drop the node.
-  3. **Universal Couplings** discounts crafting. There is no crafting — blueprints are earned and
-     free. Most likely a drop, or re-point at material costs in the hangar.
-  4. **Rapid Refit** makes a loadout change free. It already is. Re-point at the *window* — letting
-     one change happen mid-expedition would be a real ability, and it reverses M29d deliberately.
-  5. ~~**Navigation Forecast**~~ — **half of it shipped in M34**: the card gives up the hazard it was
-     holding back, and the rng roll is unchanged either way so the skill prints the forecast rather
-     than altering the weather. **The reroll half is dropped**, because it contradicts the fixed
-     ladder (decisions 1 and 3, the thing the attrition curve rests on). Reopen only if the ladder
-     decision itself is reopening — nothing else needs an answer here.
+- ~~**Five skill nodes need re-specifying before they can be built.**~~ **Answered by Tom's
+  five-node decision (2026-08-22), and none of them is open any more.** Combat Overdrive was built,
+  re-pointed onto the cooldown; the other four are dropped along with eight nodes that *were* built.
+  See "Superseded by the five-node board" for the full nine and what each names. **The one thing
+  still worth a decision is the energy pool itself** — Thermal Reclaimer, the unbuilt **Power Core**
+  component track, and the halves that Counter-Battery and Energy on Kill never had all wanted the
+  same system. It is a milestone of its own and nothing is blocked on it.
 - **Nineteen modules against one blueprint per body cleared.** M31 gave every cleared body a
   blueprint, chosen for the body about to be flown, which fixed five modules being unobtainable. With
   M32 and M33 the collection is now 19, and a typical run reaches body 3-4 — so it is three or four
@@ -1705,6 +1897,28 @@ the record, since every one of them is now a number somebody may want to move ag
 - ~~**God mode is public.**~~ **Decided (Tom, 2026-08-21): it stays as it is.** It ships on both live
   sites as a visible settings button, and that is intended - gating it behind `?god=1` was offered
   twice and declined twice. Stop offering.
+
+### Superseded by the five-node board
+
+**Nine of the spec's thirty skill nodes were never built, and are not going to be.** Recorded here so
+a later session does not open section 10 of the brief, count to thirty, and start building. The board
+is fifteen — see "Tom's decisions", item 5.
+
+| node | tree | why it is not built |
+| --- | --- | --- |
+| Thermal Reclaimer | Technician | wants module **energy**; an active has charges and a cooldown |
+| Redundant Feed Lines | Technician | shortens an **engine-stall / fuel-leak** status; neither exists. The channels are heat, cold, corrosion, radiation, charge |
+| Universal Couplings | Technician | discounts **crafting** and removes a **compatibility penalty**; there is neither. Blueprints are earned and free |
+| Rapid Refit | Technician | makes a loadout change free — **it already is.** The only real version reverses M29d, which locks the loadout once an expedition is under way |
+| Hardpoint Calibration | Combat | *"reduces laser spread / bomb drift"* — the beam is auto-tracked and a charge is integrated with nothing random in it. **Neither has any scatter to reduce.** Its other half, a landing-safe firing guide, is buildable and was cut with the node |
+| Shaped Charges | Combat | buildable (less self-damage, more against ground guns); cut for room. Its third clause, *"breakable terrain"*, names nothing — the ground is a heightmap |
+| Ordnance Fabricator | Combat | *"restore one bomb after a perfect landing"* is a **no-op**: a landing ends the mission and every mission starts with the rack full. Its other half, +1 charge, was cut for room |
+| Navigation Forecast | Flight | **built in M34 and cut in M35.** Its reroll half was always dropped — it contradicts the fixed ladder |
+| RCS Finesse · Steady Hands · Environmental Seals · Inertial Dampers · Salvage Drone · Energy on Kill · Counter-Battery Logic | — | **all built, all worked, all cut in M35** for room. See the M35 section for what each took with it |
+
+The pattern in the first four is one thing: **the brief assumes an economy of module energy and
+module crafting that this build replaced** with charges, cooldowns and earned blueprints. Anything
+still unbuilt that mentions energy or crafting is the same finding again.
 
 ### Superseded
 

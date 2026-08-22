@@ -7,7 +7,7 @@ import { ACTIVE_MODULES } from '../src/modules.js';
 import { validateEnemies, sanctuaryClear } from '../src/validate.js';
 import { Terrain } from '../src/terrain.js';
 import { applyForces } from '../src/forces.js';
-import { Ship } from '../src/ship.js';
+import { Ship, OVERDRIVE } from '../src/ship.js';
 import { spawnFor } from '../src/spawn.js';
 import { MOON_LEVELS, MARS_LEVELS, EUROPA_LEVELS } from '../src/missions.js';
 import { deriveSkills } from '../src/skills.js';
@@ -406,7 +406,7 @@ function shipAt(x, y, loadout = {}) {
 
 // --- the combat tree changes what the simulation does
 {
-  const loadout = deriveFull({}, deriveSkills({ capacitor: 3, 'threat-analysis': 1, 'energy-on-kill': 1 }), derivePassive(null));
+  const loadout = deriveFull({}, deriveSkills({ capacitor: 3, 'threat-analysis': 1 }), derivePassive(null));
   check('Capacitor Bank raises weapon power', loadout.weaponPower > 1.2);
   check('Capacitor Bank raises shield capacity', loadout.shieldCapacity > 1.2);
   check('Threat Analysis is readable by the renderer', loadout.threatWarning === 1);
@@ -424,14 +424,6 @@ function shipAt(x, y, loadout = {}) {
     return t;
   };
   check('a stronger capacitor kills faster', burn(armed, loadout) < burn(plain, {}));
-
-  // Energy on Kill hands the charge back.
-  const field = new EnemyField(lvl, terrain, 1000);
-  const ship = shipAt(field.enemies[0].x + 120, field.enemies[0].y - 90, loadout);
-  const ab = new Abilities('pulse-laser', loadout);
-  ab.trigger(ship);
-  for (let i = 0; i < 300; i++) ab.update(1 / 120, { ship, field });
-  check('Energy on Kill returns the charge', ab.charges === ab.maxCharges);
 }
 
 // --- a raised shield is worth something against fire and against hazards
@@ -820,27 +812,139 @@ function shipAt(x, y, loadout = {}) {
   check('without the node nothing is carried at all', burn(300, 0).second === 0);
 }
 
-// --- Counter-Battery Logic marks the machine that missed
+// --- Combat Overdrive: the window, the three things it does, and the bill
+//
+// **Every check below started as a mutation that raised nothing.** The refusals
+// in particular: "once a mission", "not while one is already running" and "not
+// while the bill is still owed" are each a decision somebody took, and each was
+// invisible to the suite until it was written down. Same lesson as Emergency
+// Arrest, where four refusals and one use were the whole node.
 {
-  const lvl = { ...MOON_LEVELS[3], enemyBudget: 1, enemySets: ['sentry-turret'] };
+  const lvl = MOON_LEVELS[3];
   const terrain = new Terrain(lvl, 1000);
-  const field = new EnemyField(lvl, terrain, 1000);
-  const e = field.enemies[0];
-  const ship = shipAt(e.x + 240, e.y - 100);
-  let painted = false;
-  for (let i = 0; i < 2400 && !painted; i++) {
-    ship.hull = ship.hullMax;                    // survive long enough to be missed
-    field.update(1 / 120, i / 120, ship);
-    if (e.painted > 0) painted = true;
+  const withNode = deriveFull({}, deriveSkills({ 'combat-overdrive': 1 }), {});
+  const press = { thrust: false, left: false, right: false, hold: false, arrest: 0, overdrive: 1 };
+  const idle = { ...press, overdrive: 0 };
+  const set = { steering: 'pro', invertRotation: false };
+
+  const rig = (loadout) => {
+    const ship = new Ship();
+    ship.applyLoadout(loadout);
+    const start = spawnFor(lvl, terrain);
+    ship.reset(start.x, start.y - 300, ship.tankFor(lvl.fuel));
+    return ship;
+  };
+  const tap = (ship, t = 0) => {
+    ship.step(1 / 120, press, lvl, terrain, t, set);          // the edge
+    ship.step(1 / 120, idle, lvl, terrain, t + 1 / 120, set); // and let go
+  };
+
+  // --- it exists only when the node is bought
+  check('without the node there is no overdrive to spend', rig({}).overdriveLeft === 0);
+  check('with it there is exactly one', rig(withNode).overdriveLeft === 1);
+
+  {
+    const ship = rig(withNode);
+    tap(ship);
+    check('pressing it opens the window', ship.overdrive > 0);
+    check('and spends the one charge', ship.overdriveLeft === 0);
   }
-  check('a shot that goes past you paints the machine that took it', painted);
-  // **The mark is set whatever the loadout says.** Whether it is *drawn* is the
-  // skill's business; a machine being marked is a fact about the world, and
-  // keeping the two apart is what stops a presentation feature reaching into
-  // the simulation.
-  const before = e.painted;
-  for (let i = 0; i < 240; i++) field.update(1 / 120, i / 120, ship);
-  check('and the mark fades on its own', e.painted < before);
+  // --- the refusals
+  {
+    const ship = rig(withNode);
+    tap(ship);
+    const left = ship.overdrive;
+    tap(ship, 1);
+    check('a second press while it runs does not restart it', ship.overdrive < left);
+    check('and cannot take a charge it does not have', ship.overdriveLeft === 0);
+  }
+  {
+    const ship = rig({});
+    tap(ship);
+    check('pressing it without the node does nothing at all', ship.overdrive === 0 && ship.overheat === 0);
+  }
+  {
+    // **Held down rather than tapped, and it takes a lander that can physically
+    // fire twice to tell.** With the single charge the node grants, "fires on
+    // the edge" and "fires while held" are indistinguishable - the charge is
+    // gone either way - and the mutation that drops the edge raised **zero
+    // failures** against the first version of this check. Exactly the trap M34
+    // recorded on Emergency Arrest, walked into again.
+    //
+    // Two charges and held long enough for the window *and* the bill to run
+    // out, which is the first moment a second firing becomes possible at all.
+    const ship = rig(withNode);
+    ship.overdriveLeft = 2;
+    const secs = OVERDRIVE.duration + OVERDRIVE.overheat + 2;
+    for (let i = 0; i < 120 * secs; i++) ship.step(1 / 120, press, lvl, terrain, i / 120, set);
+    check('holding the control fires it once, not again the moment it could',
+      ship.overdriveLeft === 1, `${ship.overdriveLeft} left`);
+  }
+
+  // --- the window closes into the bill, and the bill runs out
+  {
+    const ship = rig(withNode);
+    tap(ship);
+    let sawHot = false;
+    for (let i = 0; i < 120 * 12; i++) {
+      ship.step(1 / 120, idle, lvl, terrain, i / 120, set);
+      if (ship.overdrive <= 0 && ship.overheat > 0) sawHot = true;
+    }
+    check('the window closes into an engine bill', sawHot);
+    check('and the bill is paid off in time', ship.overheat === 0);
+  }
+
+  // --- what the bill actually costs, measured on the engine rather than read
+  {
+    const cold = rig(withNode);
+    const hot = rig(withNode);
+    hot.overheat = OVERDRIVE.overheat;
+    check('an overheated engine is weaker than a cold one', hot.engineThrust() < cold.engineThrust());
+    check('and it is weaker by exactly the declared amount',
+      Math.abs(hot.engineThrust() - cold.engineThrust() * OVERDRIVE.derate) < 1e-9);
+    // The two derates compose rather than replacing one another - a lander that
+    // is both hot from the weather and hot from the capstone is worse off than
+    // either alone, which is what makes the capstone's cost real on Io.
+    const both = rig(withNode);
+    both.overheat = OVERDRIVE.overheat;
+    both.thermalDerate = 0.6;
+    check('and it composes with the weather rather than replacing it',
+      Math.abs(both.engineThrust() - cold.engineThrust() * 0.6 * OVERDRIVE.derate) < 1e-9);
+  }
+
+  // --- the module half: the cooldown drains faster inside the window
+  {
+    const spend = (overdriven) => {
+      const ship = rig(withNode);
+      const a = new Abilities('pulse-laser', withNode);
+      a.trigger(ship);
+      // Run the module out so it is genuinely on cooldown.
+      while (a.active) a.update(1 / 120, { ship, field: null });
+      if (overdriven) ship.overdrive = OVERDRIVE.duration;
+      let t = 0;
+      while (a.cooldown > 0 && t < 30) { a.update(1 / 120, { ship, field: null }); t += 1 / 120; }
+      return t;
+    };
+    const plain = spend(false);
+    const fast = spend(true);
+    check('the overdrive recharges a spent module faster', fast < plain, `${fast.toFixed(2)} vs ${plain.toFixed(2)}`);
+    check('and fast enough to matter inside its own window', fast < OVERDRIVE.duration,
+      `${fast.toFixed(2)}s against a ${OVERDRIVE.duration}s window`);
+  }
+
+  // --- and the shield half
+  {
+    const raise = (overdriven) => {
+      const ship = rig(withNode);
+      if (overdriven) ship.overdrive = OVERDRIVE.duration;
+      const a = new Abilities('ray-shield', withNode);
+      a.trigger(ship);
+      return ship.shieldHp;
+    };
+    check('a shield raised inside the window starts stronger', raise(true) > raise(false));
+    check('and by exactly the declared amount',
+      Math.abs(raise(true) - raise(false) * OVERDRIVE.shield) < 1e-9);
+  }
 }
 
 // --- the briefing tells the player what is out there

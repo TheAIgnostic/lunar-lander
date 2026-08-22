@@ -59,11 +59,11 @@ export function nextPlanet(cleared = []) {
  * this array, so there is no index a cleared body can be reached through. The
  * ladder behind the player is a display concern, and it is `ladderTrail`.
  */
-export function routeChoices(cleared = [], sector = 1, seed = 0, opts = {}) {
+export function routeChoices(cleared = [], sector = 1, seed = 0) {
   const next = nextPlanet(cleared);
   if (!next) return [];
   const rng = makeRng((seed ^ (sector * 2654435761)) >>> 0);
-  return [{ ...planetCard(next, sector, rng, opts), cleared: false, isNext: true }];
+  return [{ ...planetCard(next, sector, rng), cleared: false, isNext: true }];
 }
 
 /**
@@ -75,11 +75,11 @@ export function routeChoices(cleared = [], sector = 1, seed = 0, opts = {}) {
  * rng is seeded per position rather than per run, so the withheld hazard is
  * stable across re-renders instead of flickering each time the screen redraws.
  */
-export function ladderPreview(cleared = [], opts = {}) {
+export function ladderPreview(cleared = []) {
   const done = new Set(cleared);
   const next = nextPlanet(cleared);
   return PLANET_ORDER.map((id, i) => ({
-    ...planetCard(id, i + 1, makeRng((i + 1) * 2654435761 >>> 0), opts),
+    ...planetCard(id, i + 1, makeRng((i + 1) * 2654435761 >>> 0)),
     position: i + 1,
     cleared: done.has(id),
     isNext: id === next,
@@ -155,7 +155,9 @@ function intensityOf(machines) {
 
 /**
  * A route card. The forecast is helpful but deliberately incomplete - one
- * hazard is withheld, which the Navigation Forecast skill will later reveal.
+ * hazard is withheld, and since M35 nothing reveals it. Navigation Forecast was
+ * the skill that did, and it went when the Flight tree came down to five nodes;
+ * the withholding is the card's own design and stays.
  *
  * **Two figures on this card used to be bumped by the sector**, and M27 broke
  * both by making the sector run to 10 instead of 3. Measured across the ladder,
@@ -170,7 +172,7 @@ function intensityOf(machines) {
  * off the chapter the player will actually fly rather than inferred, which is
  * the honest number and spreads because it is measured.
  */
-export function planetCard(planetId, sector, rng, opts = {}) {
+export function planetCard(planetId, sector, rng) {
   const p = PLANETS[planetId];
   // **Names, not specs.** A hazard entry is either a bare string or a tuned
   // object, and this card is presentation: `join(', ')` on the raw list printed
@@ -182,8 +184,7 @@ export function planetCard(planetId, sector, rng, opts = {}) {
   // skill and one without describe the same body - and only whether the held
   // name is printed differs. Rolling it differently would make the skill change
   // what the weather **is**, which is a route card lying in a new direction.
-  let hidden = hazards.length > 1 && rng() < 0.5 ? hazards.pop() : null;
-  if (hidden && opts.reveal) { hazards.push(hidden); hidden = null; }
+  const hidden = hazards.length > 1 && rng() < 0.5 ? hazards.pop() : null;
   const machines = peakMachines(planetId);
   return {
     planet: planetId,

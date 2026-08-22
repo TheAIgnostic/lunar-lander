@@ -4595,3 +4595,142 @@ engagement 751/800.
 The Fourth Shuttle is the one node here that touches the attrition curve the whole run model rests on
 (M27, decision 4). It is gated behind five bodies cleared, as the spec asks, and **its effect on run
 length is not measured yet** — that is M36's job, with everything in.
+
+## M35 — five per tree, and the two holes that were not about the count (2026-08-22)
+
+Tom's call after seeing the screen M34 produced: *"we have way too many skills, there should only be
+5 in each path."* **Eight nodes cut, two built, board at 15.**
+
+### The measurement that decided what to cut
+
+The node count was not the problem. The tier structure was:
+
+```
+                    T1                        T2                          T3            T4
+TECHNICIAN          fuel-mix, field-patching  black-box, salvage-drone    -- none --    phoenix
+FLIGHT & SURVIVAL   x3                        x3                          x3            fourth-shuttle
+COMBAT SYSTEMS      capacitor, threat-anal.   harmonics, energy, counter  twin-link     -- none --
+```
+
+**Technician had no tier 3 and Combat had no tier 4.** Trimming to five fixes neither; building
+`autonomous-repair` and `combat-overdrive` did. Every tree is **T1, T1, T2, T3, T4** now with the
+capstone behind the tier-3, and the three capstone paths landed within 10 research of each other
+without being tuned to:
+
+| tree | cheapest path to the capstone | data |
+| --- | --- | ---: |
+| Technician | field-patching → black-box → autonomous-repair → phoenix-protocol | **515** |
+| Flight | reinforced-struts → surface-adaptation → emergency-arrest → fourth-shuttle | **515** |
+| Combat | capacitor → shield-harmonics → twin-link → combat-overdrive | **505** |
+
+Every rank of all fifteen: **2,885** research, against ~**298** banked in a typical run.
+
+### Combat Overdrive, measured in the running game
+
+Flown on `luna-4` at seed 4242, hovering so the lander survived the window and the bill:
+
+```
+ s   overdrive  overheat  engineThrust
+0.5      4.49       0        130.0
+1.5      3.49       0        130.0
+2.5      2.49       0        130.0
+3.5      1.49       0        130.0
+4.5      0.49       0        130.0
+5.0         0     3.99        93.6      <- the window closes into the bill
+6.0         0     2.99        93.6
+```
+
+93.6 is 130 × 0.72 exactly. And the recharge half, with the laser spent and cooling:
+
+| | cooldown |
+| --- | ---: |
+| laser spent | 4.17 s |
+| pressed | 4.12 s |
+| **+0.5 s into the window** | **1.12 s** |
+
+3.0 s of cooldown drained in 0.5 s of flight — 6x, as declared. On screen the panel reads
+**OVERDRIVE 4.4s** in cyan while it runs and **ENGINE HOT 2.9s** in red afterwards, stacked above the
+ARREST cue with no overlap; the laser panel reads CHARGING with a visibly filling bar.
+
+### Autonomous Repair — the rig was wrong first, for the third milestone running
+
+MARS/deep read **0/5**. At the prize pad with machines up, four flights in five end as a crash, and a
+crash is insensitive to 20% more hull knitted back. Scanned across five bodies and both routes:
+
+```
+MARS/home 2/5    MARS/deep 0/5
+VENUS/home 0/5   VENUS/deep 1/5
+LUNA/home 0/5    LUNA/deep 2/5
+EUROPA/home 2/5  EUROPA/deep 0/5
+TITAN/home 1/5   TITAN/deep 1/5
+```
+
+MARS is what the nanites themselves claim, so MARS/home is the rig.
+
+### What each cut took with it
+
+Seven of the eight cut nodes were the **only** thing selling their effect key:
+
+| cut | mechanic removed | lived in |
+| --- | --- | --- |
+| Inertial Dampers | **nothing** — `disturbanceResist` has three other sellers | — |
+| Salvage Drone | missions paid more | `main.js` |
+| Environmental Seals | a general resist answering **every** channel | `forces.js` |
+| Steady Hands | instruments settled after two still seconds | `hud.js` |
+| Navigation Forecast | cards gave up their held-back hazard | `screens.js`, `route.js` |
+| Counter-Battery Logic | a near miss painted its firer | `enemydraw.js`, `main.js`, `enemies.js` |
+| Energy on Kill | a kill returned a charge | `abilities.js` |
+| RCS Finesse | analog fine control near centre | `ship.js` |
+
+### Mutation-tested
+
+| mutation | failures raised |
+| --- | ---: |
+| the node grants no overdrive | 6 |
+| it fires on every press rather than once a mission | 4 |
+| the engine never derates | 4 |
+| a sixth node added to a tree | 4 |
+| autonomous repair is ignored | 3 |
+| the recharge does nothing | 2 |
+| the shield boost does nothing | 2 |
+| the overdrive never charges its bill | 2 |
+| the overheat replaces the weather derate instead of composing | 1 |
+| the sliding burn forgets the derate | **0** → 1 after a structural check |
+| held rather than edge-triggered | **0** → 1 after the rig was rebuilt |
+
+**Both zeros were real holes.** The second is the one worth remembering: with the single charge the
+node grants, "fires on the edge" and "fires while held" are indistinguishable — which is **exactly the
+trap M34 recorded on Emergency Arrest**, walked into again by the session that had just read it. Two
+charges and a hold that outlasts the window *and* the bill is what tells them apart.
+
+The first is a different shape: `engineThrust()` has two callers and one of them — the recovery burn
+while a touchdown is still sliding — is too narrow for any flight to reach. It is asserted in the
+source instead: outside `engineThrust`, nothing in `ship.js` touches `spec.thrust` or the derate.
+
+### One pre-existing bug, found by looking at the screen
+
+The CONTROLS screen titled **Emergency Arrest as `undefined`** and had done since M34:
+
+```
+before:  MAIN BOOSTER · LEFT BURNER · RIGHT BURNER · ATTITUDE HOLD · ACTIVE MODULE · undefined · undefined
+after:   MAIN BOOSTER · LEFT BURNER · RIGHT BURNER · ATTITUDE HOLD · ACTIVE MODULE · EMERGENCY ARREST · COMBAT OVERDRIVE
+```
+
+`ACTIONS` is derived from `DEFAULT_KEYS` and the human label is the one thing that derivation does
+not carry, so a new control gets a row for free and gets `undefined` for free with it — `BUILDERS`
+from M29 in a fourth place. Asserted in both directions in `settings-tests.js` now, from the source.
+
+And the assertion's own first version was spliced **inside the `check` helper**, so it never ran and
+the mutation that removes a label raised zero. Running `mutate.sh` on a test you just wrote is how
+that surfaced.
+
+### What did not move
+
+**Both fixtures byte-identical**, which is the load-bearing result: `rcsFinesse` came out of the
+control path and the general hazard resist out of `forces.js`, and both were arithmetically inert at
+a stock loadout. Full suite green. Every encounter-audit figure identical: crossing **642/800 (80%)**,
+at-once 0: 63.1% · 1: 25.9% · 2: 9.5% · 3: 1.4% · 4: 0.1%, deep-route engagement 751/800.
+
+`loadout-tests.js` 396 → **350**, `skills-tests.js` 111 → **109**, `enemies-tests.js` 149 → **163**,
+`settings-tests.js` 193 → **211** — 4 of those with no edit at all, because `ACTIONS` is derived
+from `DEFAULT_KEYS` and the overdrive is a rebindable action; the rest are the label guard above.

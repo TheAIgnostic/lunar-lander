@@ -9,6 +9,52 @@ const check = (n, c, e = '') => { if (c) pass++; else { fail++; console.log(`  F
 
 console.log('skills and modules');
 
+// ---------------------------------------------------------------------------
+// **FIVE NODES PER TREE, AND THE SHAPE THEY MAKE. Tom's decision, 2026-08-22.**
+//
+// This is the decision written as a test rather than as a comment, because a
+// comment does not stop the next session adding a sixth node from the spec's
+// list of thirty. The reasoning is in `src/skills.js` and in `ROADMAP_STATUS.md`
+// under "M35"; what is asserted here is the outcome:
+//
+//   * five nodes in every tree, no more and no fewer
+//   * the tiers run **T1, T1, T2, T3, T4** - two cheap entries, one identity per
+//     tier, a capstone at the top
+//   * the capstone stands behind the tier-3, so each tree is a ladder rather
+//     than a shopping list
+//
+// The shape matters as much as the count and cost more to get right. Before
+// M35, Technician had **no tier 3 at all** and Combat had **no tier 4** - two
+// structural holes that trimming to five would not have fixed and did not: they
+// were closed by building `autonomous-repair` and `combat-overdrive`.
+//
+// **If you are here because this test is failing**, the question to answer is
+// not "how do I make it pass" but "is the five-node board being reopened". If
+// it is, this test changes with it. If it is not, the tree does.
+{
+  const SHAPE = [1, 1, 2, 3, 4];
+  for (const tree of Object.values(TREES)) {
+    check(`${tree.id}: exactly five nodes`, tree.nodes.length === 5,
+      `${tree.nodes.length} - the board is five per tree (M35)`);
+    const tiers = tree.nodes.map((n) => n.tier).sort((a, b) => a - b);
+    check(`${tree.id}: tiers run 1,1,2,3,4`, tiers.join(',') === SHAPE.join(','),
+      `${tiers.join(',')} - two entry nodes, one per tier, then the capstone`);
+    const cap = tree.nodes.find((n) => n.tier === 4);
+    const t3 = tree.nodes.find((n) => n.tier === 3);
+    check(`${tree.id}: has a capstone`, !!cap, 'every tree ends in a tier 4');
+    check(`${tree.id}: the capstone stands behind the tier-3`,
+      !!cap && !!t3 && (cap.requires || []).includes(t3.id),
+      `${cap ? (cap.requires || []).join() : '-'} - it should require ${t3 ? t3.id : '?'}`);
+    // Every node except the two entries has to be reachable *through* the tree,
+    // or a tier is decoration.
+    for (const n of tree.nodes) {
+      if (n.tier === 1) continue;
+      check(`${tree.id}/${n.id}: sits behind something`, (n.requires || []).length > 0,
+        'a node above tier 1 with no prerequisite is not on the ladder');
+    }
+  }
+}
+
 // --- every node is described, priced and reachable
 for (const n of ALL_NODES) {
   check(`${n.id}: has ranks`, n.ranks >= 1);

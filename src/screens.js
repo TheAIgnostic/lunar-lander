@@ -21,7 +21,7 @@ import { planetIcon } from './planeticons.js';
 import { PLANETS, gravityFor } from './planets.js';
 import { PLANET_ORDER, ladderPreview, ladderTrail, routeChoices } from './route.js';
 import { ENVELOPE, normalizeAngle } from './ship.js';
-import { TREES, TREE_IDS, skillCheck, skillFeatures, deriveSkills } from './skills.js';
+import { TREES, TREE_IDS, skillCheck, skillFeatures } from './skills.js';
 import { audio, g, input, meta, saveSource, settings, ship, store } from './state.js';
 import { DEG, formatScore } from './util.js';
 
@@ -86,11 +86,6 @@ function ladderHTML(cleared = []) {
     </li>`;
   }).join('');
   return `<ol class="ladder">${rungs}</ol>`;
-}
-
-/** Whether the cards give up the hazard they hold back — Navigation Forecast. */
-function forecastOpts() {
-  return { reveal: deriveSkills(meta.purchasedSkills).hazardReveal > 0 };
 }
 
 export function screenHTML(s) {
@@ -272,7 +267,7 @@ export function screenHTML(s) {
       const god = !!meta.godMode;
       // Navigation Forecast reads off the *skills*, not the equipped loadout:
       // the ladder screen is shown before a run, where there is no ship yet.
-      const cards = ladderPreview([], forecastOpts()).map((c) => {
+      const cards = ladderPreview([]).map((c) => {
         const open = !c.locked || god;
         return bodyCardHTML(c, {
           tag: c.locked
@@ -388,9 +383,18 @@ export function screenHTML(s) {
     }
 
     case 'keys': {
+      // **One entry per action, and `settings-tests.js` asserts it in both
+      // directions.** `ACTIONS` is derived from `DEFAULT_KEYS`, so adding a
+      // control gives it a row here for free - and gave it the label
+      // `undefined` for free too. M34's Emergency Arrest shipped that way and
+      // nothing caught it, because no node test draws this screen and the miss
+      // is silent: the row is there, the binding works, and the name is gone.
+      // That is the `BUILDERS` fault from M29 in a fourth place - a name in
+      // content indexing a table in code.
       const names = {
         thrust: 'MAIN BOOSTER', left: 'LEFT BURNER', right: 'RIGHT BURNER',
         hold: 'ATTITUDE HOLD', ability: 'ACTIVE MODULE',
+        arrest: 'EMERGENCY ARREST', overdrive: 'COMBAT OVERDRIVE',
       };
       const rows = ACTIONS.map((a) => {
         const listening = g.rebinding === a;
@@ -592,7 +596,7 @@ export function screenHTML(s) {
       // and the screen says so. What is behind the player is the trail above
       // the card - a record, not a menu.
       const cleared = run.cleared || [];
-      const offers = routeChoices(cleared, run.sector, run.seed, forecastOpts());
+      const offers = routeChoices(cleared, run.sector, run.seed);
       g.routeOffers = offers;
       const cards = offers.map((c, i) => bodyCardHTML(c, {
         tag: `<span class="route-tag next">BODY ${cleared.length + 1} OF ${PLANET_ORDER.length}</span>`,

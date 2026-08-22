@@ -38,6 +38,12 @@ export const DEFAULT_KEYS = {
   // so the settings screen, the rebind rules, the save format and the pad all
   // learned about it without being told.
   arrest: ['f', 'pad:3'],
+  // Combat Overdrive (M35). The Combat tree's capstone, and a rebindable action
+  // for the same reason Emergency Arrest is: `ACTIONS` is derived from this
+  // object, so the settings screen, the rebind rules, the save format and the
+  // pad all learn about it without being told. RB, because it sits under the
+  // finger already holding the trigger.
+  overdrive: ['g', 'pad:5'],
 };
 
 export const ACTIONS = Object.keys(DEFAULT_KEYS);
