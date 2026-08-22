@@ -107,6 +107,59 @@ export const ACTIVE_MODULES = {
     charges: 3, duration: 2.5, cooldown: 5,
     effect: { laserDps: 26, laserRange: 520 },
   },
+  // --- M33 -----------------------------------------------------------------
+  //
+  // **Declared after the Pulse Laser deliberately.** `recommendedFor` takes the
+  // first module whose `good` contains the body, so anything inserted above
+  // would quietly displace an existing recommendation - and the Moon's is a
+  // decision: it has no weather to fight, so the weapon is what its card names.
+  // New modules go on the end, where they can only fill an empty slot.
+  'bomb-rack': {
+    id: 'bomb-rack', name: 'KINETIC BOMB RACK',
+    blurb: 'Drops a charge that falls where you were. Fly over the gun; do not follow it down.',
+    // Turret bodies. A bomb answers a thing that cannot move, which is exactly
+    // what a ground gun is - and it is no use at all against a drone that will
+    // not be where it was a second ago.
+    //
+    // Mercury was the obvious second claim on that reasoning and was **measured
+    // and dropped**: over its whole chapter the test pilot gets above a machine
+    // once and connects with nothing, where on Io it kills one or two and on
+    // Pluto one. Read that as a floor rather than a verdict - the cue is
+    // opportunistic, and a person who *decides* to overfly a gun will hit far
+    // more often than a pilot that never detours - but a claim nothing can show
+    // is exactly what `good` is not allowed to be any more.
+    good: ['IO', 'PLUTO'],
+    cue: 'overhead',
+    charges: 3, duration: 0.2, cooldown: 5,
+    // `bombArm` is the M12 telegraph rule turned on the *player's* ordnance: it
+    // is inert for the first third of a second, so a charge can never go off
+    // inside the lander that dropped it. That is `muzzleIsSafe` from the other
+    // side - there, a machine may not spawn a shot already touching you; here,
+    // you may not spawn one already touching yourself.
+    // **`bombFuse` is 5 s because of how far a charge falls, not by feel.**
+    // Released with 40 px/s of separation at the Moon's 28 px/s^2, a fuse of
+    // 2.4 s covers 215 px - so a charge dropped from a normal crossing altitude
+    // expired in mid-air over empty ground and the weapon quietly did nothing.
+    // At 5 s it covers about 550 px there and 290 on Enceladus, which reaches
+    // the ground from anywhere a player would think to drop one.
+    effect: { bombDamage: 55, bombRadius: 150, bombFuse: 5, bombArm: 0.35 },
+  },
+  'countermeasure-flare': {
+    id: 'countermeasure-flare', name: 'COUNTERMEASURE FLARE',
+    blurb: 'Drops a burning decoy. Drones go for it instead, and it lights the ground.',
+    // **The drone bodies only, and Pluto is deliberately not on this list.**
+    // The flare does two things and this project can only measure one of them:
+    // pulling drones off you moves a flown mission, and lighting the ground is
+    // presentation, which no autopilot here can see - the blind spot
+    // `falseRadar` and `darkness` have had since M24. Pluto is the one body the
+    // light would matter most on and the one body with **no drones at all**, so
+    // claiming it would be a route card recommending kit on a promise nothing
+    // can check. The light is real; the claim is only what can be shown.
+    good: ['EUROPA', 'TITAN', 'GANYMEDE'],
+    cue: 'threat',
+    charges: 2, duration: 6, cooldown: 8,
+    effect: { decoy: 1, flareLight: 0.55 },
+  },
 };
 
 export const PASSIVE_MODULES = {

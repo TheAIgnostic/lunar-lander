@@ -472,11 +472,18 @@ function shipAt(x, y, loadout = {}) {
     'thermal-purge': ['statusLevels'],    // it dumps the gauges and they stay dumped
   };
   const QUIET = { id: 'teardown-rig', width: 2000, hazards: [] };
+  // **`null` has to be in the snapshot, and the comparison has to be over the
+  // union of both sides.** The first version skipped falsy values and walked
+  // only the keys it saw *before* - so a field that starts `null` and is left
+  // holding an object was invisible to it, which is precisely the shape of the
+  // flare's `ship.decoy`. The mutation that never lets go of a decoy raised
+  // zero failures against it.
   const snapshot = (ship) => {
     const out = {};
     for (const [k, v] of Object.entries(ship)) {
-      if (typeof v === 'number' || typeof v === 'boolean') out[k] = v;
-      else if (v && typeof v === 'object' && !Array.isArray(v)) out[k] = JSON.stringify(v);
+      if (v === null || v === undefined) out[k] = String(v);
+      else if (typeof v === 'number' || typeof v === 'boolean') out[k] = v;
+      else if (typeof v === 'object' && !Array.isArray(v)) out[k] = JSON.stringify(v);
     }
     return out;
   };
@@ -491,12 +498,20 @@ function shipAt(x, y, loadout = {}) {
     a.trigger(ship);
     // Run past the whole duration, one substep at a time, with nothing else in
     // the world - so anything different at the end is the module's doing.
-    for (let i = 0; i < (mod.duration + 1) * 120 && a.active; i++) a.update(1 / 120, { ship, field: null });
-    check(`${id}: it lets go of the lander when it ends`, !a.active);
+    // Long enough for the module *and* anything it released: a flare burns for
+    // the whole duration and a charge is still falling after the rack shuts.
+    const world = { heightAt: () => 900, ceiling: null };
+    const level = { id: 'teardown', width: 3000, gravity: 28 };
+    for (let i = 0; i < (mod.duration + 6) * 120 && (a.active || a.bombs.length || a.flare); i++) {
+      a.update(1 / 120, { ship, field: null, terrain: world, level });
+    }
+    check(`${id}: it lets go of the lander when it ends`,
+      !a.active && !a.bombs.length && !a.flare);
     applyForces(ship, QUIET, 1, 1 / 120);
     const after = snapshot(ship);
     const keeps = new Set(KEEPS[id] || []);
-    const stuck = Object.keys(before).filter((k) => !keeps.has(k) && before[k] !== after[k]);
+    const stuck = [...new Set([...Object.keys(before), ...Object.keys(after)])]
+      .filter((k) => !keeps.has(k) && before[k] !== after[k]);
     check(`${id}: every field it wrote falls away with it`, stuck.length === 0,
       stuck.map((k) => `${k} ${before[k]} -> ${after[k]}`).join(', '));
   }
@@ -562,6 +577,173 @@ function shipAt(x, y, loadout = {}) {
       `${shadowed.gap.toFixed(0)} px against a ${droneType.standoff} px ring`);
     check('and goes back to its patrol against a cloaked one', unseen.gap > droneType.standoff + 120,
       `${unseen.gap.toFixed(0)} px`);
+  }
+}
+
+// --- the Kinetic Bomb Rack: the three things that make it a decision
+{
+  const lvl = { ...MOON_LEVELS[3], enemyBudget: 2, enemySets: ['sentry-turret'], gravity: 28 };
+  const terrain = new Terrain(lvl, 4242);
+  const eff = ACTIVE_MODULES['bomb-rack'].effect;
+
+  /**
+   * Drop a charge from `up` px above a flat spot, with the machine moved `off`
+   * px to one side of the impact point.
+   *
+   * **The machine is placed rather than found**, because falloff is a claim
+   * about distance and real terrain makes distance the wrong number: the first
+   * version dropped beside a turret wherever the generator had put it, the
+   * ground under the two points differed by more than the offset, and a charge
+   * that should have clipped the edge of the blast measured zero.
+   */
+  const drop = (off, up = 300) => {
+    const field = new EnemyField(lvl, terrain, 4242);
+    const e = field.enemies[0];
+    const x0 = e.x;
+    const groundY = terrain.heightAt(x0);
+    e.x = x0 + off;
+    e.y = groundY;
+    const ship = shipAt(x0, groundY - up);
+    const hp = e.hp;
+    const hull = ship.hull;
+    const a = new Abilities('bomb-rack', {});
+    a.trigger(ship);
+    let blast = null;
+    for (let i = 0; i < 1200 && a.bombs.length; i++) {
+      for (const ev of a.update(1 / 120, { ship, field, terrain, level: lvl })) {
+        if (ev.kind === 'blast') blast = ev;
+      }
+    }
+    return { dealt: hp - e.hp, selfHarm: hull - ship.hull, blast, at: { x: e.x, y: e.y } };
+  };
+
+  // **Falloff.** A blast that does full damage to the edge of its circle is a
+  // radius nobody has to think about, and this raised zero failures until it
+  // existed - the witness in `loadout-tests.js` only ever measured the centre.
+  const centre = drop(0);
+  const edge = drop(Math.round(eff.bombRadius * 0.75));
+  check('a charge hurts a machine it lands on', centre.dealt > 0, `${centre.dealt.toFixed(1)}`);
+  check('and hurts one at the edge of the blast far less',
+    edge.dealt > 0 && edge.dealt < centre.dealt * 0.6,
+    `${centre.dealt.toFixed(1)} at the centre vs ${edge.dealt.toFixed(1)} at ${Math.round(eff.bombRadius * 0.75)} px`);
+  check('and nothing at all outside it', drop(eff.bombRadius + 40).dealt === 0);
+
+  // **It goes off where it lands**, not merely when the fuse runs out. Dropped
+  // from height the ground arrives long before the fuse, and a charge that fell
+  // through the world and detonated on a timer would be a weapon you could not
+  // aim at anything on the surface.
+  //
+  // Measured as "near the surface", not "on it": a charge that reaches a machine
+  // first goes off on the machine, which is 65 px up on a turret and is the
+  // right answer. What the check is for is a charge that fell 300 px, passed
+  // everything and went off on a timer somewhere in the air.
+  const drop300 = 300;
+  const above = centre.blast ? centre.blast.y - terrain.heightAt(centre.blast.x) : -Infinity;
+  check('a charge goes off where it arrives, not on a timer in mid-air',
+    centre.blast && Math.abs(above) < drop300 * 0.4,
+    centre.blast ? `${Math.abs(above).toFixed(0)} px off the surface after a ${drop300} px fall` : 'never went off');
+
+  // The two ways a charge can arrive are separately load-bearing, and in the rig
+  // above they cover for each other: over a turret standing on the ground,
+  // removing *either* trigger leaves the other to catch it and the blast lands
+  // in the same place. Both mutations raised zero failures until these existed.
+  {
+    // Empty ground, no machine anywhere near: only the surface can stop it, and
+    // a charge that fell through it would go off underground and hit nothing.
+    const field = new EnemyField(lvl, terrain, 4242);
+    const far = field.enemies.reduce((acc, e) => Math.max(acc, e.x), 0) + 900;
+    const x = Math.min(far, lvl.width - 200);
+    const ship = shipAt(x, terrain.heightAt(x) - 320);
+    const a = new Abilities('bomb-rack', {});
+    a.trigger(ship);
+    let blast = null;
+    for (let i = 0; i < 1800 && a.bombs.length; i++) {
+      for (const ev of a.update(1 / 120, { ship, field, terrain, level: lvl })) {
+        if (ev.kind === 'blast') blast = ev;
+      }
+    }
+    check('a charge over empty ground goes off at the surface',
+      blast && blast.y - terrain.heightAt(blast.x) < 20 && blast.y - terrain.heightAt(blast.x) > -60,
+      blast ? `${(blast.y - terrain.heightAt(blast.x)).toFixed(0)} px relative to the ground` : 'never went off');
+  }
+  {
+    // And a machine in the air stops it where *it* is, hundreds of pixels above
+    // any ground - which is the only rig where the contact trigger is the one
+    // doing the work.
+    const air = { ...MOON_LEVELS[3], enemyBudget: 1, enemySets: ['seeker-drone'], gravity: 28 };
+    const t = new Terrain(air, 4242);
+    const field = new EnemyField(air, t, 4242);
+    const e = field.enemies[0];
+    const ship = shipAt(e.x, e.y - 260);
+    const a = new Abilities('bomb-rack', {});
+    a.trigger(ship);
+    let blast = null;
+    for (let i = 0; i < 1800 && a.bombs.length; i++) {
+      // Hold the drone still: what is under test is the charge, not the chase.
+      e.x = ship.x; e.y = ship.y + 260;
+      for (const ev of a.update(1 / 120, { ship, field, terrain: t, level: air })) {
+        if (ev.kind === 'blast') blast = ev;
+      }
+    }
+    check('and a machine in the air stops it where that machine is',
+      blast && Math.abs(blast.y - e.y) < 40 && t.heightAt(blast.x) - blast.y > 120,
+      blast ? `${Math.abs(blast.y - e.y).toFixed(0)} px from the drone, ${(t.heightAt(blast.x) - blast.y).toFixed(0)} px above the ground` : 'never went off');
+  }
+
+  // **It does not care whose lander it is.** The spec asks for a weapon that is
+  // dangerous near a landing zone, and one that is safe to stand next to is not
+  // a decision at all.
+  const onTopOfIt = drop(0, 90);
+  check('and it hurts the lander that dropped it, if that lander stayed put',
+    onTopOfIt.selfHarm > 0, `${onTopOfIt.selfHarm.toFixed(1)} hull`);
+
+  // The M12 muzzle rule, from the player's side: released a hand's breadth off
+  // the deck, the charge is still inert when it gets there and simply goes.
+  const scraped = drop(0, 12);
+  check('a charge released against the ground never goes off in your lap',
+    scraped.selfHarm === 0, `${scraped.selfHarm.toFixed(1)} hull`);
+}
+
+// --- the Countermeasure Flare pulls drones, and only drones
+{
+  const decoyAt = (e, ship) => ({ x: ship.x + 420, y: ship.y });
+  // A drone leaves you for the flare...
+  {
+    const air = { ...MOON_LEVELS[3], enemyBudget: 1, enemySets: ['seeker-drone'] };
+    const t = new Terrain(air, 1000);
+    const run = (withFlare) => {
+      const field = new EnemyField(air, t, 1000);
+      const e = field.enemies[0];
+      const ship = shipAt(e.x + 300, e.y);
+      for (let i = 0; i < 480; i++) {
+        ship.decoy = withFlare ? decoyAt(e, ship) : null;
+        ship.hull = ship.hullMax;
+        field.update(1 / 120, i / 120, ship);
+      }
+      return Math.hypot(e.x - ship.x, e.y - ship.y);
+    };
+    const chased = run(false);
+    const pulled = run(true);
+    check('a drone closes on a lander with no flare out', chased < 260, `${chased.toFixed(0)} px`);
+    check('and goes to the flare instead when there is one', pulled > chased + 150,
+      `${chased.toFixed(0)} -> ${pulled.toFixed(0)} px`);
+  }
+  // ...and a dug-in gun does not, which is what stops the flare being a second
+  // cloak. Per the spec, it redirects drones; it does not blind a turret.
+  {
+    const ground = { ...MOON_LEVELS[3], enemyBudget: 1, enemySets: ['sentry-turret'] };
+    const t = new Terrain(ground, 1000);
+    const field = new EnemyField(ground, t, 1000);
+    const e = field.enemies[0];
+    const ship = shipAt(e.x + 220, e.y - 90);
+    let engaged = false;
+    for (let i = 0; i < 900; i++) {
+      ship.decoy = { x: ship.x + 420, y: ship.y };
+      ship.hull = ship.hullMax;
+      field.update(1 / 120, i / 120, ship);
+      if (e.state !== 'idle') engaged = true;
+    }
+    check('a ground gun keeps shooting at you through a flare', engaged, e.state);
   }
 }
 

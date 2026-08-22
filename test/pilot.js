@@ -256,7 +256,26 @@ export const ABILITY_CUES = {
   // scratch (the charge is worth more later) and not at death's door (the
   // module takes five seconds and a fresh hit stops it).
   hurt: ({ ship }) => ship.hull < ship.hullMax * 0.7,
+  // **Over something.** A bomb falls where you were, so the only moment worth
+  // pressing it is the moment you are above a machine - which is a different
+  // judgement from "something is shooting at me", and pressing on the threat
+  // cue would drop every charge into empty ground. Reading it as "there is a
+  // machine below and roughly under me" is what a player does looking down.
+  overhead: ({ ship, field }) => !!field && field.enemies.some((e) => !e.dead
+    && Math.abs(e.x - ship.x) < 130 && e.y > ship.y + 60 && e.y - ship.y < 620),
 };
+
+/**
+ * Which cues need something hostile in the air to fire at all.
+ *
+ * It lives here, beside the cues, because it kept drifting when it lived
+ * anywhere else: the loadout gate wrote it as `cue === 'threat'` and the Repair
+ * Nanites read as inert (nothing had hurt the lander), then as
+ * `threat || hurt` and the Kinetic Bomb Rack read as inert (nothing to be over).
+ * Both times the module looked like decoration and the rig was the fault. A
+ * cue that needs machines says so once, where the cue is defined.
+ */
+export const CUES_NEEDING_MACHINES = new Set(['threat', 'hurt', 'overhead']);
 
 export function flyMission(level, terrain, opts = {}) {
   const ship = new Ship();

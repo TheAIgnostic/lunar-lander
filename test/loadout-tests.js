@@ -53,7 +53,7 @@ import { missionReward, settleHaul, freshHaul } from '../src/economy.js';
 import { LANDING, capsFor, evaluateLanding } from '../src/landing.js';
 import { MOON_LEVELS, MARS_LEVELS, EUROPA_LEVELS, chapterFor } from '../src/missions.js';
 import { PLANET_ORDER, nextPlanet } from '../src/route.js';
-import { flyMission } from './pilot.js';
+import { flyMission, CUES_NEEDING_MACHINES } from './pilot.js';
 
 let pass = 0;
 let fail = 0;
@@ -418,6 +418,75 @@ function liftAt(loadout, angle, vx = 120) {
   return ship.env.lift || 0;
 }
 
+/**
+ * Drop a charge over a machine and report what the blast did.
+ *
+ * `dropAt` offsets the lander horizontally from the machine, `noGround` removes
+ * the floor so only the fuse can end it, and `groundGap` releases it just above
+ * the surface - which is the case the arming delay exists for.
+ */
+function bombRun({ dropAt = 0, noGround = false, groundGap = 300, noField = false } = {}) {
+  const level = { ...MOON_LEVELS[3], enemyBudget: 2, enemySets: ['sentry-turret'], gravity: 28 };
+  const terrain = new Terrain(level, 4242);
+  const field = new EnemyField(level, terrain, 4242);
+  const e = field.enemies[0];
+  const x0 = e.x;
+  const ground = terrain.heightAt(x0);
+  // **The machine is placed, not found.** Radius is a claim about distance, and
+  // real ground makes distance the wrong number: dropped 120 px to one side of
+  // wherever the generator put a turret, the height difference between the two
+  // points pushed it out of a 150 px blast and the witness measured zero either
+  // way. Moving the machine to a known offset on the same ground is what makes
+  // the measurement about the radius.
+  e.x = x0 + dropAt;
+  e.y = ground;
+  const ship = new Ship();
+  ship.applyLoadout(STOCK);
+  ship.reset(x0, ground - groundGap, level.fuel);
+  const before = e.hp;
+  const hull = ship.hull;
+  const a = new Abilities('bomb-rack', STOCK);
+  a.trigger(ship);
+  const floor = noGround ? { heightAt: () => 1e9, ceiling: null } : terrain;
+  // **No machines when the fuse is what is under test.** A charge dropped over
+  // a turret detonates on contact whatever the fuse says, so the first version
+  // of the fuse witness measured the same number either way and passed by
+  // agreeing with itself.
+  const seen = noField ? null : field;
+  let at = Infinity;
+  for (let i = 0; i < 1800 && a.bombs.length; i++) {
+    for (const ev of a.update(1 / 120, { ship, field: seen, terrain: floor, level })) {
+      if (ev.kind === 'blast') at = i / 120;
+    }
+  }
+  return { dealt: before - e.hp, selfHarm: hull - ship.hull, at };
+}
+
+/** How far a drone ends up from the lander, with a flare burning and without. */
+function dronePull(withFlare) {
+  const level = { ...MOON_LEVELS[3], enemyBudget: 1, enemySets: ['seeker-drone'], gravity: 28 };
+  const terrain = new Terrain(level, 4242);
+  const field = new EnemyField(level, terrain, 4242);
+  const e = field.enemies[0];
+  const ship = new Ship();
+  ship.applyLoadout(STOCK);
+  ship.reset(e.x + 300, e.y, level.fuel);
+  const a = withFlare ? new Abilities('countermeasure-flare', STOCK) : null;
+  if (a) {
+    a.trigger(ship);
+    a.flare.x = ship.x + 420;        // put the decoy somewhere the drone must choose
+    a.flare.vx = 0; a.flare.vy = 0;
+  }
+  const at = { x: ship.x, y: ship.y };
+  for (let i = 0; i < 480; i++) {
+    if (a) a.update(1 / 120, { ship, field, terrain, level });
+    ship.x = at.x; ship.y = at.y; ship.vx = 0; ship.vy = 0;
+    ship.hull = ship.hullMax;
+    field.update(1 / 120, i / 120, ship);
+  }
+  return Math.hypot(e.x - ship.x, e.y - ship.y);
+}
+
 /** A machine of a known type, and a lander parked beside it. */
 function machineRig(loadout, gap = 80) {
   const level = { ...MOON_LEVELS[3], enemyBudget: 2, enemySets: ['sentry-turret'] };
@@ -514,6 +583,47 @@ const WITNESS = {
       for (let i = 0; i < 240; i++) ship.step(1 / 120, idle, level, terrain, i / 120, set);
       return +Math.abs(ship.spin).toFixed(6);
     } },
+  // ---- M33's ordnance ------------------------------------------------------
+  //
+  // A rig that drops a charge from a fixed height over a machine and reports
+  // what the blast did. `withEffect` moves the declared number and the rig runs
+  // the real `_stepBombs`, so a literal written into the runtime beside the
+  // data would show up as the number failing to matter.
+  bombDamage: { how: 'flight',
+    measure: (on) => withEffect('bomb-rack', { bombDamage: on ? 55 : 0 },
+      () => +bombRun({ dropAt: 0 }).dealt.toFixed(3)) },
+  bombRadius: { how: 'flight',
+    // The machine sits 120 px to one side: inside a 150 px blast, outside a 60.
+    measure: (on) => withEffect('bomb-rack', { bombRadius: on ? 150 : 60 },
+      () => +bombRun({ dropAt: 120 }).dealt.toFixed(3)) },
+  bombFuse: { how: 'flight',
+    // Dropped into open air with no ground under it, the fuse is the only thing
+    // that can end it.
+    measure: (on) => withEffect('bomb-rack', { bombFuse: on ? 5 : 1 },
+      () => +bombRun({ dropAt: 0, noGround: true, noField: true }).at.toFixed(3)) },
+  bombArm: { how: 'flight',
+    // **The telegraph rule, as a measurement.** A charge released a hand's
+    // breadth above the ground must be inert when it gets there: with the arming
+    // delay it is simply gone, and with none it detonates in the lander's lap.
+    measure: (on) => withEffect('bomb-rack', { bombArm: on ? 0.35 : 0 },
+      () => +bombRun({ dropAt: 0, groundGap: 12 }).selfHarm.toFixed(3)) },
+
+  decoy: { how: 'flight',
+    // Where a drone ends up after four seconds, with a flare burning 400 px to
+    // one side and without one.
+    measure: (on) => +dronePull(on).toFixed(3) },
+  flareLight: { how: 'instrument',
+    measure: (on) => withEffect('countermeasure-flare', { flareLight: on ? 0.55 : 0 }, () => {
+      const ship = new Ship();
+      ship.applyLoadout(STOCK);
+      ship.reset(0, 0, 100);
+      const a = new Abilities('countermeasure-flare', STOCK);
+      a.trigger(ship);
+      ship.env.darkness = 0.8;
+      a.update(1 / 120, { ship, terrain: { heightAt: () => 400 }, level: { gravity: 20, width: 2000 } });
+      return +ship.env.darkness.toFixed(4);
+    }) },
+
   // ---- M32's three actives ------------------------------------------------
   brakeDrag: { how: 'flight',
     // How fast Titan's air takes a crossing speed off you, with the foil out
@@ -1411,13 +1521,12 @@ function movedMissions(body, route, withOpts, withoutOpts) {
   for (const m of allModules()) {
     if (NOT_IN_FLIGHT[m.id]) continue;
     const isActive = !!ACTIVE_MODULES[m.id];
-    // Machines follow the module's own cue rather than a second list. The cue
-    // says what has to be happening for a player to reach for it, and two of
-    // the four need something shooting: `threat` obviously, and `hurt`, because
-    // the hull does not go down on its own. Reading this as "threat only" made
-    // the Repair Nanites read as inert - fitted, flown, and never once fired,
-    // because nothing had hurt the lander.
-    const combat = isActive && (m.cue === 'threat' || m.cue === 'hurt');
+    // Machines follow the module's own cue, and *which* cues need machines is
+    // declared beside the cues rather than restated here - it has now been got
+    // wrong twice from this side, once for the Nanites and once for the Rack,
+    // and both times the module looked like decoration when the rig was at
+    // fault. `pilot.js` owns the list.
+    const combat = isActive && CUES_NEEDING_MACHINES.has(m.cue);
     // **Both routes, every claimed body.** Picking one route from the cue read
     // four things as inert that are not. The way home is short and quiet, so a
     // status channel never fills; the deep route is long and hostile, so the
@@ -1468,7 +1577,7 @@ function movedMissions(body, route, withOpts, withoutOpts) {
     check(`NOT_IN_FLIGHT names something real: ${id}`, !!(mod || node));
     if (!mod) continue;
     const isActive = !!ACTIVE_MODULES[id];
-    const combat = isActive && (mod.cue === 'threat' || mod.cue === 'hurt');
+    const combat = isActive && CUES_NEEDING_MACHINES.has(mod.cue);
     const base = { loadout: STOCK, enemies: combat };
     const fit = isActive
       ? { ...base, ability: id }

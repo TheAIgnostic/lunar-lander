@@ -3,7 +3,7 @@
 // Split from render.js in M23, before the six remaining enemy designs land -
 // each new design is an ENEMY_TYPES entry plus a draw function here.
 
-import { FONT, GREEN, RED, CYAN, AMBER } from './drawkit.js';
+import { FONT, GREEN, RED, CYAN, AMBER, throb } from './drawkit.js';
 import { ENEMY_TYPES } from './enemies.js';
 import { clamp, TAU } from './util.js';
 
@@ -500,6 +500,79 @@ export function drawBeam(ctx, beam, time) {
 }
 
 /** A raised shield, drawn as a bubble that thins as its pool is spent. */
+/**
+ * **The player's own ordnance, drawn under the same rule the machines are.**
+ *
+ * M12 says a machine shows you the shot before it takes it. Turned on your own
+ * weapon that means the blast circle is on the screen *while the fuse burns*,
+ * not after — "am I clear of this" has to be a question you can answer by
+ * looking, or a weapon that can kill you near your own pad is a trap rather
+ * than a decision.
+ *
+ * The circle is drawn at the charge's real radius and only once the charge is
+ * **armed**, because before that it cannot go off at all and a ring there would
+ * be a warning about nothing. So the ring appearing is itself the tell: it
+ * means the thing is now live.
+ */
+export function drawOrdnance(ctx, abilities, time) {
+  if (!abilities) return;
+  for (const b of abilities.bombs || []) {
+    ctx.save();
+    if (b.armed) {
+      // The blast it will make, growing as the fuse runs down.
+      const t = clamp(b.age / Math.max(0.001, b.fuse + b.arm), 0, 1);
+      const pulse = 0.5 + 0.5 * throb(time, 6, 1);
+      ctx.globalAlpha = 0.18 + 0.22 * t * pulse;
+      ctx.strokeStyle = RED;
+      ctx.setLineDash([7, 7]);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.radius, 0, TAU);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    ctx.globalAlpha = 1;
+    // The canister: small, dark, and blinking faster the closer it is to going.
+    ctx.translate(b.x, b.y);
+    ctx.fillStyle = 'rgba(12,20,30,0.95)';
+    ctx.strokeStyle = b.armed ? RED : '#9fe8ff';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 5, 8, 0, 0, TAU);
+    ctx.fill();
+    ctx.stroke();
+    if (b.armed && throb(time, 9, 1) > 0.5) {
+      ctx.fillStyle = RED;
+      ctx.beginPath();
+      ctx.arc(0, -3, 2, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  const f = abilities.flare;
+  if (f) {
+    ctx.save();
+    ctx.translate(f.x, f.y);
+    const pulse = 0.7 + 0.3 * throb(time, 5, 1);
+    ctx.shadowColor = AMBER;
+    ctx.shadowBlur = 26 * pulse;
+    ctx.fillStyle = '#fff2c4';
+    ctx.beginPath();
+    ctx.arc(0, 0, 4.5 * pulse, 0, TAU);
+    ctx.fill();
+    // A ring, so it reads as a thing drones are going to instead of debris.
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = AMBER;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.arc(0, 0, 16 + 8 * pulse, 0, TAU);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
 export function drawShield(ctx, ship, pool, time) {
   if (!ship.shieldActive || ship.shieldHp <= 0) return;
   const f = clamp(ship.shieldHp / Math.max(1, pool), 0, 1);

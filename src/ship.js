@@ -206,6 +206,13 @@ export class Ship {
     this.shieldActive = false;
     this.shieldHp = 0;
     this.shieldHazard = false;
+    // Declared here even though only a raised Ray Shield ever moves it. It was
+    // written by `trigger` and reset by the teardown and **never initialised**,
+    // so a lander that had used the shield once carried a field a fresh one did
+    // not have. Harmless as it stood - `hazardScale` guards for undefined - but
+    // it is the M31 rule again: a field the ship uses belongs in `reset`, or
+    // "the ship is back as it was" stops being a statement anything can check.
+    this.shieldFactor = 1;
     this.hullBurn = 0;
     this.anchor = 1;
     this.beaconBoost = 1;
@@ -215,6 +222,8 @@ export class Ship {
     // next - the same rule `thermalDerate` and `rcsStiffness` live under.
     this.airBrake = 1;
     this.cloaked = false;
+    // What the machines chase instead of you, while a flare burns.
+    this.decoy = null;
     this.revealed = false;
     this.hitsTaken = 0;
     this.hitFlash = 0;

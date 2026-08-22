@@ -21,7 +21,7 @@ import { EnemyField } from './enemies.js';
 import { evaluateObjective } from './objectives.js';
 import { Abilities, ABILITY } from './abilities.js';
 import * as R from './render.js';
-import { drawEnemies, drawBeam, drawShield, drawLethalWarnings } from './enemydraw.js';
+import { drawEnemies, drawBeam, drawOrdnance, drawShield, drawLethalWarnings } from './enemydraw.js';
 import { drawHUD } from './hud.js';
 import { Debug } from './debug.js';
 import { spawnFor } from './spawn.js';
@@ -402,6 +402,32 @@ function combatEffect(e) {
     case 'shield-down':
       audio.shieldHit();
       particles.ring(ship.x, ship.y, 90, 0.3, '#7ef2d0');
+      break;
+    case 'blast':
+      // Your own ordnance, and it reads as your own: the ring is drawn at the
+      // radius the charge actually used, so what you see afterwards is the same
+      // circle the telegraph drew before it went off.
+      audio.enemyDown();
+      particles.explode(e.x, e.y, 0, 0, []);
+      particles.sparks(e.x, e.y, 30, 0);
+      particles.ring(e.x, e.y, e.radius, 0.45, '#ffb347');
+      g.cam.trauma = Math.min(1, g.cam.trauma + (e.selfHarm > 0 ? 0.6 : 0.3));
+      if (e.selfHarm > 0) {
+        audio.warn('hull');
+        particles.text(ship.x, ship.y - 44, `-${Math.round(e.selfHarm)} HULL · OWN BLAST`, '#ff3b5c', 17);
+        Log.log('own-blast', { damage: Math.round(e.selfHarm), hull: Math.round(ship.hull) });
+      }
+      break;
+    case 'repairing':
+      // Quiet on purpose: this fires every substep, so anything louder than a
+      // trickle would be 120 effects a second. The number goes up on the HUD.
+      if (Math.random() < 0.04) particles.sparks(ship.x, ship.y, 2, 1);
+      break;
+    case 'repair-interrupted':
+      particles.text(ship.x, ship.y - 60, 'REPAIR INTERRUPTED', '#ffb347', 16);
+      break;
+    case 'flare-out':
+      particles.sparks(ship.x, ship.y, 4, 1);
       break;
     default:
       break;
@@ -975,7 +1001,11 @@ function draw() {
     showPaths: Debug.showEnemyPaths,
   });
   R.drawShip(ctx, ship, g.time, cam);
-  if (g.abilities) drawBeam(ctx, g.abilities.beam, g.time);
+  if (g.abilities) {
+    drawBeam(ctx, g.abilities.beam, g.time);
+    // Under the ship, so a charge falling away from the lander reads as leaving.
+    drawOrdnance(ctx, g.abilities, g.time);
+  }
   drawShield(ctx, ship, ABILITY.shieldPool * ((g.loadout && g.loadout.shieldCapacity) || 1), g.time);
   particles.drawTexts(ctx);
   ctx.restore();

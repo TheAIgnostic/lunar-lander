@@ -656,8 +656,18 @@ export class EnemyField {
     //
     // Shots already in the air are deliberately untouched. A cloak breaks
     // targeting; it does not erase a bullet that has left the barrel.
-    const target = ship && !ship.cloaked ? ship : null;
-    if (type.kind === 'air') this._moveDrone(e, type, dt, target, events);
+    //
+    // **A flare is the other half of the same idea.** The cloak says "there is
+    // no lander"; a decoy says "the lander is over there", and per the spec it
+    // pulls *drones* only - a dug-in gun keeps shooting at you, which is what
+    // stops the flare being a second cloak. So a drone flies at the decoy, is
+    // blind to the lander while it burns, and cannot ram what it is not
+    // chasing; `ram` is passed the real ship or nothing, never the decoy, so
+    // there is no shape-guessing about what can be hit.
+    const decoy = ship && ship.decoy ? ship.decoy : null;
+    const pulled = type.kind === 'air' && !!decoy;
+    const target = ship && !ship.cloaked && !pulled ? ship : null;
+    if (type.kind === 'air') this._moveDrone(e, type, dt, pulled ? decoy : target, target, events);
 
     const seen = target ? this._sees(e, type, target) : null;
     e.alert = clamp(e.alert + (seen ? dt * 2.5 : -dt * 1.2), 0, 1);
@@ -765,17 +775,24 @@ export class EnemyField {
     events.push({ kind: 'fire', enemy: e, x: px, y: py, dir });
   }
 
-  _moveDrone(e, type, dt, ship, events) {
+  /**
+   * `aim` is what the drone flies at - the lander, a decoy, or nothing at all.
+   * `ship` is what it is allowed to ram, which is only ever the real lander:
+   * ramming never went through the sight check, so a cloak or a flare wired
+   * only into `_sees` would leave the most dangerous machine in the game
+   * behaving exactly as before.
+   */
+  _moveDrone(e, type, dt, aim, ship, events) {
     const terrain = this.terrain;
     let tx;
     let ty;
-    if (ship && Math.hypot(ship.x - e.x, ship.y - e.y) < type.range * 1.3) {
+    if (aim && Math.hypot(aim.x - e.x, aim.y - e.y) < type.range * 1.3) {
       // Hold a standoff ring around the lander rather than flying into it.
-      const dx = e.x - ship.x;
-      const dy = e.y - ship.y;
+      const dx = e.x - aim.x;
+      const dy = e.y - aim.y;
       const d = Math.hypot(dx, dy) || 1;
-      tx = ship.x + (dx / d) * type.standoff;
-      ty = ship.y + (dy / d) * type.standoff - 30;
+      tx = aim.x + (dx / d) * type.standoff;
+      ty = aim.y + (dy / d) * type.standoff - 30;
     } else {
       e.beat += dt * 0.5;
       tx = e.homeX + Math.sin(e.beat) * type.patrol * e.dir;
@@ -787,7 +804,7 @@ export class EnemyField {
     const roof = terrain.ceiling ? terrain.ceilingAt(tx) + 80 : 60;
     ty = clamp(ty, roof, floor);
 
-    const speed = ship ? type.chase : type.cruise;
+    const speed = aim ? type.chase : type.cruise;
     const dx = tx - e.x;
     const dy = ty - e.y;
     const d = Math.hypot(dx, dy);
