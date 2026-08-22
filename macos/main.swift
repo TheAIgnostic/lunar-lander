@@ -89,6 +89,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     /// which is the branch that hid the last one. `__bootError` is re-read
     /// afterwards because a `requestAnimationFrame` throw lands there rather
     /// than in this `try`.
+    ///
+    /// **Proved to bite**: the M35 bug was put back and the canary failed. Note
+    /// what it failed *with* - `NOKILL`, not `PLAYERROR`. A throw on the kill
+    /// path aborts the step before the kill is observable rather than surfacing
+    /// as an exception here, so `NOKILL` is this class of fault, not a flaky
+    /// laser. If you see it, read it as "something on the kill path is broken",
+    /// and run the same mission in a browser to get the real stack.
     private func probe(attempt: Int) {
         let js = """
         (function () {

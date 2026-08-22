@@ -159,7 +159,19 @@ what it is *meant* to leave behind to `KEEPS`, and nothing else.
 
 ---
 
-## 4. `run-all.sh` cannot see a rendering fault
+## 4. `run-all.sh` cannot see a rendering fault — and the canary now flies
+
+**`./macos/build.sh` is the only check that executes `main.js`**, and since M38 it does more than
+boot: it launches an armed mission, steps the simulation, draws, fires a module and **requires
+something to die**. Three bugs have shipped past the old boot-only version — M30e's gauge reading a
+`ship` it never had, M31's orphaned `rad`, and M35's `bonus` deleted out from under a kill handler
+and live for two commits. All three were a free variable on a path no node test can execute.
+
+It reports **`NOKILL`** for that class rather than `PLAYERROR`: a throw on the kill path aborts the
+step before the kill is observable. Read `NOKILL` as "something on the kill path is broken", then run
+the same mission in a browser for the real stack.
+
+
 
 **No node test draws.** Two of the last three milestones introduced a bug that every suite passed and
 the first `__draw()` in a browser threw — M30e pointed a gauge at a `ship` it never had, M31 orphaned
