@@ -18,6 +18,7 @@ import { PLANETS, gravityFor } from './planets.js';
 import { peakMachines } from './missions.js';
 import { makeRng } from './util.js';
 import { hazardName } from './forces.js';
+import { ACTIVE_MODULES, PASSIVE_MODULES } from './modules.js';
 
 /**
  * The campaign, in order. All ten bodies, sorted by measured difficulty, Moon
@@ -116,18 +117,33 @@ const DIFFICULTY = {
   GANYMEDE: 3, IO: 4, MERCURY: 4, PLUTO: 4, VENUS: 5,
 };
 
-const RECOMMENDED = {
-  LUNA: ['Fuel Recycler', 'Sensor Pulse'],
-  MARS: ['Hardened Radar', 'Sensor Pulse'],
-  MERCURY: ['Thermal Sink', 'Thermal Purge'],
-  VENUS: ['Ablative Acid Skin', 'Aero-Brake Foil'],
-  TITAN: ['Atmospheric Control Surfaces', 'Aero-Brake Foil'],
-  EUROPA: ['Ray Shield', 'Ice Cleats'],
-  ENCELADUS: ['Plume Vanes', 'Gyro Stabilizer'],
-  IO: ['Thermal Sink', 'Kinetic Bomb Rack'],
-  PLUTO: ['Cryo Insulation', 'Countermeasure Flare'],
-  GANYMEDE: ['Hardened Radar', 'Ray Shield'],
-};
+/**
+ * What to take to a body, **derived from the modules themselves**.
+ *
+ * This was a hand-written table of prose names beside the card, and it named
+ * the roster the spec *plans* rather than the one the game *has*: **10 of its
+ * 20 entries were modules that do not exist.** Titan and Venus recommended two
+ * apiece and neither body had a single obtainable one - on the screen where a
+ * player commits to a run and then goes to the loadout to act on it.
+ *
+ * A module already declares the bodies it is good for (`good: ['VENUS']`), and
+ * `modules.recommendedFor` already reads that. Two sources of truth for "what
+ * should I take here" is how one of them drifts, so there is one now: this
+ * derives from the same field, cannot name something unobtainable, and a module
+ * added later appears on the right cards without anyone editing a list.
+ *
+ * One active and one passive, which is the two-item shape the card was drawn
+ * for. A body nothing claims returns nothing, and the card says so plainly -
+ * that is true of Titan and Venus today, and it is honest rather than a gap:
+ * no built module is for thick air or acid.
+ */
+function recommendedNames(planetId) {
+  const pick = (table) => {
+    const m = Object.values(table).find((x) => x.good.includes(planetId));
+    return m ? m.name : null;
+  };
+  return [pick(ACTIVE_MODULES), pick(PASSIVE_MODULES)].filter(Boolean);
+}
 
 /** What "N machines on the worst mission of this body" reads as on a card. */
 function intensityOf(machines) {
@@ -174,7 +190,7 @@ export function planetCard(planetId, sector, rng) {
     machines,
     enemyIntensity: intensityOf(machines),
     rareMaterial: p.rareMaterial,
-    recommended: RECOMMENDED[planetId] || [],
+    recommended: recommendedNames(planetId),
     difficulty: DIFFICULTY[planetId] || 1,
     summary: p.summary,
     incomplete: !!hidden,

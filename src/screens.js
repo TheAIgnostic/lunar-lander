@@ -65,7 +65,7 @@ function bodyCardHTML(c, { tag, action, state = '' }) {
       <span class="best">gravity ${(c.gravity / 6).toFixed(2)} m/s² · ${c.enemyIntensity} resistance${c.machines ? ` (up to ${c.machines})` : ''}</span>
       <span class="best">weather: ${c.hazards.join(', ') || 'nothing reported'}${c.incomplete ? ' <i>· forecast incomplete</i>' : ''}</span>
       <span class="best haul">brings home: ${c.rareMaterial}</span>
-      <span class="best rec">take: ${c.recommended.join(', ')}</span>
+      <span class="best rec">take: ${c.recommended.join(', ') || 'nothing specialised yet — fly what you have'}</span>
     </${dead ? 'div' : 'button'}>`;
 }
 

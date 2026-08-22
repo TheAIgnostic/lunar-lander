@@ -1154,6 +1154,11 @@ its own), then the gamepad behind it (stages 2-5). Full measurement in `test/BAS
   left on the combat ramp**. Read M29e's findings first: a machine is not finished when it draws and
   fires, `range` is not the lever it looks like, and reach costs twice what vantage does.
 - **Moving landing platforms** (Europa 5, Io 5) — `padAt` and the landing check become time-aware.
+- **Eleven modules and 18 skill nodes remain** against the spec's roster, all of them absent rather
+  than broken — every built node and module works. **Two bodies have no specialist module at all**:
+  Titan (thick air, gliding) and Venus (dense drag, acid), whose whole identity is the thing nothing
+  answers. **`Aero-Brake Foil` serves both**, which makes it the highest-value single module left.
+  The two missing component tracks are **Power Core** and **Utility Hardpoint**.
 - **The landing bands and the fuel budgets** still await human data, and are still parked.
 - **`hazardLead` is sold and not delivered** — Sensors **L3** costs 1,650 salvage, **3 tech cores**
   and 40 Silica nanograins, describes itself as *"Hazard trajectory prediction"*, and nothing reads

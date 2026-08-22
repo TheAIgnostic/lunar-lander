@@ -8,6 +8,7 @@ import { chapterFor, CHAPTERS } from '../src/missions.js';
 import { VALIDATION } from '../src/validate.js';
 import { everyMaterial } from '../src/components.js';
 import { forcesFor, NON_FORCE_HAZARDS } from '../src/forces.js';
+import { ACTIVE_MODULES, PASSIVE_MODULES } from '../src/modules.js';
 
 let pass = 0, fail = 0;
 const check = (n, c, e = '') => { if (c) pass++; else { fail++; console.log(`  FAIL  ${n}  ${e}`); } };
@@ -335,6 +336,32 @@ check('but not before one is cleared', !isCheckpoint(0));
         NON_FORCE_HAZARDS.includes(h) || forcesFor({ id: `probe-${h}`, width: 3000, hazards: [h] }).length > 0, h);
     }
   }
+  // **A card may not recommend kit the player cannot obtain.** It used to: the
+  // recommendation was a hand-written list of the roster the spec *plans*, and
+  // 10 of its 20 entries named modules that do not exist - with Titan and Venus
+  // recommending two apiece and neither having one. On the screen where a
+  // player commits to a run and then goes to the loadout to act on it.
+  //
+  // Derived from the modules' own `good` lists now, so this cannot recur; the
+  // assertion is here because "cannot recur" is a claim about today's code.
+  {
+    const built = new Set([...Object.values(ACTIVE_MODULES), ...Object.values(PASSIVE_MODULES)].map((m) => m.name));
+    let total = 0;
+    for (const id of PLANET_ORDER) {
+      for (const name of planetCard(id, 1, makeRng(11)).recommended) {
+        total++;
+        check(`${id}: recommends "${name}", which exists`, built.has(name), name);
+      }
+    }
+    check('the cards recommend something at all', total >= 10, String(total));
+    // At most one active and one passive, which is the shape the card is drawn
+    // for - four names overflow the tile.
+    for (const id of PLANET_ORDER) {
+      const rec = planetCard(id, 1, makeRng(11)).recommended;
+      check(`${id}: at most two recommendations`, rec.length <= 2, JSON.stringify(rec));
+    }
+  }
+
   // The rule stated directly, so it holds for a body added later too.
   const printable = (v) => typeof v === 'string' && v.length > 0 && !v.startsWith('[object');
   check('every card renders a readable forecast', PLANET_ORDER.every((id) => {

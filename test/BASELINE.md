@@ -3856,3 +3856,79 @@ means drawing where a hazard is *going* — the vents, the plumes, the sinking-a
 radiation sweeps all move on a cycle already, so the data exists. The alternative is to re-describe
 the rung around what it does deliver, which is cheaper and honest. It should not be quietly deleted:
 it is the only rung on the Sensors track between L2 and L4.
+
+---
+
+## M30g — what 1.0 still owes, and the cards that recommended kit you cannot get (2026-08-22)
+
+Tom: *"so what is still missing from the table above. leave more enemies for v1."* Enemies are
+deferred by that decision. Counting what remains against the spec's named items — not counts — turned
+up a live bug on the route screen.
+
+### The route cards recommended 10 modules that do not exist
+
+`RECOMMENDED` in `route.js` was a hand-written table of prose names listing the roster the spec
+**plans**, beside a game that has 9 of the 20. **10 of its 20 entries named modules with no
+implementation:**
+
+| body | recommended | obtainable |
+| --- | --- | --- |
+| **Titan** | Atmospheric Control Surfaces, Aero-Brake Foil | **neither** |
+| **Venus** | Ablative Acid Skin, Aero-Brake Foil | **neither** |
+| Enceladus | Plume Vanes, Gyro Stabilizer | one |
+| Io | Thermal Sink, Kinetic Bomb Rack | neither |
+| Mercury | Thermal Sink, Thermal Purge | one |
+| Pluto | Cryo Insulation, Countermeasure Flare | neither |
+
+This is the expedition screen — where a player picks a body, reads *take: Ablative Acid Skin*, goes
+to the loadout and finds nothing of the sort. **Four bodies recommended two unobtainable modules
+each.**
+
+**It was a second source of truth.** A module already declares which bodies it suits
+(`good: ['VENUS']`) and `modules.recommendedFor` already reads that field — for the flight-assist
+loaner, which is why *that* path never lied. The card had its own list, and the list drifted.
+
+Derived from the same field now: one active and one passive, so it cannot name something
+unobtainable, and a module added later appears on the right cards with no list to edit. Titan and
+Venus honestly print *"nothing specialised yet"* — no built module is for thick air or acid, and
+saying so beats naming two that do not exist. Asserted in `route-tests.js`; restoring the old table
+raises **20 failures**.
+
+**The near-miss worth recording:** the first version of that check compared `m.name` against the
+recommendation and reported **20 of 20 missing**, including modules that plainly exist. Module names
+are uppercase and the table was title case. A check that says *everything* is broken is usually the
+check.
+
+### What 1.0 still owes, by name
+
+Enemies excluded per Tom's call. Against the spec's own section 18:
+
+**Component tracks — 2 of 7 missing:** Power Core (module energy, recharge, one free activation) and
+Utility Hardpoint (unlock the active slot, reduce cooldown, ordnance support).
+
+**Skill nodes — 18 of 30 missing, six per tree.** Every built node works; these are unwritten, not
+broken.
+
+| tree | missing |
+| --- | --- |
+| Technician | Thermal Reclaimer, Redundant Feed Lines, Rapid Refit, Autonomous Repair, Universal Couplings, Phoenix Protocol |
+| Combat | Hardpoint Calibration, Shaped Charges, Counter-Battery Logic, Ordnance Fabricator, Twin-Link Control, Combat Overdrive |
+| Flight | RCS Finesse, Surface Adaptation, Emergency Arrest, Navigation Forecast, Steady Hands, Fourth Shuttle |
+
+**Active modules — 5 of 10 missing:** Kinetic Bomb Rack, Optical Cloak, Repair Nanites,
+Countermeasure Flare, Aero-Brake Foil.
+
+**Passive modules — 6 of 10 missing:** Ablative Acid Skin, Thermal Sink, Cryo Insulation, Plume
+Vanes, Atmospheric Control Surfaces, Salvage Magnet.
+
+**Two bodies have no specialist module at all** — Titan (thick air, gliding) and Venus (dense drag,
+acid), the two whose whole identity is the thing no module answers. Titan is body 3 and Venus is the
+finale. Of the eleven unbuilt modules, **Aero-Brake Foil serves both**, which makes it the single
+highest-value one to build.
+
+**Plus:** `hazardLead` sold and not delivered (M30f), and achievements, which the spec gates behind
+stable progression.
+
+### What did not move
+
+Both fixtures unchanged. Full suite green. `route-tests.js` 99 → **124**.
