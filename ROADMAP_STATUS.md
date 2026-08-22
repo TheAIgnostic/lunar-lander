@@ -1960,7 +1960,41 @@ Two files carry **39% of the codebase**, and that is the whole finding:
 `test/physics-fixture.js` and `test/flight-fixture.js` untouched, which is a complete verification
 that needs none of the conversation that produced this plan.
 
-### Handover
+### Handover — for an audit
+
+*Written 2026-08-22, after the session that ran M35–M40 and shipped the game.*
+
+**The game is content-complete and published.** The next session is not building; it is **auditing**.
+`docs/AUDIT.md` is written for that and is the file to read first — it is where the bugs actually
+are, rather than what was built and why.
+
+**The first prompt for an auditing session:**
+
+> Read `docs/AUDIT.md` first, then `docs/ARCHITECTURE.md`. You are looking for bugs in a
+> content-complete game, not adding features. Run `./test/run-all.sh 20` before anything; it takes
+> about four minutes and everything passes, which is the point — **2,348 assertions being green is
+> not the same as being covered.**
+>
+> Three whole classes of fault are invisible to that suite: **no node test executes the game loop**
+> (3,384 lines across `main.js`, `screens.js`, `actions.js`, `state.js`, `audio.js`), **no node test
+> draws**, and **no node test listens**. Every bug a human found in the last four sessions was in one
+> of those three. Three crashes have shipped from the first one, all of them the same shape — a free
+> variable on a path nothing can execute — and one was live for two commits in the published build.
+>
+> `docs/AUDIT.md` §3 ranks the leads and hands you one **verified, unfixed gap** to start on: the
+> loadout gate's exemption list is only checked in reverse for *modules*, so four skill nodes are
+> excused from the flown gate on nothing but a plausible sentence.
+>
+> Four rules, and each was paid for. **A passing test is not a test that bites** — `./test/mutate.sh`
+> breaks the code on purpose and zero failures is the finding, not the result. **A rig built from
+> whatever the world generated is measuring the world, not the rule** — five milestones running, and
+> §4 lists the five ways it has happened. **Measure before you decide.** And **§5 is a list of things
+> that look wrong and are decisions** — check it before you "fix" one.
+>
+> Do not touch the enemy roster or the skill-node count. Both are Tom's calls and `skills-tests.js`
+> fails on a sixth node in any tree.
+
+### Handover — the build session before it
 
 *Rewritten 2026-08-22, after the session that ran **M35 and M36** — the skill board cut to five per
 tree on Tom's call, and the balance pass that finished the content.*
