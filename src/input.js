@@ -31,23 +31,25 @@ export const DEFAULT_KEYS = {
   thrust: [' ', 'w', 'arrowup', 'pad:7', 'pad:0'],
   left: ['a', 'arrowleft', 'axis:0-', 'pad:14'],
   right: ['d', 'arrowright', 'axis:0+', 'pad:15'],
-  // **The descent thrusters** (M41), and the two devices want different things.
+  // **The descent thrusters** (M41). Shift on the keyboard, and **left stick
+  // down** on the pad - Tom's call on both, and the second one is the better
+  // shape for a reason worth writing down.
   //
-  // Keyboard: **Shift**, and attitude hold keeps S and arrow-down (Tom's call).
-  // The first cut had it the other way on the "down is down" argument, and that
-  // reasoning was worth less than the muscle memory of the two people actually
-  // flying this - S has held the attitude since M0.
+  // The burners are already the left stick, left and right. Putting descent on
+  // the same stick makes the whole of attitude and translation one thing under
+  // one thumb, instead of three burners spread across a stick and a trigger.
+  // It costs nothing mechanically either: a stick axis is analog exactly as a
+  // trigger is, so the M30 magnitude contract still gives a *fraction* of the
+  // thrusters rather than all-or-nothing.
   //
-  // Pad: **LT, the mirror of RT**, and the reason is mechanical rather than
-  // mnemonic. Both are analog, the descent thrusters are an axis like the main
-  // engine, and the M30 magnitude contract means a trigger gives a *fraction*
-  // of them for free. A face button can only ever give all or nothing, so the
-  // trigger is the one control on the pad that can express this at all - which
-  // is why attitude hold takes L3 there and keeps its keys here.
+  // It also puts LT back where it started. Attitude hold had it until M41 and
+  // has it again, so the only control that moved on either device is the new
+  // one. Stick *up* stays free.
   //
-  // Everything is rebindable from the settings screen, so both are defaults.
-  down: ['shift', 'pad:6'],
-  hold: ['s', 'arrowdown', 'pad:10'],
+  // (The menu cursor also reads this axis, and that is not a clash: the cursor
+  // only exists outside flight, and in flight nothing is listening for it.)
+  down: ['shift', 'axis:1+'],
+  hold: ['s', 'arrowdown', 'pad:6'],
   // **Two active modules since M37**, and the second is a full control rather
   // than a modifier on the first. Tom's playtest reason: *"you need laser for
   // enemies. everyone picks the laser and keeps it"* - one slot was not a

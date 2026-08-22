@@ -565,6 +565,33 @@ function makeInput() {
     check('a trigger at the saturation point reads exactly 1', Object.is(input.amount('thrust'), 1));
   }
 
+  // 1c. **The descent thrusters are the same stick as the burners** (M41b).
+  //     Tom's call: *"controller should fire on left stick down like the left
+  //     right boosters"*. So the whole of translation lives under one thumb, and
+  //     the diagonal is the reason it is worth asserting - a stick pushed
+  //     down-left has to command *both*, at a fraction each, or putting them on
+  //     one stick has bought nothing over the trigger it replaced.
+  {
+    const input = makeInput();
+    input.pollGamepad([fakePad({ axes: { 1: 1 } })]);
+    check('left stick down commands the descent thrusters', input.held('down'));
+    check('...at exactly 1 at the stop', Object.is(input.amount('down'), 1));
+    input.pollGamepad([fakePad({ axes: { 1: -1 } })]);
+    check('left stick up commands nothing', !input.held('down'), String(input.amount('down')));
+    input.pollGamepad([fakePad({ axes: { 0: -0.8, 1: 0.8 } })]);
+    check('down-left commands the burner and the thrusters together',
+      input.held('left') && input.held('down'),
+      `left ${input.amount('left').toFixed(2)} / down ${input.amount('down').toFixed(2)}`);
+    check('...and both at a fraction, not all-or-nothing',
+      input.amount('down') > 0 && input.amount('down') < 1
+      && input.amount('left') > 0 && input.amount('left') < 1);
+    // LT went back to attitude hold when descent took the stick, so the only
+    // control that moved on either device is the new one.
+    input.pollGamepad([fakePad({ buttons: { 6: 1 } })]);
+    check('LT is attitude hold again, not descent',
+      input.held('hold') && !input.held('down'));
+  }
+
   // 2. Noise below the floor is not intent.
   {
     const input = makeInput();
