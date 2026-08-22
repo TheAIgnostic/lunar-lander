@@ -1791,7 +1791,30 @@ function movedMissions(body, route, withOpts, withoutOpts) {
     const mod = moduleById(id);
     const node = findNode(id);
     check(`NOT_IN_FLIGHT names something real: ${id}`, !!(mod || node));
-    if (!mod) continue;
+    if (!mod) {
+      // **A skill node gets the same reverse check a module gets.** Until this
+      // branch existed the loop verified only that a node *named* something real
+      // and then trusted the written excuse forever - `if (!mod) continue` - so
+      // the four exempted nodes were the one place a stale excuse could not be
+      // caught, in the list that exists to catch stale excuses.
+      //
+      // A node has no `good` field to say where to fly it, so it is flown where
+      // a leak would show: any effect that reaches the derived spec moves
+      // *every* flight at full precision (the trace carries `r.exact`), and an
+      // effect that needs the world to answer - machines, a hard arrival -
+      // gets the Moon's armed deep route and Venus's hard-landing way home.
+      // Verified once against all ten bodies and both routes: these two chapters
+      // flag exactly what the full sweep flags, at a tenth of the flights.
+      if (!node) continue;
+      const fit = { loadout: deriveFull({}, deriveSkills({ [id]: node.ranks }), {}) };
+      let moved = 0;
+      for (const [body, route, enemies] of [['LUNA', 'deep', true], ['VENUS', 'home', false]]) {
+        moved += movedMissions(body, route, { ...fit, enemies }, { loadout: STOCK, enemies });
+      }
+      check(`${id} really is off the flight path`, moved === 0,
+        `it moves ${moved} flights - take it off NOT_IN_FLIGHT (${NOT_IN_FLIGHT[id]})`);
+      continue;
+    }
     const isActive = !!ACTIVE_MODULES[id];
     const combat = isActive && CUES_NEEDING_MACHINES.has(mod.cue);
     const base = { loadout: STOCK, enemies: combat };
