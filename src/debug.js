@@ -2,7 +2,7 @@
 // Exists so landing tuning is done from measured numbers rather than impressions
 // (roadmap Phase 0). Draws in screen space, after the HUD.
 
-import { clamp, TAU } from './util.js';
+import { clamp } from './util.js';
 import { ENVELOPE, normalizeAngle } from './ship.js';
 
 const DEBUG_FONT = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';

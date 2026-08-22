@@ -184,20 +184,32 @@ export function settleHaul(haul, { completed, recovered = 0 }) {
   }
   const keptCargo = Math.round(haul.salvageCargo * keepCargo);
   const salvage = haul.salvageSafe + keptCargo;
-  const data = haul.data;                              // transmitted, always kept
+  const data = haul.data;                              // transmitted; death still wipes it
   // A lost expedition still files its debrief. Without this an early run can
   // end with nothing to spend and nothing to change, which is the one failure
   // state a roguelite cannot afford.
-  const debrief = completed ? null : {
-    salvage: Math.max(0, DEBRIEF.salvage - salvage),
-    data: Math.max(0, DEBRIEF.data - data),
-  };
+  //
+  // **The debrief is the whole floor, not the difference.** It used to be
+  // `DEBRIEF - transmitted`, and `wipeForDeath` credits *only* the debrief - so
+  // the more the final leg had transmitted, the less a death left, reaching
+  // exactly zero the moment the haul matched the floor. Die empty: 60/40. Die
+  // carrying 42/10: 18/30. Die carrying more: nothing at all. Every promise
+  // about this number ("the worst run still leaves 60/40", "the office pays for
+  // the wreck") reads as a floor on what the player *keeps*, and only a fixed
+  // payout is one: death leaves DEBRIEF, always, and everything above it is
+  // what the wipe costs. Still farm-proof, because the wipe replaces the bank
+  // rather than adding to it - a start-and-abandon cycle ends at 60/40 total,
+  // not +60/40 per cycle.
+  const debrief = completed ? null : { salvage: DEBRIEF.salvage, data: DEBRIEF.data };
   return {
-    salvage: salvage + (debrief ? debrief.salvage : 0),
-    data: data + (debrief ? debrief.data : 0),
+    // What the run would be worth un-wiped, never less than the floor. On death
+    // this is banked and then replaced by the debrief; on a checkpoint banking
+    // it is the payout itself.
+    salvage: debrief ? Math.max(salvage, debrief.salvage) : salvage,
+    data: debrief ? Math.max(data, debrief.data) : data,
     cores: completed ? haul.cores : 0,                 // only once the lander is down
     materials,
-    debrief: debrief && (debrief.salvage || debrief.data) ? debrief : null,
+    debrief,
     lost: {
       salvage: haul.salvageCargo - keptCargo,
       cores: completed ? 0 : haul.cores,

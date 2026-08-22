@@ -12,13 +12,13 @@ import { COMPONENTS, COMPONENT_IDS, purchaseCheck, tierCheck } from './component
 import { describeThreats } from './enemies.js';
 import { hazardName } from './forces.js';
 import { ACTIONS, keyLabel } from './input.js';
-import { LANDING, capsFor } from './landing.js';
+import { capsFor } from './landing.js';
 import { LEVELS, WORLDS } from './levels.js';
-import { CHAPTERS, chapterTitle } from './missions.js';
+import { chapterTitle } from './missions.js';
 import { ACTIVE_MODULES, PASSIVE_MODULES, activeSlotOf, moduleById, recommendedFor } from './modules.js';
 import { cargoFor } from './objectives.js';
 import { planetIcon } from './planeticons.js';
-import { PLANETS, gravityFor } from './planets.js';
+import { PLANETS } from './planets.js';
 import { PLANET_ORDER, ladderPreview, ladderTrail, routeChoices } from './route.js';
 import { ENVELOPE, normalizeAngle } from './ship.js';
 import { TREES, TREE_IDS, skillCheck, skillFeatures } from './skills.js';
@@ -133,8 +133,8 @@ export function screenHTML(s) {
         </div>
         <p class="body">Land with <b>both legs</b> inside a flashing pad. Keep descent under
         <b>${((ship.envelope || ENVELOPE).GOOD.vy / 6).toFixed(1)}</b>, drift under <b>${((ship.envelope || ENVELOPE).GOOD.vx / 6).toFixed(1)}</b>
-        and tilt inside the green arc. Smaller pads pay bigger multipliers, and leftover fuel is worth points, so
-        so is a landing streak. Three lander losses ends the run.</p>
+        and tilt inside the green arc. Smaller pads pay bigger multipliers, leftover fuel is worth points,
+        and so is a landing streak. Three lander losses ends the run.</p>
         <p class="body">Miss the pad and a clean touchdown on <b>level ground</b> still survives, at the base
         rate with the streak broken. Steep ground, a hard arrival, the hull touching first, or the ice
         ceiling on Europa. Those are all wreckage.</p>
@@ -172,6 +172,18 @@ export function screenHTML(s) {
       const l = g.level;
       const acc = WORLDS[l.world].accent;
       const padList = g.terrain.pads.map((p) => `x${p.mult}`).join(' · ');
+      // The row knows the same hazard vocabulary every other reader got in M29.
+      // It used to know only `cave` and `wind` - the M0 fields - so Pluto 3
+      // briefed "HAZARD: NONE" against declared cold and darkness, and Europa's
+      // radiation went unmentioned under "ICE CEILING": the M29 fault (a name
+      // in content, a table in code, a silent miss) in a fifth reader nobody
+      // audited. The numeric wind fallback stays for the classic levels, which
+      // declare no hazard list at all.
+      const wx = [...new Set((l.hazards || []).map(hazardName))]
+        .map((h) => h.replace(/([A-Z])/g, ' $1').toUpperCase());
+      if (l.cave) wx.unshift('ICE CEILING');
+      const hazardText = wx.length ? wx.join(' · ')
+        : l.wind ? 'WIND ' + Math.abs(l.wind / 6).toFixed(0) : 'NONE';
       return `<div class="screen">
         <div class="eyebrow" style="color:${acc}">${l.world} · MISSION ${g.endless ? g.endlessN : l.id}</div>
         <h2>${l.title}</h2>
@@ -180,7 +192,7 @@ export function screenHTML(s) {
           <div><span>GRAVITY</span><b>${(l.gravity / 6).toFixed(1)} m/s²</b></div>
           <div><span>FUEL</span><b>${l.fuel}</b></div>
           <div><span>PADS</span><b>${padList}</b></div>
-          <div><span>HAZARD</span><b>${l.cave ? 'ICE CEILING' : l.wind ? 'WIND ' + Math.abs(l.wind / 6).toFixed(0) : 'NONE'}</b></div>
+          <div><span>HAZARD</span><b>${hazardText}</b></div>
         </div>
         ${cargoFor(l) ? `<div class="objective"><span>RECOVERY</span> The ${cargoFor(l).label.toLowerCase()}
           is out past the far landing zone. Nothing is stopping you landing short and going home instead.</div>` : ''}
@@ -715,8 +727,8 @@ export function screenHTML(s) {
           ${debrief ? `<tr><td>FINAL DEBRIEF — transmitted anyway</td><td>${formatScore(debrief.salvage)} salvage · ${formatScore(debrief.data)} research</td></tr>` : ''}
         </table>
         <p class="body">${debrief
-          ? 'The survey office pays for the wreck. It is not much, but it is enough to start the next run with a decision rather than an empty hangar.'
-          : 'You brought back more than the office would have paid for a failure, so there is no debrief on top.'}
+          ? 'The survey office pays a fixed rate for the wreck — the same whether the hold was full or empty. It is not much, but it is enough to start the next run with a decision rather than an empty hangar.'
+          : 'The wreck is written off; the hangar is what carries forward.'}
         There is no going back to a cleared body for more — spend it at a supply stop, or lose it
         the way this run just did.</p>
         <div class="btns">${btn('menu', 'BACK TO START', true, 'SPACE')}</div>
@@ -865,8 +877,12 @@ export function flightAssist() {
 
   // A loaner only when the player has nothing equipped for this body.
   const rec = recommendedFor(g.level.planet);
-  const owned = meta.equipped && meta.equipped.active;
-  const wanted = rec.active && rec.active !== owned ? rec.active : null;
+  // *Either* slot counts as owning it (M37): checking only `equipped.active`
+  // meant a module fitted in the second slot was offered as a loaner anyway,
+  // and the loan replaces slot one - the same module in both slots, which
+  // `fitActive` exists to forbid.
+  const fitted = rec.active && activeSlotOf(meta.equipped, rec.active) >= 0;
+  const wanted = rec.active && !fitted ? rec.active : null;
   const loaner = wanted && !g.run.loaner ? ACTIVE_MODULES[wanted] : null;
 
   return {

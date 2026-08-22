@@ -1,10 +1,9 @@
 // All drawing: parallax background, world, ship, and the flight HUD.
 
 import { clamp, TAU, makeRng } from './util.js';
-import { HULL, LEGS, normalizeAngle } from './ship.js';
+import { HULL, LEGS } from './ship.js';
 import { WORLDS } from './levels.js';
-import { FONT, throb, RED, CYAN, MAG, AMBER, VIOLET, shade, shadeA, label } from './drawkit.js';
-import { nodeWorth } from './economy.js';
+import { FONT, throb, RED, CYAN, MAG, AMBER, VIOLET, shade, shadeA } from './drawkit.js';
 
 export function buildBackdrop(level, terrain, seed) {
   const rng = makeRng(seed ^ 0x9e3779b9);

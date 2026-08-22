@@ -874,7 +874,6 @@ export class Terrain {
     // and as much as 718 - high enough that a crate read as a marker floating
     // in the sky rather than as cargo somebody left on the ground. M22 brings
     // them into the same band the seam crates already used.
-    const entryY = this.entry.y != null ? this.entry.y : this.height * 0.14;
     const road = clamp(Math.round(span / 900), 2, 3);
     // Spread along the crossing, but expressed in *bands* rather than in
     // fractions of the span. A single-landing-zone mission puts its pad in the

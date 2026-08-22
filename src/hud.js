@@ -2,7 +2,7 @@
 // Split from render.js in M23. This reads `g` each frame and draws state; it
 // owns no state of its own.
 
-import { FONT, flashOf, throb, GREEN, RED, CYAN, MAG, AMBER, VIOLET, panel, label, value } from './drawkit.js';
+import { FONT, flashOf, throb, GREEN, RED, CYAN, MAG, AMBER, VIOLET, panel, label } from './drawkit.js';
 import { clamp, TAU } from './util.js';
 import { normalizeAngle, ENVELOPE } from './ship.js';
 import { nodeWorth } from './economy.js';
@@ -375,7 +375,7 @@ function drawMaterialPointers(ctx, W, H, g) {
  * attention away from the landing, which is the thing that must stay in front.
  */
 function drawThreatPanel(ctx, W, H, g, s) {
-  const { ship, field, compact } = g;
+  const { ship, field } = g;
   const live = field.live;
   if (!live.length && !field.kills) return;
   const w = 190 * s;

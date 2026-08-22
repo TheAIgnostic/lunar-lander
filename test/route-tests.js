@@ -300,11 +300,19 @@ check('but not before one is cleared', !isCheckpoint(0));
   check('the debrief is reported, not smuggled in', !!thin.debrief);
   check('the cheapest skill rank is affordable after one failure', thin.data >= 40);
 
-  // A good run is never topped up - the floor is a floor, not a subsidy.
+  // A good run is never lifted *above* the floor - what death leaves is the
+  // debrief, exactly, and `save-tests.js` pins the whole curve. What this file
+  // asserts is that a rich failed run still files the same fixed debrief, so
+  // the settled totals stay >= the floor without the payout scaling with the
+  // haul it is about to lose.
   let rich = freshHaul();
   for (let i = 0; i < 6; i++) rich = addReward(rich, missionReward({ grade: 'PERFECT', padMultiplier: 3, fuelLeft: 60, maxFuel: 120, firstClear: true }));
   const settledRich = settleHaul(rich, { completed: false });
-  check('a good run gets no top-up', settledRich.debrief === null);
+  check('a rich failure files the same fixed debrief',
+    !!settledRich.debrief && settledRich.debrief.salvage === DEBRIEF.salvage
+    && settledRich.debrief.data === DEBRIEF.data);
+  check('and its settled totals are its own, not a subsidy',
+    settledRich.salvage >= DEBRIEF.salvage && settledRich.data >= DEBRIEF.data);
 
   // Tech Core bad-luck protection.
   const dry = missionReward({ grade: 'GOOD', padMultiplier: 2, fuelLeft: 10, maxFuel: 100, firstClear: false, coreDrought: CORE_PITY });

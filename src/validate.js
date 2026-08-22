@@ -4,7 +4,7 @@
 // mission can actually be *flown* is proven separately by simulating it, since
 // only a flight accounts for momentum and fuel.
 
-import { DEG, clamp } from './util.js';
+import { DEG } from './util.js';
 import { SHIP } from './ship.js';
 import { spawnFor } from './spawn.js';
 import { COMBAT, ENEMY_TYPES, placeEnemies, sanctuaryPad, sanctuaryGates, lineOfSight } from './enemies.js';

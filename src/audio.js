@@ -187,7 +187,11 @@ export class Audio {
     if (!spec || !this.ready) return false;
     const now = this.ctx.currentTime;
     const last = this._lastWarn;
-    if (last && now - last.t < spec.hold && WARNINGS[last.kind].rank >= spec.rank) return false;
+    // The *standing* warning's hold, not the challenger's: `hold` is how long
+    // that claim lasts, and it belongs to whoever holds the floor. Read from
+    // the challenger it meant a 0.4 s turret lock silenced a status warning
+    // for the status's own 3 s - the claim outliving the claimant by 7x.
+    if (last && now - last.t < WARNINGS[last.kind].hold && WARNINGS[last.kind].rank >= spec.rank) return false;
     this._lastWarn = { kind, t: now };
     spec.play(this);
     return true;
@@ -255,6 +259,10 @@ export class Audio {
 
   laser(on) {
     if (!this.ready) return;
+    // Never build a voice just to hold it silent - the frame loop asks every
+    // frame, so without this the oscillator starts on the first frame of the
+    // first mission whether or not a laser is even equipped.
+    if (!on && !this.laserVoice) return;
     if (!this.laserVoice) {
       const o = this.ctx.createOscillator();
       const g = this.ctx.createGain();
@@ -390,11 +398,15 @@ export class Audio {
   /** Wind bed for atmosphere levels. */
   setWind(strength) {
     if (!this.ready) return;
+    const on = strength > 0.05;
+    // Same rule as the laser and the space bed: the play loop calls
+    // `setWind(0)` every frame on a windless body, which used to build the
+    // resonant noise voice on the first frame just to leave it at gain 0.
+    if (!on && !this.windVoice) return;
     if (!this.windVoice) {
       this.windVoice = this._thruster(240, 0.25);
       this.windVoice.filt.Q.value = 3;
     }
-    const on = strength > 0.05;
     const t = this.ctx.currentTime;
     this.windVoice.g.gain.setTargetAtTime(on ? clamp(strength, 0, 1) * 0.22 : 0, t, 0.4);
   }

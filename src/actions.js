@@ -13,7 +13,6 @@ import * as Save from './save.js';
 import { everyMaterial, purchase } from './components.js';
 import { settleHaul } from './economy.js';
 import { chapterFor } from './missions.js';
-import { PLANET_ORDER, routeChoices } from './route.js';
 import { flightAssist } from './screens.js';
 import { ACTIVE_MODULES, PASSIVE_MODULES, STARTER_PASSIVES, equipInto, fitActive, moduleById } from './modules.js';
 import { buySkill, skillFeatures } from './skills.js';

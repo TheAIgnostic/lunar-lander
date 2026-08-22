@@ -250,6 +250,13 @@ kbd {
   border-color: rgba(126, 242, 208, .45); font-size: 20px; line-height: 1;
 }
 .tbtn.ability span { display: block; font-size: 8px; letter-spacing: .14em; }
+.tbtn.ability.slot2 { color: #ffcf4d; border-color: rgba(255, 207, 77, .45); }
+.tbtn.util { color: var(--amber); border-color: rgba(255, 179, 71, .4); margin: 0 10px 0 0; }
+.tbtn.util span { display: block; font-size: 7px; letter-spacing: .12em; }
+/* A button the player does not own yet is absent, not disabled - synced per
+   mission by syncTouchButtons. The container's own .hidden already carries
+   !important; the per-button rule needs its own. */
+#touch .tbtn.hidden { display: none; }
 .tbtn.active { background: rgba(95, 245, 255, .25); box-shadow: 0 0 26px rgba(95, 245, 255, .4); }
 .tbtn.thrust.active { background: rgba(255, 179, 71, .3); box-shadow: 0 0 30px rgba(255, 179, 71, .5); }
 

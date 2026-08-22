@@ -13,6 +13,24 @@ import { clamp } from './util.js';
 import { ACTIVE_MODULES } from './modules.js';
 import { OVERDRIVE } from './ship.js';
 
+/**
+ * Resolve what the pilot can see from the weather's own value and the bounds
+ * the active modules have put on it: min(cap, max(floor, raw)).
+ *
+ * One function, called by every module that touches visibility, because the
+ * M37 second slot made "who writes last" a question the loadout screen was
+ * quietly answering: a max (Sensor Pulse) and a min (Thermal Purge) applied in
+ * slot order gave a different sky depending on which slot each was fitted
+ * into. This form is commutative - both orders agree - and the cap is applied
+ * outside the max, so a purge's whiteout holds against a raised pulse.
+ * `applyForces` resets raw, floor and cap every step, so a module that ends
+ * leaves nothing behind - the same teardown rule every ship field lives under.
+ */
+function resolveVisibility(env) {
+  const raw = env.visRaw != null ? env.visRaw : env.visibility;
+  env.visibility = Math.min(env.visCap != null ? env.visCap : 1, Math.max(env.visFloor || 0, raw));
+}
+
 export const ABILITY = {
   // px. **Read against what it has to answer, not on its own.** At 430 every
   // machine in the game outranged it - drone 520, turret 560, sniper 640 - so
@@ -220,12 +238,21 @@ export class Abilities {
         // Burns through dust and darkness, and paints anything hostile. The
         // reveal level is the module's own declared effect rather than a 1
         // written here, so the data and the behaviour cannot drift apart.
-        ship.env.visibility = Math.max(ship.env.visibility, this.mod.effect.revealVisibility || 1);
+        //
+        // Written as a *floor* rather than straight into `visibility`, because
+        // two actives can be running at once (M37) and a max and a min applied
+        // in slot order made the outcome depend on which slot each was fitted
+        // into - measured: pulse-then-purge ended blind at 0.35, purge-then-
+        // pulse revealed at 1.0. `resolveVisibility` is commutative, and the
+        // purge's cap wins on purpose: its whiteout is the module's cost.
+        ship.env.visFloor = Math.max(ship.env.visFloor || 0, this.mod.effect.revealVisibility || 1);
+        resolveVisibility(ship.env);
         ship.beaconBoost = this.mod.effect.beacon || 1;
         ship.revealed = true;
         break;
       case 'thermal-purge':
-        ship.env.visibility = Math.min(ship.env.visibility, ABILITY.purgeBlind);
+        ship.env.visCap = Math.min(ship.env.visCap != null ? ship.env.visCap : 1, ABILITY.purgeBlind);
+        resolveVisibility(ship.env);
         break;
       case 'magnetic-anchor':
         ship.anchor = this.mod.effect.anchorGrip || 1;

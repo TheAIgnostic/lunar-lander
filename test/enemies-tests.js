@@ -1082,6 +1082,29 @@ function shipAt(x, y, loadout = {}) {
   check('an empty slot refuses to fire', none.trigger(s3) === false);
   check('and stepping it does nothing at all',
     none.update(1 / 120, { ship: s3, terrain, level: lvl }).length === 0);
+
+  // **Two modules on one channel resolve the same in either slot.** The pulse
+  // raises a visibility floor and the purge lowers a cap, and before this was a
+  // floor and a cap it was a max and a min applied in slot order - measured:
+  // pulse-then-purge flew blind at 0.35 while purge-then-pulse flew revealed at
+  // 1.0, so which slot a module was fitted into decided the sky. The rule now:
+  // min(cap, max(floor, raw)), commutative, and the purge's whiteout holds
+  // against a raised pulse because the blind is the module's own stated cost.
+  const bothWays = (order) => {
+    const s = shipAt(600, 400);
+    const slots = order.map((id) => new Abilities(id, {}));
+    applyForces(s, lvl, 0, 1 / 120, terrain);
+    for (const m of slots) m.trigger(s);
+    applyForces(s, lvl, 1 / 120, 1 / 120, terrain);
+    for (const m of slots) m.update(1 / 120, { ship: s, terrain, level: lvl });
+    return s.env.visibility;
+  };
+  const pulseFirst = bothWays(['sensor-pulse', 'thermal-purge']);
+  const purgeFirst = bothWays(['thermal-purge', 'sensor-pulse']);
+  check('pulse and purge agree in either slot order', pulseFirst === purgeFirst,
+    `pulse-first ${pulseFirst} vs purge-first ${purgeFirst}`);
+  check('and the purge\'s blind holds against a raised pulse', pulseFirst === ABILITY.purgeBlind,
+    `${pulseFirst} against a cap of ${ABILITY.purgeBlind}`);
 }
 
 // --- the briefing tells the player what is out there

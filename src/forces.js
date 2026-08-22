@@ -203,6 +203,15 @@ export function worstVisibility(level) {
 export function freshEnv() {
   return {
     visibility: 1, dust: 0, darkness: 0,
+    // The weather's own visibility, and the bounds the active modules put on
+    // it. `visRaw` is what the forces computed before any module spoke;
+    // `visFloor` is raised by a reveal (Sensor Pulse) and `visCap` lowered by a
+    // self-blind (Thermal Purge), and the resolved value is
+    // min(cap, max(floor, raw)) - commutative, so which slot a module sits in
+    // cannot decide who wins. Blind beats reveal by construction: the purge's
+    // whiteout is a stated cost of the module, and a cost the other slot could
+    // cancel by being fitted second is not a cost.
+    visRaw: 1, visFloor: 0, visCap: 1,
     radiationSweep: 0, radiationBand: 0, radiationReach: 0, shielded: false,
     // M29 channels. Each is written by one force and read by the renderer or
     // the HUD; none of them is read back by the simulation, except `magnetic`,
@@ -1024,6 +1033,12 @@ export function applyForces(ship, level, t, dt, terrain) {
   ship.env.instrumentError = 0;
   ship.thermalDerate = 1;
   ship.rcsStiffness = 1;
-  if (!list.length) { ship.windNow = 0; return; }
+  // The module bounds reset with everything else a step writes, and `visRaw`
+  // is recorded *after* the forces have run, because the dust squall writes
+  // `visibility` from inside its own apply.
+  ship.env.visFloor = 0;
+  ship.env.visCap = 1;
+  if (!list.length) { ship.windNow = 0; ship.env.visRaw = ship.env.visibility; return; }
   for (const f of list) f.apply(ship, level, t, dt, terrain);
+  ship.env.visRaw = ship.env.visibility;
 }

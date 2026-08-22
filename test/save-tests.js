@@ -99,6 +99,22 @@ console.log('save, migration and recovery');
   check('missing arrays become arrays', Array.isArray(meta.clearedChapters));
 }
 
+// --- a save carrying fields of the wrong *type*, not just missing ones
+//
+// The tallies are grown with `+=` all over `main.js`, and a string that gets
+// in - a hand-edited save, a corrupted-but-parseable write - concatenates
+// forever instead of adding. Type coercion falls back to the default.
+{
+  const s = mkStore({ [KEYS.meta]: JSON.stringify({ version: 2,
+    stats: { landings: '12', fuelBurned: null, crashes: 3 },
+    banked: { salvage: 'lots', data: 85 }, diamonds: '1' }) });
+  const { meta } = loadMeta(s);
+  check('a string tally falls back to its default', meta.stats.landings === 0 && meta.stats.fuelBurned === 0);
+  check('a numeric tally beside it is kept', meta.stats.crashes === 3);
+  check('a string balance falls back, a number stays', meta.banked.salvage === 0 && meta.banked.data === 85);
+  check('a mistyped trophy count falls back', meta.diamonds === 0);
+}
+
 // --- run state
 {
   const s = mkStore();
@@ -312,12 +328,31 @@ console.log('save, migration and recovery');
   check('and still keeps what the hangar built',
     JSON.stringify(paid.componentLevels) === JSON.stringify(meta.componentLevels));
 
-  // A run that did well is not topped up - the floor is a floor, not a subsidy.
+  // **The floor is what death leaves - exactly, for everyone.** It used to be
+  // `DEBRIEF - transmitted`, which paid the *complement* of the final leg's
+  // haul: die empty and keep 60/40, die carrying 42/10 and keep 18/30, die
+  // carrying the floor or more and keep nothing at all. Both endpoints were
+  // asserted here and the middle was never asked, which is how a payout that
+  // *punished* gathering shipped as an anti-frustration feature. The three
+  // cases below pin the whole curve: flat at the floor.
+  const cases = [
+    ['empty hold', freshHaul()],
+    ['a little gathered', { salvageSafe: 42, salvageCargo: 0, data: 10, cores: 0, materials: {} }],
+    ['a rich final leg', { salvageSafe: 400, salvageCargo: 400, data: 200, cores: 2, materials: {} }],
+  ];
+  for (const [name, haul] of cases) {
+    const s = settleHaul(haul, { completed: false });
+    const after = wipeForDeath(defaultMeta(), { debrief: s.debrief });
+    check(`death leaves exactly the floor: ${name}`,
+      after.banked.salvage === 60 && after.banked.data === 40,
+      `${after.banked.salvage}/${after.banked.data}`);
+  }
+  // Everything above the floor is what the wipe costs - the floor is a floor,
+  // not a subsidy, and a rich run keeps not one salvage more than a wreck.
   const rich = settleHaul({ salvageSafe: 400, salvageCargo: 400, data: 200, cores: 2, materials: {} },
     { completed: false });
-  check('a good run gets no debrief', rich.debrief === null);
-  check('and a good run still loses its banked salvage on death',
-    wipeForDeath(defaultMeta(), { debrief: rich.debrief }).banked.salvage === 0);
+  check('a rich run keeps nothing above the floor',
+    wipeForDeath(defaultMeta(), { debrief: rich.debrief }).banked.salvage === 60);
 }
 
 // --- the diamond

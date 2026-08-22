@@ -112,6 +112,18 @@ function coerceMeta(raw) {
   for (const k of ['bodies', 'missionGrades', 'moduleFlights', 'moduleUses']) {
     m.stats[k] = { ...(raw.stats && raw.stats[k]) || {} };
   }
+  // **A field of the wrong *type* falls back to its default**, not just a
+  // missing one. The tallies are grown with `+=` all over `main.js`, and a
+  // string smuggled into one - a hand-edited save, a corrupted-but-parseable
+  // write - concatenates instead of adding, forever. The defaults are the
+  // shape authority: anything numeric there must be numeric here.
+  for (const k of Object.keys(d.stats)) {
+    if (typeof d.stats[k] === 'number' && !Number.isFinite(m.stats[k])) m.stats[k] = d.stats[k];
+  }
+  for (const k of ['salvage', 'data', 'cores']) {
+    if (!Number.isFinite(m.banked[k])) m.banked[k] = d.banked[k];
+  }
+  if (!Number.isFinite(m.diamonds)) m.diamonds = d.diamonds;
   m.classic = { ...d.classic, ...(raw.classic || {}) };
   m.clearedChapters = Array.isArray(raw.clearedChapters) ? raw.clearedChapters : [];
   m.discoveredPlanets = Array.isArray(raw.discoveredPlanets) && raw.discoveredPlanets.length

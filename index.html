@@ -19,8 +19,17 @@
       <button id="t-hold" class="tbtn small" aria-label="attitude hold">≡</button>
       <button id="t-right" class="tbtn" aria-label="rotate right">▶</button>
     </div>
-    <button id="t-ability" class="tbtn ability" aria-label="use module">◈<span>MODULE</span></button>
-    <button id="t-thrust" class="tbtn thrust" aria-label="booster">▲<span>BURN</span></button>
+    <!-- The utility and second-module buttons appear only when the player owns
+         the thing they fire (syncTouchButtons in main.js) - the bar stays
+         clean for a new player, and nothing the game sells is unreachable on
+         touch, which arrest, overdrive and the second slot all were. -->
+    <div class="cluster">
+      <button id="t-arrest" class="tbtn small util hidden" aria-label="emergency arrest">⏚<span>ARREST</span></button>
+      <button id="t-overdrive" class="tbtn small util hidden" aria-label="combat overdrive">≫<span>OVERDRIVE</span></button>
+      <button id="t-ability" class="tbtn ability" aria-label="use module one">◈<span>MODULE I</span></button>
+      <button id="t-ability2" class="tbtn ability slot2 hidden" aria-label="use module two">◈<span>MODULE II</span></button>
+      <button id="t-thrust" class="tbtn thrust" aria-label="booster">▲<span>BURN</span></button>
+    </div>
   </div>
 
   <div id="rotate">Rotate your device to landscape for the full instrument panel.</div>

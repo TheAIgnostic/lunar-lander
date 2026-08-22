@@ -981,8 +981,12 @@ const WITNESS = {
       return drew;
     } },
   revealVisibility: { how: 'instrument',
+    // The weather is faked on `visRaw`, the channel `applyForces` records it
+    // on, because the pulse resolves min(cap, max(floor, raw)) since the M37
+    // slot-order fix - a rig that only sets `visibility` is setting a value
+    // the resolver derives, not one it reads.
     measure: (on) => withEffect('sensor-pulse', { revealVisibility: on ? 1 : 0.3 },
-      () => +fired('sensor-pulse', STOCK, 1, (s) => { s.env.visibility = 0.2; }).ship.env.visibility.toFixed(4)) },
+      () => +fired('sensor-pulse', STOCK, 1, (s) => { s.env.visRaw = 0.2; s.env.visibility = 0.2; }).ship.env.visibility.toFixed(4)) },
 };
 
 {
@@ -1419,6 +1423,7 @@ section('3. turning it on moves the simulation');
     const ship = new Ship();
     ship.applyLoadout(loadout);
     ship.reset(0, 0, 100);
+    ship.env.visRaw = 0.2;         // the weather's own channel since the M37 fix
     ship.env.visibility = 0.2;
     const a = new Abilities('sensor-pulse', loadout);
     a.trigger(ship);
@@ -1528,6 +1533,7 @@ section('3. turning it on moves the simulation');
   const ship = new Ship();
   ship.applyLoadout(lo);
   ship.reset(0, 0, 100);
+  ship.env.visRaw = 0.15;          // the weather's own channel since the M37 fix
   ship.env.visibility = 0.15;
   const a = new Abilities('sensor-pulse', lo);
   a.trigger(ship);

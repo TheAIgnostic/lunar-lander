@@ -339,7 +339,10 @@ function launch() {
     // no force has run at launch, so ship.env still reads the default 1.
     visWorst: worstVisibility(lv),
     machines: g.field && !g.field.empty ? g.field.summary().total : 0,
-    active: [(meta.equipped || {}).active, (meta.equipped || {}).active2].filter(Boolean).join('+') || '',
+    // What is actually in the slots, which is not `meta.equipped` when a
+    // loaner is flying in place of slot one - the log should name the module
+    // that flew, the way `recordFlight` already credits it.
+    active: (g.slots || []).map((a) => a.id).filter(Boolean).join('+') || '',
     passive: (meta.equipped && meta.equipped.passive) || '',
   });
   const eq = meta.equipped || {};
@@ -722,12 +725,20 @@ function onLand() {
   meta.stats.landings++;
   if (q === 'PERFECT') meta.stats.perfect++;
   {
+    // The numbers live where `evaluateLanding` put them - `parts.<axis>.value`,
+    // in px/s and radians - not as flat `vy`/`vx`/`tilt` fields, and the pad
+    // multiplier is the pad's, not the result's. This line used to read all
+    // four off names `landingResult` never had (plus `.length` of the carried
+    // *object*), and `gamelog` drops undefined silently, so every landed entry
+    // in the playtest log shipped without the numbers the log exists to record.
     const r = ship.landingResult || {};
+    const p = r.parts || {};
     Log.log('landed', {
       mission: g.level && g.level.id, grade: q,
-      vy: r.vy, vx: r.vx, tilt: r.tiltDeg != null ? r.tiltDeg : r.tilt,
-      onPad: !!r.onPad, mult: r.mult, fuel: ship.fuel, hull: ship.hull,
-      carried: g.carried ? g.carried.length : 0,
+      vy: p.vy ? p.vy.value : null, vx: p.vx ? p.vx.value : null,
+      tilt: p.tilt ? p.tilt.value * 57.2958 : null,
+      onPad: !!r.onPad, mult, fuel: ship.fuel, hull: ship.hull,
+      carried: g.carried ? g.carried.nodes : 0,
     });
   }
   // The weapon arrives once you have survived a mission that shot at you, not
@@ -845,6 +856,13 @@ function onLand() {
           setState('checkpoint');
           return;
         }
+        // Unreachable under the current tuning: `isCheckpoint` is
+        // `chaptersCleared > 0` and the count was incremented above, so every
+        // body is a supply stop and this route-screen path never fires. It
+        // stays because the *rule* lives in `route.js` where route-tests pin
+        // it - deleting the else here would encode "every body" a second time,
+        // in the one file no node test executes, and a re-tuned cadence would
+        // quietly bank at every body anyway.
         g.loadoutWindow = false;
         setState('route');
         return;
@@ -1175,6 +1193,9 @@ function setState(s) {
   audio.spaceBed(BED_SCREENS.has(s));
   renderOverlay();
   touchbar.classList.toggle('hidden', s !== 'play');
+  // Re-derived entering play rather than at equip time: the loadout is fixed
+  // for a mission by then, and this is the one moment the bar becomes visible.
+  if (s === 'play') syncTouchButtons();
 }
 
 /**
@@ -1433,6 +1454,31 @@ input.bindTouchButton(document.getElementById('t-right'), 'right');
 document.getElementById('t-hold') && input.bindTouchButton(document.getElementById('t-hold'), 'hold');
 const abilityBtn = document.getElementById('t-ability');
 if (abilityBtn) abilityBtn.addEventListener('pointerdown', (ev) => { ev.preventDefault(); useAbility(); });
+// The second slot, and the two held controls the touch bar never had: M37 gave
+// the lander two actives and M34's arrest and M35's overdrive are both
+// purchasable, and none of the three could be fired on a touch device - a
+// thing sold and not delivered, on one device class. Arrest and overdrive go
+// through `bindTouchButton` like the flight controls because the ship reads
+// them as held intents (`amountOf`), not as key presses.
+const ability2Btn = document.getElementById('t-ability2');
+if (ability2Btn) ability2Btn.addEventListener('pointerdown', (ev) => { ev.preventDefault(); useAbility(1); });
+document.getElementById('t-arrest') && input.bindTouchButton(document.getElementById('t-arrest'), 'arrest');
+document.getElementById('t-overdrive') && input.bindTouchButton(document.getElementById('t-overdrive'), 'overdrive');
+
+/**
+ * Show a touch button only when the player owns what it fires. Absent rather
+ * than disabled: the bar has five flight controls a new player is still
+ * learning, and a dead button reads as a broken one (M16).
+ */
+function syncTouchButtons() {
+  const show = (id, on) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('hidden', !on);
+  };
+  show('t-ability2', !!(g.slots && g.slots[1] && g.slots[1].equipped));
+  show('t-arrest', !!(g.loadout && g.loadout.arrest > 0));
+  show('t-overdrive', !!(g.loadout && g.loadout.overdrive > 0));
+}
 
 /**
  * WebAudio will not make a sound until a user gesture, and the title screen is
@@ -1479,7 +1525,10 @@ window.__debug = Debug;
 window.__preview = (archetype, relief = 260, detail = 1) => {
   const lvl = g.level || LEVELS[0];
   g.level = { ...lvl, terrain: { archetype, relief, detail } };
-  g.terrain = new Terrain(g.level, g.seed ^ (g.level.id * 2654435761));
+  // `levelSeedSalt`, not `id * prime`: a mission id is a string, and a string
+  // times a prime is NaN, which XORs to nothing - the salt silently vanished
+  // for every authored mission previewed this way.
+  g.terrain = new Terrain(g.level, g.seed ^ (levelSeedSalt(g.level) | 0));
   g.backdrop = R.buildBackdrop(g.level, g.terrain, g.seed);
   particles.clear();
   const best = g.terrain.pads.reduce((a, b) => (b.mult > a.mult ? b : a), g.terrain.pads[0]);
