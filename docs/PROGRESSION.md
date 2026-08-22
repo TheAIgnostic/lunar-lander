@@ -33,7 +33,7 @@ matters most is which survive a death, because that is the whole risk structure 
 | --- | --- | --- | --- | ---: |
 | **Hangar** (`components.js`) | 5 tracks × 3 levels | salvage **+ body-specific material**, and **tech cores on L3/L4** (M29) | **kept** | 12,840 salvage |
 | **Skills** (`skills.js`) | 3 trees × **5 nodes**, ranked | research data | **wiped** | **2,885 data** (M35) |
-| **Loadout** (`modules.js`) | 1 active + 1 passive slot | nothing — blueprints are earned | blueprints **kept** | 5 active, **9 passive** (M31) |
+| **Loadout** (`modules.js`) | 1 active + 1 passive slot | nothing — blueprints are earned | blueprints **kept** | **10 active + 10 passive** (M36) |
 
 `Save.wipeForDeath` is the authority: it clears `purchasedSkills`, `banked` and the opened map, and
 keeps `componentLevels`, `unlockedBlueprints` and `equipped`.

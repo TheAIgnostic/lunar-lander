@@ -768,6 +768,32 @@ const WITNESS = {
   coldResist: { how: 'flight',
     measure: (on) => timeToStatus(on ? only('coldResist', 0.55) : STOCK,
       [{ type: 'cold', coldRate: 12 }], 'cold') },
+  // ---- M36: the Thermal Sink's two halves, on opposite terms ---------------
+  //
+  // **Heat is the one channel a status rig has to fly rather than sit in.** It
+  // is made by the throttle, so a rig that only calls `applyForces` on a parked
+  // lander measures a cold engine forever - `throttleCmd` is what says the
+  // engine is on, and it is the same field `ship.step` writes.
+  heatResist: { how: 'flight',
+    measure: (on) => timeToStatus(on ? only('heatResist', 0.6) : STOCK,
+      [{ type: 'heat', heatRise: 12, heatFall: 1 }], 'heat', 40,
+      (sh) => { sh.throttleCmd = 1; }) },
+  heatShed: { how: 'flight',
+    // The other half, and it has to be measured with the engine **off**: shed
+    // scales what the hull gets rid of, so a rig burning flat out would read
+    // mostly the rise. Soak it, cut the engine, and see what is left.
+    measure: (on) => {
+      const level = { id: 'shed-rig', width: 2000, height: 1400, groundBase: 300, rough: 150,
+        gravity: 25, fuel: 120, pads: [{ mult: 2, width: 200 }],
+        hazards: [{ type: 'heat', heatRise: 12, heatFall: 1.5 }] };
+      const ship = new Ship();
+      ship.applyLoadout(on ? only('heatShed', 1.7) : STOCK);
+      ship.reset(500, 300, level.fuel);
+      ship.statusLevels.heat = 80;
+      ship.throttleCmd = 0;
+      for (let i = 0; i < 600; i++) applyForces(ship, level, i / 120, 1 / 120);
+      return +ship.statusLevels.heat.toFixed(4);
+    } },
   plumeLateral: { how: 'flight',
     // Parked in a live vent and asked what it did **sideways**. The vertical
     // half is checked here too, in the section below, because the module's

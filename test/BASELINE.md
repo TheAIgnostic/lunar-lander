@@ -4734,3 +4734,126 @@ at-once 0: 63.1% · 1: 25.9% · 2: 9.5% · 3: 1.4% · 4: 0.1%, deep-route engage
 `loadout-tests.js` 396 → **350**, `skills-tests.js` 111 → **109**, `enemies-tests.js` 149 → **163**,
 `settings-tests.js` 193 → **211** — 4 of those with no edit at all, because `ACTIONS` is derived
 from `DEFAULT_KEYS` and the overdrive is a rebindable action; the rest are the label guard above.
+
+## M36 — the heat number moves, and the twentieth module (2026-08-22)
+
+The balance pass. Three things were queued for it; one of them turned out to be a **bug** rather than
+a balance question.
+
+### Heat had been inert since M5, and it is arithmetic
+
+Whether heat can bite is a question about **burn duty**: it accumulates only above
+`fall / (rise + fall)`. Measured fresh before anything was touched:
+
+```
+           burn duty   peak heat (bite 60)     break-even duty the authoring asked for
+MERCURY      34-37%          10-31                          33-50%
+IO           25-28%          10-15                          33-50%
+```
+
+Re-authored per body from that measured duty — Mercury `heatFall` 1.45, Io 0.8 for a similar rise,
+because Io's pilot burns nine points less of the mission. `HEAT.bite` 60 → **55**, lining it up with
+`COLD.bite`.
+
+| peak heat | 1 | 2 | 3 | 4 | 5 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Mercury, way home | 40 | **58** | 30 | **68** | **76** |
+| Mercury, prize route | 35 | 24 | 21 | 46 | 49 |
+| Io, way home | 42 | 48 | 48 | **61** | **65** |
+| Io, prize route | 28 | **69** | **83** | 40 | 32 |
+
+`mercury-3` is **COLD TRAP** and stays the cool one — authored as high rise on a high fall, an engine
+making heat freely on ground that takes it away. The first cut of this pass flattened it into the
+ramp before the name had been read.
+
+### The finding: heat was made by a button
+
+`thermal` read `ship.thrusting`, a boolean. A keyboard hover is a **pulse train at full throttle**; a
+pad hover is a **held fraction** that reads as thrusting 100% of the time. Same flight, roughly twice
+the heat on a pad.
+
+Fixed in two halves, and both are needed:
+
+| | keyboard, 50% duty | pad, 0.5 held |
+| --- | ---: | ---: |
+| boolean `thrusting` | rises half the time | rises **all** the time |
+| magnitude, cooling only while coasting | rises half, cools half | rises half, **never cools** |
+| magnitude, cooling always | `rise×0.5 − fall` | `rise×0.5 − fall` |
+
+Asserted over 8 s: keyboard and pad within 0.5 of a point, and a quarter throttle makes measurably
+less than a half.
+
+**Two wrong turns, both caught by measuring rather than by reading:**
+
+- `ship.throttle` is the **smoothed** value the exhaust plume uses; it lerps toward zero without
+  arriving, so read as "is the engine on" it is on forever after the first burn. Every mission pinned
+  at 100.
+- The parity rig ran 30 s and **both sides hit the 100 clamp**, agreeing for the wrong reason — the
+  mutation that puts cooling back in the coasting branch raised **zero failures** against it.
+
+### The floor rule now asks what it meant to ask
+
+It asserted ">10 s to bite" at a flat **0.5 duty**, which M31 had already recorded as a profile
+neither the pilot nor a hovering player has. Derived now from `gravity / SHIP.thrust`:
+
+| | hover throttle | time to bite, mission 5 |
+| --- | ---: | ---: |
+| Mercury | **33%** | 17 s |
+| Io | **23%** | 23 s |
+
+Those are the two figures M31 measured by hand. In the browser on `mercury-5` at **full** throttle
+held down: bite at 4.5 s, derate floor (0.55) at 9 s, and it recovers the moment you let go.
+
+**The `ENGINE HEAT · THRUST DOWN` warning fired for the first time since M5.** It was built with the
+channel and had been unreachable.
+
+### The Thermal Sink — 20 of 20
+
+`heatResist` 0.6 slows what the engine puts in, `heatShed` 1.7 speeds up what the hull sheds — the
+spec's two halves, on opposite terms. Flown **MERCURY/home 3/5, IO/home 2/5, IO/deep 2/5**.
+
+**Every body on the ladder now has both slots filled.** Io and Mercury were the two with no passive.
+
+Knock-on: the **Thermal Purge** went `PLUTO/deep 1/5` → `MERCURY/home 3/5 · IO/home 2/5 · IO/deep 2/5
+· PLUTO/deep 1/5`. It always claimed those bodies; giving the channel a consequence made it work.
+
+### The Fourth Shuttle buys a mission and a half
+
+40 seeded runs of the real ladder, real pilot, a shuttle per crash and the mission retried:
+
+| profile | 3 shuttles | 4 shuttles | change |
+| --- | --- | --- | --- |
+| cautious (safe pad) | 1.02 bodies · 9.97 missions | 1.07 · **11.45** | **+15% run length** |
+| greedy (prize every 3rd) | 0.05 bodies · 5.22 missions | 0.10 · **6.50** | **+25%** |
+
+The attrition curve survives it. Absolute figures describe the instrument — this pilot has no
+loadout, no skills, no weapon and no evasive logic — so the **ratio** is the finding.
+
+*(The first rig ended the run on the first crash and reported 0 bodies cleared for every seed at both
+shuttle counts. A measurement that says nothing is a broken measurement.)*
+
+### Combat Overdrive is a real trade, and is left alone
+
+```
+LUNA/deep     kills 3->4   hull 60->60   enemy hp left 287->282
+MARS/deep     kills 6->5   hull 70->60   enemy hp left 246->259    worse
+IO/deep       kills 6->8   hull 60->70   enemy hp left 213->182    better
+MERCURY/deep  unchanged
+```
+
+No landing outcome moved on any body. Not retuned — no complaint to aim at.
+
+### What moved, and what did not
+
+**Campaign crossing 642/800 → 641/800 (80%).** One flight in eight hundred, with heat biting on ten
+missions, because heat costs **thrust** — recoverable — rather than hull.
+
+**Physics fixture byte-identical**, which is the load-bearing result: it replays a fixed input script,
+so `throttleCmd` provably did not touch the flight model. **Flight fixture 5 of 186 moved**, all
+Mercury and Io, every grade unchanged, fuel left the difference (`mercury-2` 44.8 → 34.5) — a derated
+engine burns more. Re-recorded.
+
+Audit: deep-route engagement 751/800 and the at-once distribution identical; flight time 1.18x →
+1.17x; sweep-everything landings 114/1000 → 111/1000.
+
+`forces-tests.js` 147 → **160**, `loadout-tests.js` 350 → **359**.

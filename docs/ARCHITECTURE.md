@@ -28,7 +28,7 @@ Everything under `src/` is a plain ES module, loaded directly in the browser and
 | `src/route.js` | the ten-body ladder, the next-body card, the progress trail, checkpoint rule | M9/M27 |
 | `src/components.js` | 5 component tracks, `deriveLoadout` / `deriveFull`, purchase rules, the recommended tier | M10/M11/M28 |
 | `src/skills.js` | 3 skill trees, **5 nodes each — Tom's decision, not the spec's 30**, `deriveSkills`, `skillFeatures`, purchase and gating rules | M11/M34/M35 |
-| `src/modules.js` | **10 active + 9 passive** modules, each active's firing `cue`, the blueprint grant rule | M11/M12/M31-M33 |
+| `src/modules.js` | **10 active + 10 passive** modules, each active's firing `cue`, the blueprint grant rule | M11/M12/M31-M33/M36 |
 | `src/enemies.js` | enemy roster, placement around the prize, telegraphs, projectiles, damage, rewards | M12/M14 |
 | `src/objectives.js` | the optional objectives: conditions judged at touchdown, and six cargo recoveries | M14/M15 |
 | `src/abilities.js` | the active-module runtime: charges, duration, cooldown, effects, teardown, the player's ordnance | M12/M32/M33 |
@@ -348,15 +348,38 @@ hands over a blueprint for **the body you are about to fly** (`nextBlueprint`), 
 rather than from a second table, and `loadout-tests.js` simulates the ladder to prove every module
 lands in the player's hands.
 
-**Four of the five status channels are, in practice, gauges — and heat cannot bite at all.** A
+**A status channel made by a *button* is device-dependent, and heat was.** `thermal` read
+`ship.thrusting`, and a keyboard answers exactly 1 or 0 while a trigger answers anything between — so
+a keyboard hover is a pulse train at full throttle and a pad hover is a held fraction reading as
+thrusting **100% of the time**. The identical flight cooked roughly twice as fast on a gamepad. Heat
+reads the **commanded magnitude** now (`ship.throttleCmd`, which is exactly 0 or 1 on a keyboard and
+is deliberately *not* `ship.throttle`, the smoothed value the exhaust plume uses — that one lerps
+toward zero without arriving, so read as "is the engine on" it never turns off and heat never falls).
+And **cooling runs all the time** rather than only while coasting, because without that half the pad
+player never cools at all and the two devices still disagree. Both now integrate
+`rise × mean(throttle) − fall`, which is the same number for the same flight, and it is asserted.
+Generalise it: **anything reading how hard a control is held owes the keyboard's two values a check**
+— `cloakDrain` and RCS Finesse are the same decision, and this is the one that was got wrong.
+
+**Whether a status channel can bite is a question about duty, not about time.** Heat accumulates only
+above `fall / (rise + fall)`, and authored at a fall of 4.5-7 that break-even sat at 33-50% while the
+measured burn duty is 26-37% — so heat trended *down* on the two bodies that declare it, from M5
+until M36. It is authored per body from that measured duty now (Mercury 1.45, Io 0.8 for a similar
+rise, because Io's pilot burns nine points less of the mission), and the floor rule in
+`forces-tests.js` asks the question at **`gravity / SHIP.thrust`** — what holding a hover actually
+costs on that body, 33% on Mercury and 23% on Io — rather than at a flat 0.5 nobody flies. Assert the
+relationship, not the number.
+
+**Four of the five status channels were, in practice, gauges — and heat could not bite at all.** A
 channel's consequence starts at its bite point, and measured over every mission of every body, heat
 peaks at 10–15% on Io and 10–31% on Mercury against a bite at 55–60. It is not the pilot: heat rises
 only while burning and falls otherwise, so it needs a duty of 33–50%, while *hovering* costs 33% on
 Mercury and 23% on Io — and `forces-tests.js` tunes it at 50%. Corrosion on Venus peaks at 42 against
-45; cold crosses on one Pluto mission in five. Only Europa's radiation bites reliably. **Know this
-before building anything that scales one**: M31 dropped the Thermal Sink for it, because a passive
-that scales a channel with no consequence is the `hazardLead` fault with a new name. The numbers are
-M36's or Tom's.
+45; cold crosses on one Pluto mission in five. Only Europa's radiation bites reliably. **Heat is repaired (M36) and the Thermal Sink is built**; corrosion and cold are
+untouched and still read as gauges, deliberately — there is no complaint aimed at either and both
+have a passive that already changes flown missions on the body it claims. **Know this before building
+anything that scales one**: M31 dropped the Thermal Sink precisely because a passive that scales a
+channel with no consequence is the `hazardLead` fault with a new name.
 
 **A mitigation key per channel, written out rather than assembled.** `CHANNEL_RESIST` maps each
 status channel to the loadout key that answers it, so `hazardResist` stays general and the Ablative

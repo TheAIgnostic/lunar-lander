@@ -347,6 +347,8 @@ export function flyMission(level, terrain, opts = {}) {
   // mission ever get hot" is a different question from "what is the gauge
   // reading now", and the second one was all this returned.
   const peakStatus = {};
+  let burnSteps = 0;
+  let steps = 0;
 
   while (t < maxT) {
     control(input);
@@ -412,6 +414,14 @@ export function flyMission(level, terrain, opts = {}) {
     for (const [k, v] of Object.entries(ship.statusLevels || {})) {
       if (!(peakStatus[k] >= v)) peakStatus[k] = v;
     }
+    // **Burn duty**, because heat is a question about duty rather than about
+    // time. Heat rises only while thrusting and falls otherwise, so whether a
+    // channel can ever bite is `fall / (rise + fall)` against the fraction of a
+    // mission spent on the engine - and M31 had to measure that by hand to find
+    // that on the two bodies declaring heat, it cannot. Reported by the pilot
+    // so the next person asking does not have to build a rig for it.
+    burnSteps += ship.thrusting ? 1 : 0;
+    steps++;
     t += step;
     // Reachability: how near the pad did it get, low and slow enough to land?
     const alt = terrain.heightAt(ship.x) - ship.y;
@@ -457,6 +467,7 @@ export function flyMission(level, terrain, opts = {}) {
       beamSecs: +abilityStats.beamSecs.toFixed(2) } : null,
     slid,
     peakStatus,
+    duty: steps ? +(burnSteps / steps).toFixed(4) : 0,
     // **The flight at full precision.** Everything above is rounded for a
     // fixture or a printed table - `x` to the pixel, `fuelLeft` to a tenth -
     // and that is a tolerance, not the flight. A cold soak that took attitude

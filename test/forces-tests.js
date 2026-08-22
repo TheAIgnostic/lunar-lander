@@ -3,12 +3,25 @@ import { readFileSync } from 'node:fs';
 import { applyForces, forcesFor, freshStatus, freshEnv, RADIATION, STATUS_CHANNELS, CHANNEL_RESIST, NON_FORCE_HAZARDS, HEAT, COLD, ACID, MAGNETIC, hazardName } from '../src/forces.js';
 import { PLANETS, PLANET_IDS, gravityFor, gravityPx } from '../src/planets.js';
 import { CHAPTERS } from '../src/missions.js';
+import { SHIP } from '../src/ship.js';
 
 let pass = 0, fail = 0;
 const check = (name, cond, extra = '') => {
   if (cond) pass++; else { fail++; console.log(`  FAIL  ${name}  ${extra}`); }
 };
-const mkShip = (o = {}) => ({ x: 100, y: 100, vx: 0, vy: 0, thrusting: false, windNow: 0, statusLevels: freshStatus(), env: freshEnv(), ...o });
+// `throttleCmd` is the **commanded** throttle magnitude, and `thermal` reads it
+// rather than the `thrusting` boolean so that a keyboard and a pad make the same
+// heat for the same flight (M36). A rig that says `thrusting: true` and nothing
+// else means "burning, at full", which is what a keyboard commands - so it is
+// derived here rather than written out at every call site.
+const mkShip = (o = {}) => {
+  const s = { x: 100, y: 100, vx: 0, vy: 0, thrusting: false, windNow: 0,
+    statusLevels: freshStatus(), env: freshEnv(), ...o };
+  if (s.throttleCmd == null) s.throttleCmd = s.thrusting ? 1 : 0;
+  return s;
+};
+/** Set both halves of "the engine is on this hard", the way `ship.step` does. */
+const burnAt = (ship, amount) => { ship.throttleCmd = amount; ship.thrusting = amount > 0; };
 
 console.log('forces and planets');
 
@@ -56,7 +69,7 @@ console.log('forces and planets');
   const level = { hazards: ['thermal'] };
   for (let i = 0; i < 120; i++) applyForces(ship, level, i / 120, 1 / 120);
   check('burning raises heat', ship.statusLevels.heat > 0, String(ship.statusLevels.heat.toFixed(1)));
-  ship.thrusting = false;
+  burnAt(ship, 0);
   const peak = ship.statusLevels.heat;
   for (let i = 0; i < 120; i++) applyForces(ship, level, i / 120, 1 / 120);
   check('coasting sheds heat', ship.statusLevels.heat < peak);
@@ -349,7 +362,7 @@ check('difficulty cannot reach gravity',
   const run = (level, duty, seconds) => {
     const ship = mkShip({ x: 1500, y: 800, hull: 100, hullMax: 100, damageOverTime() {}, loadout: {} });
     for (let i = 0; i < seconds * 60; i++) {
-      ship.thrusting = (i % 100) < duty * 100;
+      burnAt(ship, (i % 100) < duty * 100 ? 1 : 0);
       applyForces(ship, level, i / 60, 1 / 60, terrain);
     }
     return ship;
@@ -362,6 +375,58 @@ check('difficulty cannot reach gravity',
   const cool = run({ id: 'h2', width: 3000, hazards: [{ type: 'heat', heatRise: 11, heatFall: 4 }] }, 0, 30);
   check('and lets go again when you stop burning', cool.thermalDerate === 1);
 
+  // **A keyboard and a pad make the same heat for the same flight**, and it is
+  // arithmetic rather than convention.
+  //
+  // Heat used to be made by the `thrusting` *boolean*, and that is a device
+  // split: a keyboard answers exactly 1 or 0, so a hover is a pulse train at
+  // full throttle, while a pad holds a fraction and reads as thrusting 100% of
+  // the time. The identical physical flight cooked twice as fast on a pad. Same
+  // shape as the Optical Cloak's drain (M32) and the Emergency Arrest cue -
+  // anything reading how *hard* a control is held owes this check.
+  //
+  // Both halves matter: reading the magnitude, and cooling that runs whatever
+  // the engine is doing. With cooling only while coasting, the pad player never
+  // cools at all and the two still disagree.
+  {
+    // **Eight seconds, deliberately short.** The first version of this ran for
+    // thirty and both sides pinned at the 100 clamp, so they agreed for the
+    // wrong reason: the mutation that puts cooling back inside the "coasting"
+    // branch raised **zero failures** against it. A rig has to stay inside the
+    // range of the thing it is measuring.
+    const SECS = 8;
+    const hz = [{ type: 'heat', heatRise: 12, heatFall: 1.5 }];
+    const lvl = { id: 'parity', width: 3000, hazards: hz };
+    // A keyboard: full throttle, half the time.
+    const key = mkShip({ x: 1500, y: 800, loadout: {} });
+    for (let i = 0; i < SECS * 60; i++) {
+      burnAt(key, (i % 2) === 0 ? 1 : 0);
+      applyForces(key, lvl, i / 60, 1 / 60, terrain);
+    }
+    // A pad: half throttle, all of the time. Same mean, same flight.
+    const pad = mkShip({ x: 1500, y: 800, loadout: {} });
+    for (let i = 0; i < SECS * 60; i++) {
+      burnAt(pad, 0.5);
+      applyForces(pad, lvl, i / 60, 1 / 60, terrain);
+    }
+    check('the parity rig stays off the ceiling',
+      key.statusLevels.heat < 95 && pad.statusLevels.heat < 95,
+      `key ${key.statusLevels.heat.toFixed(1)} pad ${pad.statusLevels.heat.toFixed(1)} - both clamped, so they agree for the wrong reason`);
+    check('a pad and a keyboard make the same heat for the same flight',
+      Math.abs(key.statusLevels.heat - pad.statusLevels.heat) < 0.5,
+      `key ${key.statusLevels.heat.toFixed(2)} vs pad ${pad.statusLevels.heat.toFixed(2)}`);
+    // And it is the *throttle* doing it, not the button: half as hard for the
+    // same length of time has to make less heat, or the magnitude is inert.
+    const soft = mkShip({ x: 1500, y: 800, loadout: {} });
+    for (let i = 0; i < SECS * 60; i++) {
+      burnAt(soft, 0.25);
+      applyForces(soft, lvl, i / 60, 1 / 60, terrain);
+    }
+    check('and a gentler throttle makes less of it',
+      soft.statusLevels.heat < pad.statusLevels.heat - 1,
+      `${soft.statusLevels.heat.toFixed(2)} vs ${pad.statusLevels.heat.toFixed(2)}`);
+  }
+
   const cold = run({ id: 'c', width: 3000, hazards: [{ type: 'cold', coldRate: 2.5 }] }, 0, 60);
   check('cold stiffens the thrusters', cold.rcsStiffness < 1 && cold.rcsStiffness >= COLD.minRcs - 1e-9,
     cold.rcsStiffness.toFixed(2));
@@ -370,7 +435,7 @@ check('difficulty cannot reach gravity',
   const bitesAt = (level, duty, read) => {
     const ship = mkShip({ x: 1500, y: 800, hull: 100, hullMax: 100, damageOverTime() {}, loadout: {} });
     for (let i = 0; i < 120 * 60; i++) {
-      ship.thrusting = (i % 100) < duty * 100;
+      burnAt(ship, (i % 100) < duty * 100 ? 1 : 0);
       applyForces(ship, level, i / 60, 1 / 60, terrain);
       if (read(ship) >= 55) return i / 60;
     }
@@ -380,8 +445,22 @@ check('difficulty cannot reach gravity',
     for (const lvl of c.levels) {
       const kinds = (lvl.hazards || []).map((h) => (typeof h === 'string' ? h : h.type));
       if (kinds.includes('heat')) {
-        const t = bitesAt(lvl, 0.5, (s) => s.statusLevels.heat);
-        check(`${lvl.id}: heat takes more than 10 s to bite`, t > 10, `${t.toFixed(1)}s`);
+        // **At the throttle a hover on *this body* actually costs**, derived
+        // rather than encoded. It used to be a flat 0.5, and M31 recorded that
+        // as a burn profile neither the pilot nor a hovering player has - a
+        // check measuring a lander nobody flies. Hovering is `gravity / thrust`:
+        // 33% on Mercury, 23% on Io, which are the two figures M31 measured by
+        // hand. The M30a rule, one level out - assert the relationship against
+        // what it answers, because a number nobody derived is a number that
+        // stops describing the game the moment either side of it moves.
+        const hover = Math.min(1, lvl.gravity / SHIP.thrust);
+        const t = bitesAt(lvl, hover, (s) => s.statusLevels.heat);
+        check(`${lvl.id}: heat takes more than 10 s to bite at a ${(hover * 100).toFixed(0)}% hover`,
+          t > 10, `${t.toFixed(1)}s`);
+        // And it has to bite *eventually* at a hover, or the channel is a gauge
+        // again - which is the whole fault M36 exists to repair.
+        check(`${lvl.id}: and heat does bite if you hold that hover`, Number.isFinite(t),
+          'heat never reaches its bite point on this mission');
       }
       if (kinds.includes('cold')) {
         const t = bitesAt(lvl, 0.3, (s) => s.statusLevels.cold);

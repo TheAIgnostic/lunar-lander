@@ -94,7 +94,19 @@ export const RADIATION = {
  * than armour. It recovers the moment you stop burning, so it is never a
  * one-way trip to a crash.
  */
-export const HEAT = { bite: 60, minThrust: 0.55 };
+// **`bite` is 55 since M36, and `heatFall` is the number that actually mattered.**
+// Heat rises only while thrusting and falls otherwise, so whether it can ever
+// bite is a question about **burn duty**: it accumulates only above
+// `fall / (rise + fall)`. Authored against a fall of 4.5-7, that break-even sat
+// at 33-50% while the measured duty is **34-37% on Mercury and 26% on Io** - so
+// on the two bodies that declare heat, heat trended *down*, and across both
+// chapters it peaked at 10-31 against a bite of 60. It had been inert since M5.
+//
+// The fall rates are re-authored per body from that measured duty (M36), which
+// is why Mercury's is 2.5 and Io's is 1.3 for a similar rise: Io's pilot burns
+// nine points less of the mission. 55 rather than 60 lines the bite up with
+// `COLD.bite`, so a status channel bites at one number across the game.
+export const HEAT = { bite: 55, minThrust: 0.55 };
 
 /**
  * Cold soak. The third consequence, deliberately different again: heat costs
@@ -263,7 +275,40 @@ function thermal(cfg) {
     apply(ship, level, t, dt) {
       const s = ship.statusLevels;
       const res = hazardScale(ship, 'heat');
-      s.heat = Math.max(0, Math.min(100, s.heat + (ship.thrusting ? rise * res : -fall) * dt));
+      // **Heat is made by the throttle, not by the button** (M36), and that is a
+      // device-parity rule rather than a nicety. Read as `ship.thrusting` this
+      // was a boolean, and a keyboard answers exactly 1 or 0 while a trigger
+      // answers anything between: a keyboard hover is *pulsing* at roughly the
+      // hover throttle (48% on Mercury), while a pad player holding that same
+      // 48% is thrusting **100% of the time**. Identical flights, twice the heat
+      // on a pad. That is the M30 input-contract rule broken inside a force, and
+      // `cloakDrain` is the same decision already taken in `abilities.js`.
+      //
+      // Multiplying by the magnitude makes the two devices agree by arithmetic:
+      // mean throttle is the same number either way, and it is what the engine
+      // is actually being asked for.
+      // `throttleCmd` is the **commanded** magnitude and is exactly 0 or exactly
+      // 1 on a keyboard, so the two devices agree by arithmetic rather than by
+      // convention. `ship.throttle` is the smoothed value the exhaust plume
+      // uses; it lerps toward zero without arriving, so reading it here would
+      // mean the engine never stops and heat never falls.
+      //
+      // **Cooling runs all the time, and that is what makes the parity exact.**
+      // Cooling only *while coasting* is still device-dependent one level down:
+      // a keyboard hover pulses, so it cools between pulses, while a pad hover
+      // holds a fraction and never cools at all. Radiating whatever the engine
+      // is doing makes the two identical arithmetically - over any window, both
+      // devices integrate `rise x mean(throttle) - fall`, and mean throttle is
+      // the same number for the same flight. Asserted in `forces-tests.js`.
+      const burn = ship.throttleCmd || 0;
+      // **The Thermal Sink's two halves, and they are genuinely two.** The spec
+      // asks for *"raises heat capacity and cooling rate"*: `heatResist` is
+      // folded in by `hazardScale` above and slows what the engine puts in,
+      // `heatShed` speeds up what the hull gets rid of. One key would have been
+      // two dials on one wire - here they act on opposite terms, so the module
+      // is worth more on a long burn *and* on the pause after it.
+      const shed = (ship.loadout && ship.loadout.heatShed) || 1;
+      s.heat = Math.max(0, Math.min(100, s.heat + (rise * res * burn - fall * shed) * dt));
       const over = clamp01((s.heat - bite) / (100 - bite));
       ship.thermalDerate = 1 - (1 - minThrust) * over;
     },

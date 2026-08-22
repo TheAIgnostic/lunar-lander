@@ -234,6 +234,27 @@ export const PASSIVE_MODULES = {
     // free altitude for the ability to choose when you have it.
     effect: { glideTrim: 0.7, disturbanceResist: 0.85 },
   },
+  // --- M36 ------------------------------------------------------------------
+  //
+  // **The twentieth module, and the one that had to wait for a number.** M31
+  // built five of the six missing passives and deliberately left this one: heat
+  // could not bite on either body that declares it - it peaked at 10-31 against
+  // a bite of 60 - so a passive scaling that channel would have been the
+  // `hazardLead` fault with a new name, a thing sold and not delivered.
+  //
+  // M36 is where that number moved. `heatFall` was authored at 4.5-7 against a
+  // measured burn duty of 26-37%, which put the break-even duty *above* what
+  // anyone flies; it is re-authored per body from that duty now, and heat runs
+  // 40-76 across Mercury and 42-83 across Io. The module is the same module the
+  // spec asked for; what changed is that there is now something to answer.
+  'thermal-sink': {
+    id: 'thermal-sink', name: 'THERMAL SINK',
+    blurb: 'A bigger heat store and a faster way out of it. The engine keeps its punch longer.',
+    good: ['MERCURY', 'IO'],
+    // Both halves of *"raises heat capacity and cooling rate"*, acting on
+    // opposite terms - see `thermal` in `forces.js`.
+    effect: { heatResist: 0.6, heatShed: 1.7 },
+  },
   'salvage-magnet': {
     id: 'salvage-magnet', name: 'SALVAGE MAGNET',
     blurb: 'Sweeps cells, cargo and ore in from half again the distance.',

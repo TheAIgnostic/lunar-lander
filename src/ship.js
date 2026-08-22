@@ -277,6 +277,7 @@ export class Ship {
     // because `spec` is the *derived loadout* and must not move under a hazard -
     // that is the M10 rule that stops a reloaded save stacking an upgrade.
     this.thermalDerate = 1;
+    this.throttleCmd = 0;
     this.rcsStiffness = 1;
     this.rcsLeft = false;
     this.rcsRight = false;
@@ -464,6 +465,15 @@ export class Ship {
     this.rcsLeft = leftIn > 0;
     this.rcsRight = rightIn > 0;
     this.holding = amountOf(input, 'hold') > 0 && hasFuel && Math.abs(this.spin) > 0.02;
+    // **The commanded throttle, kept as a float on purpose.** The booleans above
+    // are what a dozen consumers want; `thermal` is the one that must not have
+    // one, because heat made by a *button* is device-dependent - a keyboard
+    // hover is a pulse train at full throttle and a pad hover is a held
+    // fraction, and the same flight would cook twice as fast on a pad.
+    // Deliberately **not** `this.throttle`, which is smoothed for the exhaust
+    // plume and lerps toward zero without arriving: read as "is the engine on"
+    // it is on forever after the first burn, and heat would never fall again.
+    this.throttleCmd = throttleIn;
     this.direct = settings.steering === 'direct';
 
     // Partial throttle costs proportionally less. Holding attitude is a button

@@ -1108,21 +1108,27 @@ None.
 
 ## Next task
 
-**M36 — measure what the loadout and the trees did, and move the numbers that need moving.**
-M31-M35 are done. This is the only milestone in the stretch allowed to retune balance, and three
-things are queued for it and should not be touched before it:
+**Testing and bug fixes.** The content is finished: ten bodies, 50 missions, 20 modules, 15 skill
+nodes, three enemies, the ladder, the economy and the hangar. M31-M36 closed the last of it, and
+there is no content milestone queued behind them.
 
-- **The heat channel cannot bite** on either body that declares it (measured in M31). The lever is
-  `heatFall` or `heatBite`. Until it moves, the **Thermal Sink** passive stays unbuilt — it is the
-  last of the spec's twenty modules, and Io and Mercury are the only two bodies with no passive at
-  all.
-- **The Fourth Shuttle's effect on run length** is unmeasured, and it touches the attrition curve
-  (decision 4).
-- **Combat Overdrive's window against its bill.** Five seconds at 6x recharge for four seconds at
-  0.72 thrust, authored in M35 and never balanced against a player.
+What is genuinely left, in the order it is worth doing:
 
-Re-run the encounter audit and the campaign crossing, and compare against **642/800 (80%)** and the
-at-once distribution recorded at M30 — all of which are still identical after M35.
+1. **A human flying it.** Everything below the line in "Open with Tom" is a question only a person
+   answers, and three of them have waited since M13. The two that are now newly askable: **does heat
+   feel like pacing or like punishment** on Mercury and Io, which M36 made real for the first time,
+   and **does the Combat Overdrive feel worth its bill** — measured as a genuine trade, never felt.
+2. **`falseRadar` and `darkness` are unmeasurable by this project's instrument**, because the
+   autopilot flies on state and cannot see the screen. Ganymede's whole identity is one of them.
+3. **The known findings below**, which are real and small: `hazardLead` is the last thing sold and
+   not delivered, the mission fuel budgets predate the bigger maps, and the clicking noise has never
+   been confirmed fixed.
+
+**Two things are deferred by decision, not by oversight**, and neither should be picked up without
+reopening the decision: the **six remaining enemy designs** (Tom's call, v1) and the **module energy
+pool**, which is what the unbuilt Power Core component track and four dropped skill nodes all wanted.
+
+---
 
 ---
 
@@ -1471,7 +1477,141 @@ it is a name, an ON marker and one button. Nothing else about it changed — it 
 the playtest log's header, still amber on the menu and the expedition screen, and `beginExpedition`
 still re-reads the flag itself.
 
-### M36 — measure what the loadout and the trees did
+### M36 — the heat number moves, and the twentieth module (done, this commit)
+
+The balance pass, and the only milestone in this stretch allowed to move a number. Three things were
+queued for it; all three are answered, and one of them turned out to be a **bug rather than a
+balance question**.
+
+#### Heat had been inert since M5, and the reason was arithmetic
+
+Heat rises only while thrusting and falls otherwise, so whether it can ever bite is a question about
+**burn duty**: it accumulates only above `fall / (rise + fall)`. Measured fresh:
+
+```
+                    burn duty      peak heat (bite 60)
+MERCURY  1-5          34-37%              10-31
+IO       1-5          25-28%              10-15
+```
+
+Authored at `heatFall` 4.5-7, the break-even duty sat at **33-50%** — at or above what anybody flies.
+So on the two bodies that declare heat, heat trended *down*. The fall rates are re-authored per body
+from the measured duty (Mercury 1.45, Io 0.8 for a similar rise), and `HEAT.bite` is 55, which lines
+it up with `COLD.bite` so a status channel bites at one number across the game.
+
+| | 1 | 2 | 3 | 4 | 5 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| **Mercury**, way home | 40 | **58** | 30 | **68** | **76** |
+| **Io**, way home | 42 | 48 | 48 | **61** | **65** |
+| **Io**, prize route | 28 | **69** | **83** | 40 | 32 |
+
+Mission 1 warms and does not bite; missions 4 and 5 bite. **Io's prize route is where its heat
+lives** — `io-2` and `io-3` are 38-40 s flights, so greed costs heat, which is the shape the deep
+route should have.
+
+**`mercury-3` is deliberately the cool one and stays that way.** It is called COLD TRAP, and the
+first cut of this pass flattened it into the ramp before the name was read. It is authored as a
+mission where the engine makes heat freely and the ground takes it away — a high rise on a high fall —
+rather than one that never warms.
+
+#### The finding: heat was made by a *button*, and that is a device split
+
+`thermal` read `ship.thrusting`, a **boolean**. A keyboard answers exactly 1 or 0, so a keyboard
+hover is a pulse train at full throttle; a pad player holding the same physical hover reads as
+thrusting **100% of the time**. The identical flight cooked roughly twice as fast on a gamepad.
+
+That is the M30 input-contract rule broken inside a force, and `cloakDrain` is the same decision
+already taken correctly in M32. Heat reads the **commanded** throttle magnitude now
+(`ship.throttleCmd`, exactly 0 or 1 on a keyboard), and **cooling runs all the time** rather than
+only while coasting — without that second half the pad player never cools at all and the two still
+disagree. Both devices now integrate `rise x mean(throttle) - fall`, which is the same number for the
+same flight, and `forces-tests.js` asserts it.
+
+Two wrong turns on the way, both caught by measuring:
+
+- **`ship.throttle` is the smoothed value the exhaust plume uses.** It lerps toward zero without
+  arriving, so read as "is the engine on" it is on forever after the first burn — heat never fell
+  again and every mission pinned at 100.
+- **The parity rig ran for thirty seconds and both sides hit the 100 clamp**, so they agreed for the
+  wrong reason and the mutation that puts cooling back inside the coasting branch raised **zero
+  failures**. Eight seconds, off the ceiling.
+
+#### The floor rule now asks the question it meant to ask
+
+`forces-tests.js` asserted "more than 10 s to bite" at a flat **0.5 duty** — a burn profile M31 had
+already recorded as one neither the pilot nor a hovering player has. It is derived now:
+`gravity / SHIP.thrust`, which is what holding a hover costs on that body — **33% on Mercury, 23% on
+Io**, the two figures M31 measured by hand. The M30a rule one level out: assert the relationship, not
+a number. It also asserts the other direction — heat must bite *eventually* at a hover, or the
+channel is a gauge again.
+
+Measured in the browser on `mercury-5` at **full** throttle held down: bite at 4.5 s, the derate
+floor at 9 s, and it recovers the moment you stop. At the 33% hover the same mission takes 17 s.
+
+**And the warning for it has existed since M5 and had never once fired.** The HUD's
+`ENGINE HEAT · THRUST DOWN` banner and the red callout beside the lander were built with the channel
+and were unreachable, because nothing ever reached the bite point.
+
+#### The Thermal Sink — the twentieth module
+
+Both halves of the spec's *"raises heat capacity and cooling rate"*, and they act on opposite terms:
+`heatResist` 0.6 slows what the engine puts in (folded in by `hazardScale`), `heatShed` 1.7 speeds up
+what the hull gets rid of. Flown: **MERCURY/home 3/5, IO/home 2/5, IO/deep 2/5**.
+
+**The module count is complete at 20 of 20**, and **every body on the ladder now has both slots
+filled** — Io and Mercury were the two with no passive at all, and they were waiting on exactly this.
+
+A knock-on worth recording: the **Thermal Purge** went from `PLUTO/deep 1/5` to
+`MERCURY/home 3/5 · IO/home 2/5 · IO/deep 2/5 · PLUTO/deep 1/5`. It always claimed those bodies and
+was nearly inert on them; giving the channel a consequence made an existing module work.
+
+#### The Fourth Shuttle buys a mission and a half, not a body
+
+Measured over 40 seeded runs of the real ladder with the real pilot, losing a shuttle per crash and
+retrying the mission:
+
+| profile | 3 shuttles | 4 shuttles |
+| --- | --- | --- |
+| cautious (safe pad every time) | 1.02 bodies · 9.97 missions | 1.07 bodies · **11.45** missions |
+| greedy (prize pad every third) | 0.05 bodies · 5.22 missions | 0.10 bodies · **6.50** missions |
+
+**+15% and +25% of run length respectively, and +0.05 bodies.** The attrition curve (decision 4)
+survives the capstone intact. Read the absolute figures as the instrument, not the game — this pilot
+has no loadout, no skills, no weapon and no evasive logic, and Tom's own playtest log has him
+clearing the Moon with two crashes. What is meaningful is the **ratio**, measured on one pilot.
+
+*(The first version of this rig ended the run on the first crash and reported 0 bodies cleared for
+every seed at both shuttle counts. A measurement that says nothing is a broken measurement.)*
+
+#### Combat Overdrive is a real trade, and is left alone
+
+Flown over four chapters, both routes, with and without the node:
+
+```
+LUNA/deep     kills 3->4   hull 60->60   enemy hp left 287->282
+MARS/deep     kills 6->5   hull 70->60   enemy hp left 246->259     <- worse
+IO/deep       kills 6->8   hull 60->70   enemy hp left 213->182     <- better
+MERCURY/deep  unchanged
+```
+
+Two bodies better, one worse, one unchanged, and no landing outcome ever moved. That is a window
+worth the bill sometimes and not others, which is what a costed capstone should look like — neither a
+trap nor a free win. **Not retuned**, per the standing rule: there is no specific complaint to aim at.
+
+#### What moved, and what did not
+
+**The campaign crossing is 641/800 (80%), against 642/800.** One flight in eight hundred, with heat
+now biting on ten missions — because heat costs **thrust**, which is recoverable, rather than hull.
+
+**The physics fixture is byte-identical**, which is the load-bearing result: it replays a fixed input
+script, so the `throttleCmd` change provably did not touch the flight model. **The flight fixture
+moved 5 of 186**, all of them Mercury and Io, every grade unchanged, with fuel left as the difference
+(`mercury-2` 44.8 → 34.5) — a derated engine burns more. Re-recorded.
+
+Encounter audit: deep-route engagement 751/800 and the at-once distribution both identical; flight
+time 1.18x → 1.17x; sweep-everything landings 114/1000 → 111/1000.
+
+`forces-tests.js` 147 → **160**, `loadout-tests.js` 350 → **359**, `skills-tests.js` unchanged.
 
 See "Next task" at the top of this file.
 
@@ -1612,66 +1752,62 @@ that needs none of the conversation that produced this plan.
 
 ### Handover
 
-*Rewritten 2026-08-22, after the session that ran **M35** — the skill board cut to five nodes per
-tree on Tom's call, and the two structural holes in it closed.*
+*Rewritten 2026-08-22, after the session that ran **M35 and M36** — the skill board cut to five per
+tree on Tom's call, and the balance pass that finished the content.*
+
+**The content is finished.** Ten bodies, 50 authored missions, **20 of 20 modules**, 15 skill nodes,
+the ladder, the economy, the hangar, controller support and accessibility. There is no content
+milestone queued. What is left is **testing and bug fixes**, and most of what remains needs a person
+rather than a milestone.
 
 **The first prompt for a new session:**
 
-> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then `test/README.md`, then the **M31 to M35**
-> sections of `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything; it takes a few
-> minutes and it is how every milestone here that went well started.
+> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then `test/README.md`, then the **M35 and
+> M36** sections of `test/BASELINE.md`. Run `./test/run-all.sh 20` before writing anything.
 >
-> Then build **M36**, under "Next task". It is the balance pass, and **it is the only milestone in
-> this stretch allowed to move a number.** Three things are queued for it and they are named there.
+> **There is no next feature.** The content is complete and "Next task" says what is actually left:
+> a human flying it, two hazards this project's instrument cannot see, and three small known
+> findings. **Do not start building from the spec** — section 10 asks for thirty skill nodes and the
+> board is fifteen by Tom's decision, section 11's twenty modules are all built, and the six missing
+> enemy designs are deferred to v1 by his call. Everything the spec still lists and this build does
+> not have is under "Superseded by the five-node board" or in the deferred list, with a reason each.
 >
-> **The skill board is fifteen nodes, five per tree, and that is Tom's decision — not a milestone
-> that ran short.** Section 10 of the brief asks for thirty. Do not build the missing nine; they are
-> listed under "Superseded by the five-node board" with what each one names that this build does not
-> have. `test/skills-tests.js` fails on a sixth node in any tree, and on a tree whose tiers are not
-> **T1, T1, T2, T3, T4** with the capstone behind the tier-3.
+> If you are here to **fix a bug**, the four standing rules still apply and every one of them was
+> paid for:
 >
-> **Enemies are deferred to v1 — Tom's call — so do not touch the roster.**
+> **Measure before you decide.** M36 is the cleanest example in the file: heat had been inert since
+> M5, and both the tuning *and* a device-parity bug fell out of measuring burn duty rather than
+> reading the constants.
 >
-> **The gate is the thing to understand before you add anything.** `loadout-tests.js` will refuse a
-> new effect key with no witness, a module that changes no flown mission on a body its own `good`
-> claims, a node with nowhere declared to measure it, and — since M35 — a second place in `ship.js`
-> that burns the main engine. `test/README.md` §3 is the recipe. It caught three things sold and not
-> delivered in M31, a wrong constant in M34, and in M35 it caught a declared key with nothing wiring
-> it up.
+> **A passing test is not a test that bites.** `./test/mutate.sh <file> <from> <to>`. **Zero failures
+> is the finding, not the result** — M35 and M36 each hit two, and in both milestones one of them was
+> a trap this project had already written down and walked into again.
 >
-> Four standing rules, and every one of them was paid for.
+> **A rig built from whatever the world generated is measuring the world, not the rule.** Five
+> milestones running. In M36 a parity rig agreed with itself because both sides hit a clamp, and a
+> run-length rig reported zero for every seed because it ended the run on the first crash.
 >
-> **Measure before you decide.** M31 dropped a passive because heat cannot bite; M34 set an arc's
-> reach from a distribution over 664 machines; **M35 chose what to cut from the tier structure rather
-> than from the node count, and the two holes it found were not the ones the count would have shown.**
+> **Do not retune balance without a specific complaint to aim at.** M36 was the pass with the
+> complaints; corrosion and cold were measured, found to be gauges, and deliberately left, because
+> nobody has complained about either and both have a passive that already works on the body it
+> claims.
 >
-> **A passing test is not a test that bites.** `./test/mutate.sh <file> <from> <to>` breaks the code
-> on purpose and reports which suites noticed. **Zero failures is the finding, not the result** — and
-> in M35 one of the two zeros was *the exact trap M34 had already written down*, walked into again.
-> Run it on anything you write.
->
-> **A rig built from whatever the world generated is measuring the world, not the rule.** Four
-> milestones running. In M35 the first rig for Autonomous Repair read 0/5 because it was flown at the
-> deep pad, where four flights in five end as a crash and a crash is insensitive to almost anything.
->
-> **Do not retune balance without a specific complaint to aim at** — except in M36, which is the
-> complaint.
->
-> And one thing about the instrument: `./test/run-all.sh` **cannot see a rendering fault**, because
-> no node test draws. Look at the game, not only at the numbers about the game.
+> And: `./test/run-all.sh` **cannot see a rendering fault**, because no node test draws. Look at the
+> game.
 
 **What is different about the state you are inheriting.**
 
-The **1.0 module count is finished at 19 of 20** — ten actives and nine passives, every one proved to
-change a flown mission on a body it claims and every one obtainable without god mode. The twentieth,
-the Thermal Sink, is blocked on the heat number rather than on work, and that number is M36's.
+Every number the game sells is now delivered *and* measured, with one exception — `hazardLead`, the
+Sensors track's level 3, which is the single entry left on `KNOWN_GAPS` and prints a `GAP` line on
+every run of the gate.
 
-The **skill board is finished at 15**, and "finished" now means something different from "thirty":
-five per tree, every tier occupied, a capstone on each, and the three capstone paths within 10
-research of each other. Nine spec nodes will not be built and the record says why for each.
+The two things that were "blocked on a number" are unblocked. Heat bites on Mercury and Io for the
+first time since M5, the Thermal Sink is built, and every body on the ladder has both loadout slots
+filled. The Fourth Shuttle is measured at +15% run length, so the attrition curve holds.
 
-What is left is **one balance pass and one passive**. There is no content milestone after M36 in the
-current plan.
+**The remaining open questions are almost all human.** They are listed under "Open with Tom" and the
+newest two are the most interesting: does heat read as pacing or as punishment, and is the Combat
+Overdrive's window worth its bill? Both are measured and neither has been felt.
 
 ### Reading order
 
@@ -1692,7 +1828,23 @@ current plan.
 Then **measure before editing**: `./test/run-all.sh 20`. It ends with the encounter audit, so one
 command tells you both that the game still works and what a player currently meets in it.
 
-### What this session did (2026-08-22, M35)
+### What this session did (2026-08-22, M35 and M36)
+
+**M36 — the balance pass, and the content is finished.**
+
+- **Heat had been inert since M5**, and measuring it found two faults rather than one. The authored
+  `heatFall` put the break-even burn duty at 33-50% against a measured 26-37%, so heat trended *down*
+  on both bodies that declare it. And it was made by the `thrusting` **boolean** — a device split, so
+  a pad player holding a hover cooked twice as fast as a keyboard player pulsing the same flight.
+- **The Thermal Sink is built**, which makes the module count **20 of 20** and gives every body on the
+  ladder both slots filled. The `ENGINE HEAT · THRUST DOWN` warning fired for the first time ever.
+- **The Fourth Shuttle buys +15% of run length, not a body**, so decision 4 survives its own capstone.
+- **Combat Overdrive measured as a genuine trade** — better on two bodies, worse on one — and left
+  alone, because there is no complaint to aim at.
+- **The campaign crossing moved by one flight in eight hundred**, and the physics fixture is
+  byte-identical.
+
+**M35 — five nodes per tree.**
 
 - **The skill board went from 21 nodes to 15**, five per tree, on Tom's call after he looked at the
   screen M34 produced. Eight nodes cut, two built.
@@ -1711,7 +1863,7 @@ command tells you both that the game still works and what a player currently mee
 - **One mutation raised zero, and it was a trap M34 had already documented** — an edge-triggered
   control with one charge cannot be told apart from a held one. Rig rebuilt with two.
 
-### The session before (2026-08-22, M31–M34)
+### Earlier this session (2026-08-22, M31–M34)
 
 - **M31 — the gate, then five specialists.** `loadout-tests.js` went from "a declared key is
   mentioned by some file" to a witness table plus a flown differential. It found **three things sold
@@ -1868,17 +2020,20 @@ the record, since every one of them is now a number somebody may want to move ag
   flight and left menu navigation out on purpose, because what confirms and what moves a selection is
   a design call. And `PAD.curve` is argued from where the hover point lands, which is arithmetic —
   whether it *feels* right is the one thing only a controller in a hand can say.
-- **Heat cannot bite on either body that declares it, and that is a number.** Measured in M31: heat
-  rises only while thrusting and falls otherwise, so it needs a sustained burn duty of 33-50%
-  depending on the mission — while *holding a hover* costs 33% on Mercury and 23% on Io. Across both
-  chapters it peaks at 10-15% on Io and 10-31% on Mercury against a bite at 55-60, and
-  `forces-tests.js` tunes it at a 50% duty neither this pilot nor a hovering player has. **It is the
-  Pulse Laser's reach again** (M30a): a number that is wrong relative to what it has to answer, sat
-  there since M5. The Thermal Sink passive is held until it moves, because a module that scales a
-  channel with no consequence is a thing sold and not delivered. The lever is `heatFall` (lower makes
-  it accumulate) or `heatBite`. **Not touched in M31 — M31-M35 add content and M36 is the only place
-  a number moves.** Read alongside it: corrosion on Venus peaks at 42 against a bite of 45, and cold
-  crosses on one Pluto mission in five. Only Europa's radiation bites reliably.
+- ~~**Heat cannot bite on either body that declares it.**~~ **Fixed in M36**, and it was two faults
+  rather than one. The number was wrong — `heatFall` put the break-even burn duty at 33-50% against a
+  measured 26-37%, so heat trended *down* on both bodies that declare it, and had since M5. And heat
+  was made by the `thrusting` **boolean**, which is a device split: a pad player holding a hover
+  cooked roughly twice as fast as a keyboard player pulsing the identical flight. Both repaired;
+  Mercury now runs 40-76 and Io 42-83, the **Thermal Sink** is built, and the
+  `ENGINE HEAT · THRUST DOWN` warning fires for the first time since it was written in M5.
+  **What is left is a human question: does it read as pacing, or as punishment?**
+
+  Read alongside it, and **still open**: corrosion on Venus peaks at 42 against a bite of 45, and
+  cold crosses on one Pluto mission in five. Those two are the same shape of question and were
+  deliberately not touched in M36 — there is no complaint aimed at either, and the Ablative Acid Skin
+  and Cryo Insulation both already change flown missions on the bodies they claim, so neither module
+  is hollow. Only Europa's radiation, and now heat, bite reliably.
 - ~~**Five skill nodes need re-specifying before they can be built.**~~ **Answered by Tom's
   five-node decision (2026-08-22), and none of them is open any more.** Combat Overdrive was built,
   re-pointed onto the cooldown; the other four are dropped along with eight nodes that *were* built.
