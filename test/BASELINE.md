@@ -3722,3 +3722,76 @@ next to the reminder that a screenshot found the `[object Object]` forecast a da
 Both fixtures byte-identical. Full suite green — the campaign crossing is **642/800 (80%)** and every
 encounter-audit figure is identical to the run before the audit started. `forces-tests.js` 100 →
 **133**, `loadout-tests.js` 136 → **151**.
+
+---
+
+## Where 1.0 stands (measured 2026-08-22, after M30e)
+
+Counted against the spec's own "Full 1.0 target" (section 18), not against intent.
+
+| 1.0 target | built | short by |
+| --- | ---: | ---: |
+| 10 bodies | **10** | — |
+| 50 missions | **50** | — |
+| seven component tracks at four levels | 5 tracks (all reach L4) | **2 tracks** |
+| all 30 skill nodes | 12 (3 trees × 4) | **18 nodes** |
+| ten active modules | 5 | **5** |
+| ten passive modules | 4 | **6** |
+| full eight-enemy roster | 2 of the roster, + 1 original | **6 designs** |
+| materials, blueprints, checkpoints, save migration, accessibility | done | — |
+
+**The enemy count in both documents was wrong** and this is where it surfaced. They said "three of
+eight exist" and then named **six** remaining, which does not add up. The Mast Sniper is Tom's own
+design (M29e) and is **not** on the spec's roster, so the roster still owes six, not five. Corrected
+in `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`.
+
+### Phase 8 acceptance criteria
+
+| criterion | state |
+| --- | --- |
+| no route softlocks | `route-tests.js` 99/99, every ladder id has an authored chapter |
+| no save loss across the upgrade path | `save-tests.js` 83/83, versioned migration from the `tv_*` keys |
+| all 50 missions validate on an automated seed | 50/50 structural, sanctuary 20/20 on all 40 armed |
+| no unavoidable damage from untelegraphed hazards | every hazard with a boundary draws it; `falseRadar` is asserted presentation-only |
+| controls retain the original feel | both fixtures byte-identical since M0; `pro` is the original law to 1e-9 |
+| **human playtest completion of all 50** | **not done — the one criterion no test can close** |
+
+Accessibility is complete against the Phase 8 list: shake, flash, `highContrast`, `uiScale`, keyboard
+remapping, three steering modes, and controller remapping since M30. **Achievements are the one
+Phase 8 line deliberately not built** — the spec gates them behind stable progression.
+
+### Codebase health
+
+| | |
+| --- | ---: |
+| src | 14,060 lines, 34 modules |
+| …of which comment | 3,617 (0.38 per code line) |
+| …executable | 9,625 |
+| content-shaped modules | 2,104 lines |
+| tests | 5,447 lines, 18 files (0.57 per code line) |
+
+**Module count has not moved since M27** — 34 then, 34 now. Growth since is content and prose:
+of the 3,391 lines added, **1,557 (46%) are comments**.
+
+25 of 34 modules import three things or fewer, the graph is a DAG the bundler enforces by
+topological sort, and `util.js` is the only widely-shared module at 22 importers — a pure-helper leaf,
+which is the right thing to be shared.
+
+**Three hot spots, and they are the honest answer to "is it still manageable":**
+
+| | lines |
+| --- | ---: |
+| `screens.js:screenHTML` | **627** (a 624-line `switch`) |
+| `render.js:drawTerrain` | **483** |
+| `actions.js:act` | **365** |
+
+Eight functions exceed 150 lines. All three are flat dispatch or flat drawing rather than deep logic —
+`screenHTML` is one case per screen and `act` one case per verb — so they are long rather than
+complex, and splitting them would trade one long file for a directory. Worth knowing before the next
+screen or verb is added: **that is where the friction will be.**
+
+The drawing layer is the least explained part of the tree — `hud.js` 14% comment, `debug.js` 7%,
+`particles.js` 2%, against `route.js` 110% and `economy.js` 99%. Every fault this project has recorded
+came out of the rules layer, which is the annotated half; the drawing half has been quiet, but M30e's
+one self-inflicted bug (`drawTiltGauge` reaching for a `ship` it never had) came from exactly there,
+and **no node test renders**.

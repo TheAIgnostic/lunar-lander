@@ -668,7 +668,10 @@ badly started from an assumption.
 
 The MVP is complete and measured (`test/BASELINE.md`, M13 section). What the next milestones inherit:
 
-- **Three of eight enemies exist** since M29e added the Mast Sniper. Coil Cannon, Patrol Drone, Mortar Platform, Magnetic Mine, Solar
+- **Three machines are built, and two of them are the spec's.** The Mast Sniper is Tom's own design
+  (M29e) and is **not** on the roster in section 12, so it does not reduce it: **six of the spec's
+  eight remain**, not five. Both documents said "three of eight" and then listed six, which does not
+  add up and was only noticed when the 1.0 gap was counted. Coil Cannon, Patrol Drone, Mortar Platform, Magnetic Mine, Solar
   Sentry and Shielded Guardian are roster entries with no implementation. Adding one is an
   `ENEMY_TYPES` entry plus a draw function; the field, telegraph, projectile, damage and reward
   systems are shared. `PlanetDefinition.eligibleEnemySets` is where a new design joins the bodies

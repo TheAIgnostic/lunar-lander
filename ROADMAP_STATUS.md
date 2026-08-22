@@ -1145,8 +1145,11 @@ its own), then the gamepad behind it (stages 2-5). Full measurement in `test/BAS
 
 ### Still queued, unchanged
 
-- **Five enemy designs of eight remain** — Coil Cannon, Patrol Drone, Mortar Platform, Magnetic Mine,
-  Solar Sentry, Shielded Guardian. M29 measured that on a low-gravity body the machine *type* decides
+- **Six of the spec's eight enemy designs remain** — Coil Cannon, Patrol Drone, Mortar Platform, Magnetic Mine,
+  Solar Sentry, Shielded Guardian. Three machines are *built*, but only two of them are the spec's:
+  the **Mast Sniper is Tom's own design and is not on that roster**, so it does not reduce it. Both
+  documents used to say "three of eight" and then name six, which does not add up.
+  M29 measured that on a low-gravity body the machine *type* decides
   almost everything and the count decides almost nothing, so **more designs is the only real lever
   left on the combat ramp**. Read M29e's findings first: a machine is not finished when it draws and
   fires, `range` is not the lever it looks like, and reach costs twice what vantage does.
