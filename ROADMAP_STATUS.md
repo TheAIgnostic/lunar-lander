@@ -1151,28 +1151,40 @@ economy already bounds it.
 
 ---
 
-### M31 — the gate, then the six passives
+### M31 — the gate, then five specialists (done, this commit)
 
-**The gate goes in first, because everything after it depends on the gate being honest.**
-`loadout-tests.js` currently asserts that a declared effect key is *read by some file*. That is how
-`hazardLead` passed for three milestones once a comment mentioned it, and it is not the same claim as
-"fitting this changes anything". Raise the bar: **fitting a module or buying a node must move a
-measured outcome in a flown mission** — `flyMission` already takes `{ loadout }` and `{ ability }`.
+Shipped, and the gate found more than it was built to find. Every figure is in the M31 section of
+`test/BASELINE.md`.
 
-Then all six missing passives, which are the cheapest work in the plan because every one of them
-scales a channel that already exists:
+**The gate** is a witness table now rather than a grep: every key the game sells names how it is
+delivered — `flight`, `economy` or `instrument` — and a measurement that runs the real code with the
+declared number moved. On top of it, **fitting a module or buying a node must change a flown
+mission**, on a body the module's own `good` field claims. It fails in both directions, so it cannot
+fall behind the content.
 
-| module | scales | already exists as |
-| --- | --- | --- |
-| Ablative Acid Skin | corrosion build-up | `corrosion` status channel, Venus |
-| Thermal Sink | heat build and fall | `heat` channel, `heatRise`/`heatFall` |
-| Cryo Insulation | cold build-up | `cold` channel, Pluto |
-| Plume Vanes | lateral force from vents | `plumes` force + `disturbanceResist` |
-| Atmospheric Control Surfaces | glide authority, wind rotation | `glide` and `windChannels` forces |
-| Salvage Magnet | pickup radius | `terrain.collect(x, y, radius = 62)` — **already a parameter** |
+Three things were sold and not delivered, and only building the gate found them:
 
-**Ends with Titan and Venus no longer printing "nothing specialised yet"** on the expedition card,
-which is the visible half of M30g.
+- **`beacon`** — sold by the Hardened Radar, by Sensors L2 *and* L3 and by the Sensor Pulse, read by
+  nothing. The old check passed it because `abilities.js` contains the string while reading the
+  module's own field. M30f's "32 of 33 keys reach the simulation" was really 31. Delivered.
+- **`fuelCapacity` never reached `flyMission`** — every sweep ever flown with `opts.loadout` flew the
+  engine track and the Reserve Tank on a stock tank.
+- **Five of nine modules had no grant path at all.** Ray Shield, Magnetic Anchor, Thermal Purge, Ice
+  Cleats and Hardened Radar were obtainable only under god mode, while the route card recommended
+  four of them by name. **That is M30g one level down**: it stopped the card naming modules with no
+  *implementation* and never asked whether an implemented one was *reachable*. A cleared body hands
+  over a blueprint for the body you are about to fly now, derived from `good`.
+
+**Five of the six passives shipped** — Ablative Acid Skin, Cryo Insulation, Plume Vanes, Control
+Surfaces and the Salvage Magnet — and **Titan and Venus no longer print "nothing specialised yet"**,
+which was the visible half of M30g.
+
+**The sixth is not built, and the reason is arithmetic.** Heat rises only while thrusting and falls
+otherwise, so it needs a burn duty of 33–50% depending on the mission, while *hovering* costs 33% on
+Mercury and 23% on Io. Measured over both chapters, heat peaks at 10–15% on Io and 10–31% on Mercury
+against a bite at 55–60: **on the two bodies that declare heat, heat never bites.** A Thermal Sink
+would scale a channel with no consequence, which is the `hazardLead` fault with a new name. It waits
+on the number — see "Open with Tom".
 
 ### M32 — the three actives that need no new system
 
@@ -1539,6 +1551,17 @@ the record, since every one of them is now a number somebody may want to move ag
   flight and left menu navigation out on purpose, because what confirms and what moves a selection is
   a design call. And `PAD.curve` is argued from where the hover point lands, which is arithmetic —
   whether it *feels* right is the one thing only a controller in a hand can say.
+- **Heat cannot bite on either body that declares it, and that is a number.** Measured in M31: heat
+  rises only while thrusting and falls otherwise, so it needs a sustained burn duty of 33-50%
+  depending on the mission — while *holding a hover* costs 33% on Mercury and 23% on Io. Across both
+  chapters it peaks at 10-15% on Io and 10-31% on Mercury against a bite at 55-60, and
+  `forces-tests.js` tunes it at a 50% duty neither this pilot nor a hovering player has. **It is the
+  Pulse Laser's reach again** (M30a): a number that is wrong relative to what it has to answer, sat
+  there since M5. The Thermal Sink passive is held until it moves, because a module that scales a
+  channel with no consequence is a thing sold and not delivered. The lever is `heatFall` (lower makes
+  it accumulate) or `heatBite`. **Not touched in M31 — M31-M35 add content and M36 is the only place
+  a number moves.** Read alongside it: corrosion on Venus peaks at 42 against a bite of 45, and cold
+  crosses on one Pluto mission in five. Only Europa's radiation bites reliably.
 - **Six skill nodes need re-specifying before they can be built** (M35). Each names a system this
   build does not have, and the cheap answer is usually to re-point the node at something that exists
   rather than to build the system underneath it:
@@ -1602,6 +1625,16 @@ enemy roster's remaining six designs and the moving landing platforms are the tw
 owed; everything else those chapters need already exists.
 
 ### Known findings
+
+- ~~**`beacon` was sold and not delivered**~~ — **fixed in M31.** Sold by the Hardened Radar, by
+  Sensors L2 and L3 and by a raised Sensor Pulse, and read by nothing at all: the two beacon draws
+  took the obscuration and no gain. M30f's guard passed it because `abilities.js` contains the
+  *string* while reading the module's own field. `render.beaconGain` is the one place it is cashed
+  in, verified against real pixels in the browser.
+
+- ~~**Five of nine modules could not be obtained without god mode.**~~ — **fixed in M31.** See the
+  M31 entry above; the general rule is that **a thing advertised must be obtainable**, and it is
+  asserted by simulating the ladder rather than by reading the grant code.
 
 - **`hazardLead` is sold and not delivered.** The Sensors track's level 3 (700 salvage plus two
   materials) advertises "Hazard trajectory prediction", and `hazardLead` is folded into the ship

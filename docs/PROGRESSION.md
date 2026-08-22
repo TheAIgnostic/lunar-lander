@@ -33,10 +33,19 @@ matters most is which survive a death, because that is the whole risk structure 
 | --- | --- | --- | --- | ---: |
 | **Hangar** (`components.js`) | 5 tracks × 3 levels | salvage **+ body-specific material**, and **tech cores on L3/L4** (M29) | **kept** | 12,840 salvage |
 | **Skills** (`skills.js`) | 3 trees × 4 nodes, ranked | research data | **wiped** | 1,555 data |
-| **Loadout** (`modules.js`) | 1 active + 1 passive slot | nothing — blueprints are earned | blueprints **kept** | 5 active, 4 passive |
+| **Loadout** (`modules.js`) | 1 active + 1 passive slot | nothing — blueprints are earned | blueprints **kept** | 5 active, **9 passive** (M31) |
 
 `Save.wipeForDeath` is the authority: it clears `purchasedSkills`, `banked` and the opened map, and
 keeps `componentLevels`, `unlockedBlueprints` and `equipped`.
+
+> **M31 (2026-08-22) found the loadout row was worse than "earned": it was unreachable.** Five of the
+> nine modules had **no grant path at all** — the only unlocks were the two starter passives, one
+> guaranteed on a first chapter clear, and the weapon for surviving a mission that shot at you. Ray
+> Shield, Magnetic Anchor, Thermal Purge, Ice Cleats and Hardened Radar could be obtained only under
+> god mode, which is exactly why no playtest surfaced it, and the route card recommended four of them
+> by name. **Every cleared body hands over a blueprint now**, chosen for the body about to be flown.
+> The count above is 14 modules against 10 grants in a full ladder, and blueprints survive death, so
+> the collection is the one thing that compounds across runs.
 
 **The intended trade** is sound and worth preserving: salvage spent in the hangar is the only thing
 that outlives a run, it can only be spent in the window between bodies, and spending it means not

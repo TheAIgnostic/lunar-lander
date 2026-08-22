@@ -3736,7 +3736,7 @@ Counted against the spec's own "Full 1.0 target" (section 18), not against inten
 | seven component tracks at four levels | 5 tracks (all reach L4) | **2 tracks** |
 | all 30 skill nodes | 12 (3 trees × 4) | **18 nodes** |
 | ten active modules | 5 | **5** |
-| ten passive modules | 4 | **6** |
+| ten passive modules | 4 | **6** |   ← 9 / **1** after M31
 | full eight-enemy roster | 2 of the roster, + 1 original | **6 designs** |
 | materials, blueprints, checkpoints, save migration, accessibility | done | — |
 
@@ -3919,10 +3919,12 @@ broken.
 Countermeasure Flare, Aero-Brake Foil.
 
 **Passive modules — 6 of 10 missing:** Ablative Acid Skin, Thermal Sink, Cryo Insulation, Plume
-Vanes, Atmospheric Control Surfaces, Salvage Magnet.
+Vanes, Atmospheric Control Surfaces, Salvage Magnet.  *(**1 of 10 after M31** — only the Thermal
+Sink, and it is blocked on a number rather than on work. See the M31 section.)*
 
 **Two bodies have no specialist module at all** — Titan (thick air, gliding) and Venus (dense drag,
-acid), the two whose whole identity is the thing no module answers. Titan is body 3 and Venus is the
+acid), the two whose whole identity is the thing no module answers. *(Both answered in M31: Control
+Surfaces and the Ablative Acid Skin.)* Titan is body 3 and Venus is the
 finale. Of the eleven unbuilt modules, **Aero-Brake Foil serves both**, which makes it the single
 highest-value one to build.
 
@@ -3932,3 +3934,259 @@ stable progression.
 ### What did not move
 
 Both fixtures unchanged. Full suite green. `route-tests.js` 99 → **124**.
+
+## M31 — the gate, then five specialists (2026-08-22)
+
+The first of the M31-M36 plan. **The gate goes in before the content**, because the plan adds eleven
+modules and eighteen nodes on top of a check that had already been fooled once.
+
+### What the old check claimed, and why it was not the claim
+
+`loadout-tests.js` asked whether a declared effect key was **mentioned** by some file outside the
+three that define them. That is how `hazardLead` passed for three milestones — the moment a *comment*
+named it, the regex called it delivered — and M30f's repair (strip comments before searching) closed
+only the narrowest version of the hole.
+
+The general form is worse, and building the gate found it:
+
+| | |
+| --- | --- |
+| key | `beacon` |
+| sold by | Hardened Radar (1.5), **Sensors L2** (1.3), **Sensors L3** (1.6), Sensor Pulse (2.4) |
+| read by | **nothing** |
+| why the grep passed it | `abilities.js` contains the string `beacon`, reading `this.mod.effect.beacon` — the *module's own field*, never the loadout key |
+
+M30f measured "32 of 33 keys reach the simulation". It was **31 of 33**. A file mentioning a name is
+not a file acting on it, and that is the whole difference between the old check and this one.
+
+### The gate: a witness per key, measured by running the code
+
+Every key the game sells now names **how** it is delivered and **a measurement that runs the real
+code with the declared number moved**. Turn the key on, measure again, and the number has to move.
+
+| category | keys | what "delivered" means |
+| --- | ---: | --- |
+| flight | 29 | the lander behaves differently |
+| economy | 2 | the run is paid differently |
+| instrument | 6 | the player is shown something different, and the flight is untouched |
+| **gap** | **1** | `hazardLead` — no witness exists, and it prints `GAP` every run |
+
+It fails in both directions: a key with no witness is a hard failure, and a witness for a key nobody
+sells is a hard failure the other way, so the table cannot fall behind the content. Two things were
+found by writing it rather than by reading:
+
+- **`impactResist` had a check that could not fail.** It scales the hull cost of a HARD or off-pad
+  *touchdown* and nothing else; `ship.damage()` never reads it. The existing assertion was
+  `stock.damage(20)` against `armoured.damage(20)` with `<=`, comparing 20 to 20. Its witness is a
+  30 px/s arrival now: hull 75 stock, 88 with the key.
+- **`fuelCapacity` never reached `flyMission`.** `main.js` multiplied `level.fuel` by it and the test
+  rig did too; the pilot did not. **Every sweep ever flown with `opts.loadout` flew the engine track
+  and the Reserve Tank on a stock tank.** `Ship.tankFor` is one rule with three callers now.
+
+### And the sharper question: does *fitting* it change a flown mission?
+
+Section 2 proves a key is read. Section 4 proves the thing a player chooses is worth choosing — fit
+the module or buy the node, fly a real chapter with the real autopilot, and compare the flights.
+
+**Every module is flown on every body its own `good` field claims**, which makes the claim testable
+too: the route card is derived from `good` since M30g, so a lie there is a lie on the screen a run is
+picked from.
+
+| | missions of five that flew differently |
+| --- | --- |
+| ray-shield | EUROPA 3/5 home, 3/5 deep · GANYMEDE 1/5 · IO 3/5 home, 2/5 deep |
+| magnetic-anchor | EUROPA 1/5 · ENCELADUS 3/5 |
+| thermal-purge | PLUTO 1/5 deep |
+| pulse-laser | LUNA 3/5 deep |
+| fuel-recycler | LUNA 5/5, PLUTO 5/5, both routes |
+| gyro-stabilizer | ENCELADUS 5/5, GANYMEDE 5/5, both routes |
+| ice-cleats | EUROPA 5/5 home, 3/5 deep |
+| **ablative-acid-skin** | VENUS 1/5 deep |
+| **cryo-insulation** | PLUTO 1/5 deep |
+| **plume-vanes** | ENCELADUS 4/5 deep |
+| **control surfaces** | TITAN 5/5 and VENUS 5/5, both routes |
+| **salvage-magnet** | LUNA 1/5 home, 2/5 deep |
+| fuel-mix · reserve-tank · env-seals · inertial-dampers | 5/5 each |
+| field-patching 2/5 · capacitor 2/5 · shield-harmonics 2/5 · reinforced-struts 1/5 · energy-on-kill 1/5 | |
+
+Five things are declared off the flight path with a reason, and **the list fails the other way too** —
+anything parked there that does move a flight is reported as a stale excuse. Sensor Pulse (what you
+see), Hardened Radar (instruments), Salvage Drone and Black-Box (money), Threat Analysis (the arc).
+
+### Three things the first version of section 4 got wrong, and each is the finding
+
+**It read four things as inert that are not.** The first rigs put everything on the Moon's deep route.
+A scan of all ten bodies against both routes found each one a place where it is visible:
+
+```
+field-patching     EUROPA/home 1/5  TITAN/deep 1/5  MARS/home 2/5  ENCELADUS 1/5  IO/home 1/5  VENUS/home 2/5
+reinforced-struts  TITAN/home 1/5   TITAN/deep 1/5  VENUS/home 1/5
+energy-on-kill     ENCELADUS/deep 1/5
+shield-harmonics   GANYMEDE/deep 2/5  PLUTO/deep 1/5
+```
+
+The route is the argument. At the deep pad with machines up, four flights in five end as a crash and
+a crash is insensitive to almost everything a module does; at the sanctuary pad **nothing can shoot
+at you**, which is the M24 guarantee, so a weapon reads as decoration. Guessing the rig wrong looks
+exactly like the module being decoration.
+
+**The pilot only pressed an active when something was aiming at it.** M30a's firing policy is right
+for a weapon and a shield and is nothing like what a player does with the rest, so the Magnetic
+Anchor and the Thermal Purge were fitted, fired and **provably identical to an empty slot** across
+whole chapters. Each active declares a `cue` now — `threat`, `final`, `status`, `blind` — and the
+pilot presses on it. **`threat` is unchanged to the line**, so M30a's figures over 6,400 flights
+still describe this policy.
+
+**And the trace was rounded, which is a tolerance rather than a flight.** `x` to the pixel and
+`fuelLeft` to a tenth. A Thermal Purge on pluto-5 cut peak cold from **68% to 32%** and restored
+attitude authority from **0.838 to 1.000**, and the rounded trace read it as byte-identical. Compared
+at full precision now — and deliberately **not** including the ability's own `fires`/`hit` counters,
+because carrying those made every active differ from an empty slot for free, which is exactly the
+fault the section exists to catch.
+
+### The question nobody had asked: can the player get hold of it?
+
+**Five of nine modules had no grant path at all.** The only unlocks were the two starter passives,
+`MOON_BLUEPRINTS[0]` on a first chapter clear, and the weapon for surviving a mission that shot at
+you. Ray Shield, Magnetic Anchor, Thermal Purge, Ice Cleats and Hardened Radar were reachable **only
+under god mode** — which is exactly why it never showed in a playtest.
+
+```
+modules total        9
+obtainable normally  fuel-recycler, gyro-stabilizer, sensor-pulse, pulse-laser
+NEVER obtainable     ray-shield, magnetic-anchor, thermal-purge, ice-cleats, hardened-radar
+
+EUROPA     active: ray-shield  <-- UNOBTAINABLE     passive: ice-cleats  <-- UNOBTAINABLE
+MARS       active: sensor-pulse                     passive: hardened-radar  <-- UNOBTAINABLE
+ENCELADUS  active: magnetic-anchor  <-- UNOBTAINABLE
+MERCURY    active: thermal-purge  <-- UNOBTAINABLE
+```
+
+**This is M30g one level down.** That milestone stopped the route card naming modules with no
+*implementation*, by deriving the advice from each module's own `good` field. Nobody then asked
+whether an implemented module was **reachable** — so Europa's card honestly recommended Ice Cleats
+and Ray Shield, and the player could never own either.
+
+A cleared body hands over a blueprint for **the body you are about to fly**, derived from `good`
+rather than from a second table — the same reason M30g gave for deleting `RECOMMENDED`. It never
+grants a duplicate, and falls through to whatever is still missing so nothing is stranded. 13 of 14
+modules after one full ladder; blueprints survive death, so the rest arrive on the next run.
+
+Verified in the real game rather than only in node: a fresh save cleared the Moon through the real
+settle closure and was handed the **RAY SHIELD** — Europa's recommended active, the body it is about
+to fly.
+
+### Mutation-tested, because a passing test is not a test that bites
+
+| mutation | failures raised |
+| --- | ---: |
+| the blueprint grant removed | **7** |
+| the gyro's spin damping made inert | 5 |
+| the Thermal Purge stops purging | 3 |
+| `flyMission` drops `fuelCapacity` again | 2 |
+| Ice Cleats' grip does nothing | 2 |
+| a new effect key nobody delivers | 2 |
+| `beacon` read by nothing again | 1 |
+| a comment naming `hazardLead` | 0 — and the `GAP` line still prints (the M30f regression) |
+| the laser's reach cut back to 430 | 0 here, **2 in `enemies-tests.js`**, which owns that relationship |
+
+### The five specialists
+
+Each scales a channel that already exists, and each is proved above to change a flown mission on a
+body it claims.
+
+| module | what it does | why it is not just a resistance number |
+| --- | --- | --- |
+| **Ablative Acid Skin** | `corrosionResist` 0.55, Venus | the hull cost is driven by how far corrosion is past its bite, so one lever is both halves of "reduces acid and corrosion damage" |
+| **Cryo Insulation** | `coldResist` 0.55, Pluto | — |
+| **Plume Vanes** | `plumeLateral` 0.35, Enceladus | cuts the **sideways** shove and leaves the lift, per the spec. At 1.4 m/s² the column is free altitude; being thrown off the pad is what loses the mission |
+| **Control Surfaces** | `glideTrim` 0.7 + `disturbanceResist` 0.85, Titan and Venus | attitude starts to mean something to the air |
+| **Salvage Magnet** | `collectRadius` 1.5 | reaches cells, cargo **and ore** — a magnet that widened the reach for fuel and not for salvage would miss the thing it is named after |
+
+**Control Surfaces measured live on titan-5 at 120 px/s**, against the real modules in the browser:
+
+| nose | stock lift | with the foil |
+| --- | ---: | ---: |
+| flared away from travel (−0.45 rad) | 4.60 | **5.10** |
+| level | 4.60 | 3.91 |
+| tipped into the crossing (+0.45 rad) | 4.60 | **2.72** |
+
+Stock, the only thing that decides how much the air holds you up is how fast you are going. The trim
+term is zero at a level nose, so it is *authority*: what it is worth depends entirely on how you fly
+it. Note the level row — the foil's `disturbanceResist` scales the raw lift too, so it trims about
+15% off the float before the attitude term does anything. **That is stated on the module**; the first
+version of the comment claimed the level case was identical to stock, and the browser said otherwise.
+
+**Titan and Venus stop printing "nothing specialised yet"** on the expedition card, which is the
+visible half of M30g:
+
+```
+TITAN      take: CONTROL SURFACES
+VENUS      take: ABLATIVE ACID SKIN
+```
+
+### The sixth is not built, and the reason is arithmetic
+
+**Thermal Sink is deliberately absent.** Heat rises only while thrusting and falls otherwise, so
+whether it can ever bite is a question about burn *duty*, not about mission length:
+
+| body | mission | rise | fall | bite | duty needed | duty a hover costs |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Mercury | 1–5 | 7–11 | 4–7 | 55–60 | 27–50% | **33%** |
+| Io | 1–5 | 7–9 | 4.5–5 | 60 | 33–42% | **23%** |
+
+And measured, flying every mission of both chapters:
+
+```
+MERCURY  heat 10  13  12  15  31      (bite 60/55)
+IO       heat 12  12  13  13  15      (bite 60)
+PLUTO    cold 32  53  47  48  68!     (bite 55)
+VENUS    corrosion 31 36 33 41 42     (bite 45)
+EUROPA   radiation 77 75 88 69 94!    (bite 55)
+```
+
+**On the two bodies that declare heat, heat never bites.** The autopilot's own thrust duty is 34–37%
+on Mercury and 26% on Io, against a break-even of 33–50% — and `forces-tests.js` tunes these channels
+at **50%** duty, which is a burn profile neither this pilot nor a hovering player has. A passive that
+scales a channel with no consequence is a thing sold and not delivered, which is the one thing this
+milestone exists to prevent. The number is M36's or Tom's; the module waits for it.
+
+Worth reading beside it: **corrosion on Venus never bites either** (peaks 42 against 45), and cold
+crosses on one Pluto mission out of five. Only Europa's radiation bites reliably. Four of the five
+status channels are, in practice, gauges.
+
+**Cryo Insulation claims Pluto only.** The spec lists Europa too, and Europa declares no `cold` at
+all — its weather is ice underfoot and radiation overhead — so claiming it would be a route card
+recommending kit that does nothing there, and the gate would have failed it.
+
+### One bug introduced, and what caught it
+
+Lifting `instrumentNoise` out of `drawHUD` orphaned the `rad` the hazard stack reads. **Every node
+test passed**; the browser threw `ReferenceError: rad is not defined` on the first `__draw()`.
+
+That is M30e's self-inflicted bug in the same place for the same reason — `./test/run-all.sh` cannot
+see a rendering fault, because no node test draws — and it is the second milestone running in which
+the only way it was going to be found was by looking at the screen.
+
+The `beacon` delivery was checked the same way rather than trusted, sampling real pixels with the
+throb pinned so the pulse could not confound it:
+
+| gain | ink over the pad marker |
+| --- | ---: |
+| stock 1.0 | 1,441,121 |
+| Hardened Radar 1.5 | 1,457,896 |
+| Sensors L3 1.6 | 1,461,843 |
+| Sensor Pulse 2.4 | **1,491,144** |
+
+Monotonic in the gain. A fired pulse also had to be made to *stop* boosting when it ends — it never
+did, and nothing had noticed because until this milestone nothing read `beaconBoost` at all. A
+channel that is written and never read cannot be seen to leak.
+
+### What did not move
+
+**Both fixtures byte-identical.** Full suite green, and every encounter-audit figure identical to the
+run taken before the first edit: campaign crossing **642/800 (80%)**, at-once distribution
+0: 63.1% · 1: 25.9% · 2: 9.5% · 3: 1.4% · 4: 0.1%, deep-route engagement 751/800. The new modules are
+optional kit and nothing baseline could move.
+
+`loadout-tests.js` 150 → **285**, `forces-tests.js` 133 → **147**, `route-tests.js` 124 → **126**.

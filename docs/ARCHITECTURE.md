@@ -22,13 +22,13 @@ Everything under `src/` is a plain ES module, loaded directly in the browser and
 | `src/planets.js` | 10 PlanetDefinitions, the gravity mapping, and what the ground is made of | M4/M5/M20/M29a/M29 |
 | `src/planeticons.js` | one icon per body, for the route screen | M17 |
 | `src/missions.js` | **all ten authored chapters** (50 missions), the survey-chapter fallback, `chapterFor` | M4-M9/M29 |
-| `src/forces.js` | force/status interface: atmosphere, dust, wind channels, thermal, cryo, plumes, radiation, glide, acid, downdraft, eruption, magnetic, falseRadar, darkness | M5-M7/M28b/M29 |
+| `src/forces.js` | force/status interface: atmosphere, dust, wind channels, thermal, cryo, plumes, radiation, glide, acid, downdraft, eruption, magnetic, falseRadar, darkness; `CHANNEL_RESIST` | M5-M7/M28b/M29/M31 |
 | `src/save.js` | versioned MetaSave + RunState, legacy migration, corruption recovery | M8 |
 | `src/economy.js` | rewards, the carried haul, what a deposit is worth, the transmitted/cargo split, settlement and banking | M9/M15 |
 | `src/route.js` | the ten-body ladder, the next-body card, the progress trail, checkpoint rule | M9/M27 |
 | `src/components.js` | 5 component tracks, `deriveLoadout` / `deriveFull`, purchase rules, the recommended tier | M10/M11/M28 |
 | `src/skills.js` | 3 skill trees, `deriveSkills`, purchase and gating rules | M11 |
-| `src/modules.js` | 5 active + 4 passive modules, blueprint guarantee list | M11/M12 |
+| `src/modules.js` | 5 active + **9 passive** modules, each active's firing `cue`, the blueprint grant rule | M11/M12/M31 |
 | `src/enemies.js` | enemy roster, placement around the prize, telegraphs, projectiles, damage, rewards | M12/M14 |
 | `src/objectives.js` | the optional objectives: conditions judged at touchdown, and six cargo recoveries | M14/M15 |
 | `src/abilities.js` | the active-module runtime: charges, duration, cooldown, effects | M12 |
@@ -192,6 +192,67 @@ blind spot `opts.loadout` closed for passives — an active could be carried and
 could measure whether one was any good. **The firing policy is the player's cue**: ready, and the
 HUD's own threat count says something is aiming at you. Deliberately not "fire when a target is in
 range", which measures the ceiling rather than the experience.
+
+**"Read by something" is not the claim; "changes something" is.** Until M31 the guard asked whether
+a declared effect key was *mentioned* by a file outside the three that define them. `hazardLead`
+passed it once a comment named it (below), and the general form is worse: **`beacon`** is sold by the
+Hardened Radar, by Sensors L2 and L3 *and* by the Sensor Pulse, and was read by **nothing** — the
+grep passed it because `abilities.js` contains the string while reading `this.mod.effect.beacon`, the
+module's own field. A file mentioning a name is not a file acting on it, and M30f's "32 of 33 keys
+reach the simulation" was really 31.
+
+`loadout-tests.js` carries a **witness table** now. Every key names how it is delivered — `flight`,
+`economy` or `instrument` — and a measurement that runs the real code with the declared number moved;
+the number has to move. A key with no witness fails, and a witness for a key nobody sells fails the
+other way, so the table cannot fall behind the content. On top of that, **fitting a module or buying
+a node must change a flown mission**, on a body the module's own `good` field claims — which makes
+`good` testable, and `good` is what the route card is derived from.
+
+Three rules came out of building it, and each cost a wrong first answer:
+
+- **The route is the argument.** At the deep pad with machines up, four flights in five end as a
+  crash and a crash is insensitive to almost everything; at the sanctuary pad nothing can shoot at
+  you, so a weapon reads as inert. Both are measured.
+- **The pilot's firing policy is part of the instrument.** M30a's one policy — fire when something is
+  aiming at you — is right for a weapon and wrong for a landing tool, and under it the Magnetic
+  Anchor and the Thermal Purge were fitted, fired and provably identical to an empty slot. Each
+  active declares a `cue` (`threat` / `final` / `status` / `blind`) and the pilot presses on it;
+  `threat` is unchanged, so M30a's figures still describe the same policy.
+- **A rounded trace is a tolerance, not a flight.** `x` to the pixel hid a purge that cut a cold soak
+  from 68% to 32% and restored attitude authority from 0.838 to 1.000.
+
+**A thing sold must also be obtainable, and nobody had asked.** Five of the nine modules had no grant
+path at all — Ray Shield, Magnetic Anchor, Thermal Purge, Ice Cleats and Hardened Radar were
+reachable only under god mode, which is why it never surfaced in a playtest, while the route card
+recommended four of them by name. That is M30g one level down: it stopped the card naming modules
+with no *implementation* and never asked whether an implemented one was *reachable*. A cleared body
+hands over a blueprint for **the body you are about to fly** (`nextBlueprint`), derived from `good`
+rather than from a second table, and `loadout-tests.js` simulates the ladder to prove every module
+lands in the player's hands.
+
+**Four of the five status channels are, in practice, gauges — and heat cannot bite at all.** A
+channel's consequence starts at its bite point, and measured over every mission of every body, heat
+peaks at 10–15% on Io and 10–31% on Mercury against a bite at 55–60. It is not the pilot: heat rises
+only while burning and falls otherwise, so it needs a duty of 33–50%, while *hovering* costs 33% on
+Mercury and 23% on Io — and `forces-tests.js` tunes it at 50%. Corrosion on Venus peaks at 42 against
+45; cold crosses on one Pluto mission in five. Only Europa's radiation bites reliably. **Know this
+before building anything that scales one**: M31 dropped the Thermal Sink for it, because a passive
+that scales a channel with no consequence is the `hazardLead` fault with a new name. The numbers are
+M36's or Tom's.
+
+**A mitigation key per channel, written out rather than assembled.** `CHANNEL_RESIST` maps each
+status channel to the loadout key that answers it, so `hazardResist` stays general and the Ablative
+Acid Skin answers Venus and nothing else. It was briefly `channel + 'Resist'`, which works and is
+**invisible** — the loadout guard searches source for every key the game sells, and an assembled name
+is in no file, so two new passives read as hollow. A table can also be asserted complete, which a
+template literal cannot: `forces-tests.js` requires an entry per `STATUS_CHANNELS` and requires each
+one to slow its own channel.
+
+**One rule, both callers, twice more.** `Ship.tankFor` folds `fuelCapacity` into the starting tank —
+open-coded in `main.js` and in a test rig and **missing from `flyMission`**, so every sweep ever flown
+with `opts.loadout` flew the engine track on a stock tank. `terrain.pickupRadius` folds the Salvage
+Magnet into the collection reach, called by the game loop and the test pilot the way `collect`
+already is.
 
 **Every effect the game sells must be read by something, and the guard for it may not read
 comments.** `loadout-tests.js` checks all 33 keys declared by skills, modules and components against
