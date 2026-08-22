@@ -37,8 +37,12 @@ export const DEFAULT_KEYS = {
   // enemies. everyone picks the laser and keeps it"* - one slot was not a
   // choice between ten modules, it was the weapon and nine things nobody could
   // afford to carry.
-  ability: ['e', 'q', 'pad:2'],
-  ability2: ['x', 'pad:3'],
+  // E and X on the pad for the first, Q and Y for the second - adjacent on both
+  // devices. **Deliberately not `x` on the keyboard for the second slot**: the
+  // pad's X button is the *first* slot, so a screen that says "SLOT II - X"
+  // beside a pad prompt reading X for slot I is two different X's on one panel.
+  ability: ['e', 'pad:2'],
+  ability2: ['q', 'pad:3'],
   // Emergency Arrest (M34). A rebindable action like any other, which is the
   // whole point of the M30 binding work: `ACTIONS` is derived from this object,
   // so the settings screen, the rebind rules, the save format and the pad all

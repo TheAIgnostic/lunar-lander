@@ -1,6 +1,6 @@
 // Skills, modules and the folded loadout:  node test/skills-tests.js
 import { TREES, ALL_NODES, deriveSkills, skillCheck, buySkill, findNode } from '../src/skills.js';
-import { ACTIVE_MODULES, PASSIVE_MODULES, derivePassive, recommendedFor, MOON_BLUEPRINTS, equipInto, ACTIVE_SLOTS } from '../src/modules.js';
+import { ACTIVE_MODULES, PASSIVE_MODULES, derivePassive, recommendedFor, MOON_BLUEPRINTS, equipInto, fitActive, activeSlotOf, ACTIVE_SLOTS } from '../src/modules.js';
 import { deriveFull } from '../src/components.js';
 import { Ship, SHIP } from '../src/ship.js';
 
@@ -50,6 +50,60 @@ console.log('skills and modules');
   // The passive slot is untouched by any of it.
   check('the passive slot is not an active slot',
     equipInto(two, 'passive', 'ice-cleats').active === 'pulse-laser');
+}
+
+{
+  // **One list, two slots, and the order you pick decides the button** (M39).
+  //
+  // It was two identical grids, one per slot, which Tom called correctly: the
+  // same ten modules drawn twice is a table rather than a choice. `fitActive`
+  // is the rule that replaced it - first pick takes `E`/pad X, second takes
+  // `Q`/pad Y - and it is pure so it can be checked without a browser.
+  const empty = { active: null, active2: null, passive: null };
+
+  const first = fitActive(empty, 'pulse-laser');
+  check('the first pick takes the first slot', first.slot === 'active' && first.equipped.active === 'pulse-laser');
+  const second = fitActive(first.equipped, 'ray-shield');
+  check('the second pick takes the second', second.slot === 'active2' && second.equipped.active2 === 'ray-shield');
+
+  // **A full board refuses and says so**, rather than overwriting a choice
+  // somebody made. Silently replacing the older slot would be a decision the
+  // player did not take - the M16 rule about buttons that do something
+  // unexplained, from the other side.
+  const third = fitActive(second.equipped, 'optical-cloak');
+  check('a third pick is refused while both slots are taken', third.full === true);
+  check('and the refusal changes nothing',
+    third.equipped.active === 'pulse-laser' && third.equipped.active2 === 'ray-shield');
+
+  // Tapping a fitted module takes it off, and frees *its* slot rather than the
+  // first one - so the module you did not touch keeps the button it had.
+  const off = fitActive(second.equipped, 'pulse-laser');
+  check('tapping a fitted module takes it off', off.removed === true && off.equipped.active === null);
+  check('and the other keeps its own slot', off.equipped.active2 === 'ray-shield');
+  // **And the same from the other side**, because removing from slot I cannot
+  // tell "free the slot it is in" apart from "always free slot I" - the
+  // mutation that hard-codes the first slot raised zero against that alone.
+  const offTwo = fitActive(second.equipped, 'ray-shield');
+  check('tapping the second module frees the second slot',
+    offTwo.equipped.active2 === null, JSON.stringify(offTwo.equipped));
+  check('and leaves the first one alone', offTwo.equipped.active === 'pulse-laser');
+
+  const back = fitActive(off.equipped, 'optical-cloak');
+  check('so the freed slot is the one that refills', back.slot === 'active',
+    JSON.stringify(back.equipped));
+
+  // The badge on the tile is `activeSlotOf`, and it has to agree with `fitActive`
+  // or the screen shows one button and the game fires another.
+  check('the screen and the rule agree on slot I', activeSlotOf(back.equipped, 'optical-cloak') === 0);
+  check('and on slot II', activeSlotOf(back.equipped, 'ray-shield') === 1);
+  check('and on a module in neither', activeSlotOf(back.equipped, 'thermal-purge') === -1);
+
+  // Every active can reach either slot - nothing is quietly slot-locked.
+  for (const id of Object.keys(ACTIVE_MODULES)) {
+    const a = fitActive(empty, id);
+    const b = fitActive(a.equipped, id === 'ray-shield' ? 'pulse-laser' : 'ray-shield');
+    check(`${id} can be fitted and reaches a slot`, a.slot === 'active' && b.slot === 'active2');
+  }
 }
 
 

@@ -1106,6 +1106,39 @@ scheduled until the MVP is stable — the spec says the same.
 
 None.
 
+## Done: M39 — one list, pick two
+
+**Tom, on the M37 screen:** *"This is not good design to have the slots twice. you should be able to
+mark the two active in one area. first pick gets x button second y button."*
+
+He is right, and the reason is worth keeping: **the same ten modules drawn twice is a table, not a
+choice.** M37 gave each slot its own grid because that was unambiguous, and unambiguous is not the
+same as good — it doubled the screen to say something a badge says better.
+
+One grid now. The **order you pick decides the button**: first goes on `E` / pad **X**, second on
+`Q` / pad **Y**, and a fitted tile carries that key as a badge, so the thing you press is written on
+the thing you pressed it onto.
+
+- **`fitActive` is the whole rule** — fill the first free slot, or take a module out of the one it is
+  in — pure, in `modules.js`, tested without a browser. `activeSlotOf` is what the screen draws the
+  badge from, so the button shown and the button that fires are one answer.
+- **A full board refuses and says why** (*"Both active slots are taken. Tap one to free it."*) rather
+  than overwriting a choice somebody made. Silently replacing the older slot is a decision the player
+  did not take — the M16 rule from the other side.
+- **Taking a module off frees *its* slot**, not the first one, so the module you did not touch keeps
+  the button it had. The mutation that hard-codes the first slot raised **zero failures** until a
+  check existed that removes from the *second* one: with only slot I under test the two are
+  indistinguishable. Same shape as M35's edge-versus-held trap.
+
+**The keyboard binding for the second slot moved from `x` to `q`.** Pad X is slot *one*, so a panel
+reading "SLOT II — X" beside a pad prompt reading X for slot one is two different X's on one screen.
+`E` and `Q` are adjacent and were already both bound to the module button.
+
+Nothing balance-related moved: both fixtures byte-identical, crossing 641/800, every audit figure
+unchanged.
+
+---
+
 ## Done: M38a — a crash writes itself into the playtest log
 
 Tom's report of the M38 bug read: *"game crashed after shooting the pulse laser"*, with a log that

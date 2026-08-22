@@ -4900,3 +4900,28 @@ one at a time and the pilot presses on a single cue, so this instrument cannot a
 
 `skills-tests.js` 109 → **127**, `enemies-tests.js` 163 → **173**, `settings-tests.js` 220 → **223**,
 `save-tests.js` 83 → **86**.
+
+## M39 — one list, pick two (2026-08-22)
+
+Tom on the M37 loadout screen: *"This is not good design to have the slots twice."* Correct — the
+same ten modules drawn twice is a table, not a choice.
+
+| | M37 | M39 |
+| --- | --- | --- |
+| the screen | two identical grids, one per slot | **one grid** |
+| which button | a heading above each grid | **a badge on the fitted tile** |
+| choosing | pick within a slot | **order of picking decides**: first `E`/X, second `Q`/Y |
+| a third pick | — | refused, with a reason |
+| second-slot keyboard key | `x` | **`q`** — pad X is slot *one*, so `x` was two X's on one screen |
+
+Verified in the game: laser badged `E`, shield badged `Q`, a third pick refused with
+*"Both active slots are taken. Tap one to free it."* and nothing changed, tapping the laser off
+freeing slot I while the shield kept `Q`, and the next pick landing back in slot I.
+
+**One mutation raised zero**: hard-coding the first slot when removing a module. With only a
+slot-I removal under test, "free the slot it is in" and "always free slot I" are the same thing — the
+check had to remove from slot II to tell them apart. Same shape as M35's edge-versus-held trap, which
+also needed a second case before it could fail.
+
+Both fixtures byte-identical, crossing 641/800, every audit figure unchanged.
+`skills-tests.js` 127 → **149**.

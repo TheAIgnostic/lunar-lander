@@ -334,6 +334,29 @@ export function nextBlueprint(unlocked = [], planetId = null) {
  */
 export const ACTIVE_SLOTS = ['active', 'active2'];
 
+/**
+ * **Fit an active into the first free slot, or take it out of the one it is
+ * in.** One list of modules, two slots, and the order you pick decides which
+ * button each one lands on — first pick `E`/X, second `Q`/Y.
+ *
+ * Returns the new loadout plus which slot it went to, or `full: true` and the
+ * loadout unchanged when both are taken. A refusal that says why is the M16
+ * rule; silently replacing whichever slot happened to be older would be a
+ * choice the player did not make.
+ */
+export function fitActive(equipped = {}, id) {
+  const held = ACTIVE_SLOTS.find((k) => equipped[k] === id);
+  if (held) return { equipped: { ...equipped, [held]: null }, slot: null, removed: true };
+  const free = ACTIVE_SLOTS.find((k) => !equipped[k]);
+  if (!free) return { equipped, slot: null, full: true };
+  return { equipped: { ...equipped, [free]: id }, slot: free };
+}
+
+/** Which slot an active is sitting in, or `-1`. Used by the loadout screen. */
+export function activeSlotOf(equipped = {}, id) {
+  return ACTIVE_SLOTS.findIndex((k) => equipped[k] === id);
+}
+
 export function equipInto(equipped = {}, kind, id) {
   const next = { ...equipped, [kind]: equipped[kind] === id ? null : id };
   const other = kind === 'active' ? 'active2' : kind === 'active2' ? 'active' : null;

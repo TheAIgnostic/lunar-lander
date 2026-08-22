@@ -15,8 +15,9 @@ import { settleHaul } from './economy.js';
 import { chapterFor } from './missions.js';
 import { PLANET_ORDER, routeChoices } from './route.js';
 import { flightAssist } from './screens.js';
-import { ACTIVE_MODULES, PASSIVE_MODULES, STARTER_PASSIVES, equipInto } from './modules.js';
+import { ACTIVE_MODULES, PASSIVE_MODULES, STARTER_PASSIVES, equipInto, fitActive, moduleById } from './modules.js';
 import { buySkill, skillFeatures } from './skills.js';
+import { keyLabel } from './input.js';
 import { audio, g, input, meta, saveSettings, setMeta, settings, ship } from './state.js';
 
 // The loop's verbs, injected by main.js at startup.
@@ -82,9 +83,25 @@ export function act(action) {
       return;
     }
     const [, kind, id] = action.split(':');
-    // The rule - fill, clear, or move out of the other active slot - is
-    // `equipInto` in `modules.js`, so it can be tested without a browser.
-    meta.equipped = equipInto(meta.equipped, kind, id);
+    if (kind === 'active') {
+      // **One list, two slots, and the order you pick decides the button.**
+      // `fitActive` is the whole rule and lives in `modules.js` so it can be
+      // tested without a browser. A full board refuses and says so - the M16
+      // rule - rather than silently overwriting a choice somebody made.
+      const r = fitActive(meta.equipped, id);
+      if (r.full) {
+        flow.toast('Both active slots are taken. Tap one to free it.');
+        return;
+      }
+      meta.equipped = r.equipped;
+      const mod = moduleById(id);
+      if (r.slot) {
+        const key = (input.bindings[r.slot === 'active' ? 'ability' : 'ability2'] || [])[0];
+        flow.toast(`${mod.name} fitted — ${keyLabel(key || '?')}`);
+      }
+    } else {
+      meta.equipped = equipInto(meta.equipped, kind, id);
+    }
     Save.saveMeta(meta);
     flow.renderOverlay();
     return;

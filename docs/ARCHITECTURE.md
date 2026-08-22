@@ -748,6 +748,13 @@ loaner replaces. A module may sit in only one slot — picking it in the other *
 two copies of a rack are two independent charge pools, which is not a choice between modules but a
 way to carry six charges of one.
 
+**One list, and the order you pick decides the button.** The two slots were briefly drawn as two
+identical grids, which is unambiguous and bad — the same ten modules twice is a table rather than a
+choice. `fitActive` fills the first free slot or removes a module from the one it holds, `activeSlotOf`
+is what the tile draws its badge from, and both live in `modules.js` so the screen and the runtime
+cannot disagree about which button fires what. A full board **refuses and says why**; overwriting the
+older slot would be a choice the player did not make.
+
 **And `main.js` is unreachable from node, so rules that live in it are asserted from the source.**
 Building the second slot empty, and stepping only the first, both raised **zero failures** in every
 suite — not because nothing checks them but because no node test can execute the game loop.
