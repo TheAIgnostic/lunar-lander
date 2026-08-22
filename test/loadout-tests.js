@@ -5,28 +5,55 @@
 // M11 recorded that every module had "a consumer already in the simulation".
 // That was true of the four passives and false of the four actives - nothing
 // could fire them - and it went unnoticed because the only thing reading them
-// was a *screen*. This suite exists so that cannot happen twice. It asks three
-// separate questions, and the third is the one M11 got wrong:
+// was a *screen*. This suite exists so that cannot happen twice.
 //
 //   1. does the derivation fold the numbers correctly?
-//   2. does every declared effect key have a reader outside its own file?
-//   3. does turning the effect on actually move the simulation?
+//   2. is every effect the game sells actually delivered?
+//   3. does turning the effect on move the simulation?
+//   4. does *fitting* it change a flown mission, on a body it claims to suit?
+//   5. can the player ever get hold of the thing at all?
 //
-// Question 3 is answered by running the physics, never by reading the spec.
+// **Question 2 was a grep until M31, and a grep is not the claim.** It asked
+// whether some file outside the three defining ones mentioned the key. That is
+// how `hazardLead` passed for three milestones - the moment a *comment* named
+// it, the regex called it delivered - and M30f's repair (strip the comments)
+// only closed the narrowest version of the hole. The general form is worse:
+// `beacon` is sold by the Hardened Radar, by Sensors L2 and L3 and by the
+// Sensor Pulse, and was read by **nothing**, while the grep passed it because
+// `abilities.js` contains the string `beacon` reading the *module's own field*.
+// A file mentioning a name is not a file acting on it.
+//
+// So section 2 is a **witness table** now. Every declared key names how it is
+// delivered - `flight`, `economy` or `instrument` - and a measurement that runs
+// the real code and comes back with a number. Turn the key on, measure again,
+// and the number has to move. A key with no witness is a hard failure, and a
+// witness for a key nobody declares is a hard failure the other way, so the
+// table cannot quietly fall behind the content.
+//
+// Section 3 asks the sharper version of the same question for the things a
+// player actually chooses between: **fitting a module or buying a node has to
+// change a flown mission**, on a body the module itself claims to be good for.
+// Section 4 asks the question nobody had asked at all - whether the module can
+// be obtained without god mode. Five of nine could not.
 import { readFileSync, readdirSync } from 'node:fs';
 import { Ship, SHIP, ENVELOPE } from '../src/ship.js';
 import { Terrain } from '../src/terrain.js';
-import { drawTrajectory } from '../src/render.js';
+import { drawTrajectory, drawPadBeacons, beaconGain } from '../src/render.js';
+import { drawEnemies } from '../src/enemydraw.js';
+import { instrumentNoise, instrumentDrift } from '../src/hud.js';
 import { spawnFor } from '../src/spawn.js';
 import { Abilities } from '../src/abilities.js';
 import { EnemyField } from '../src/enemies.js';
-import { applyForces } from '../src/forces.js';
+import { applyForces, HEAT, COLD, ACID, RADIATION } from '../src/forces.js';
 import { deriveFull, deriveLoadout, COMPONENTS, COMPONENT_IDS, purchaseCheck, purchase } from '../src/components.js';
 import { TREES, ALL_NODES, deriveSkills, skillCheck, buySkill, findNode } from '../src/skills.js';
-import { ACTIVE_MODULES, PASSIVE_MODULES, derivePassive } from '../src/modules.js';
+import { ACTIVE_MODULES, PASSIVE_MODULES, derivePassive, allModules, moduleById,
+  nextBlueprint, recommendedFor, STARTER_PASSIVES, MOON_BLUEPRINTS, COMBAT_BLUEPRINT } from '../src/modules.js';
 import { missionReward, settleHaul, freshHaul } from '../src/economy.js';
 import { LANDING, capsFor, evaluateLanding } from '../src/landing.js';
-import { MOON_LEVELS, MARS_LEVELS, EUROPA_LEVELS } from '../src/missions.js';
+import { MOON_LEVELS, MARS_LEVELS, EUROPA_LEVELS, chapterFor } from '../src/missions.js';
+import { PLANET_ORDER, nextPlanet } from '../src/route.js';
+import { flyMission } from './pilot.js';
 
 let pass = 0;
 let fail = 0;
@@ -45,7 +72,7 @@ function rig(loadout, levelIndex = 0, levels = MOON_LEVELS) {
   const ship = new Ship();
   ship.applyLoadout(loadout);
   const start = spawnFor(level, terrain);
-  ship.reset(start.x, start.y, Math.round(level.fuel * (loadout.fuelCapacity || 1)));
+  ship.reset(start.x, start.y, ship.tankFor(level.fuel));
   return { ship, terrain, level };
 }
 
@@ -176,21 +203,34 @@ section('1. the derivation folds correctly');
 }
 
 // ---------------------------------------------------------------------------
-section('2. every declared effect has a reader outside its own file');
+section('2. every declared effect is delivered - measured, not grepped');
+
+// Every key any tree, module or component sells, and where it was sold.
+const DECLARED = new Map();
+{
+  const note = (key, where) => { if (!DECLARED.has(key)) DECLARED.set(key, where); };
+  for (const n of ALL_NODES) for (const k of Object.keys(n.effect(n.ranks))) note(k, `skill ${n.id}`);
+  for (const m of Object.values(PASSIVE_MODULES)) for (const k of Object.keys(m.effect)) note(k, `passive ${m.id}`);
+  for (const m of Object.values(ACTIVE_MODULES)) for (const k of Object.keys(m.effect)) note(k, `active ${m.id}`);
+  for (const c of COMPONENT_IDS) {
+    for (const lvl of COMPONENTS[c].levels) for (const k of Object.keys(lvl.effect || {})) note(k, `component ${c}`);
+  }
+}
+
+// Keys known to be sold and not yet delivered, tracked in ROADMAP_STATUS.md.
+// Anything *not* on this list with no witness is a hard failure - that is the
+// M11 regression guard. Shrinking this list is the point; growing it should
+// take an argument.
+const KNOWN_GAPS = new Set(['hazardLead']);
 
 {
-  // The M11 guard, automated. A key that only its definition file mentions is
-  // a number on a screen, whatever the blurb says about it.
+  // **The old check, kept as the cheap first pass and no longer the claim.**
+  // It asks whether any file outside the three defining ones mentions the key,
+  // with comments stripped (M30f). It is worth keeping because its failure
+  // message is the clearest one - "nothing reads this at all" - but it cannot
+  // tell a reader from an actor, which is how `beacon` sat hollow across a
+  // passive, an active and a component track while this passed it.
   const DEFINING = new Set(['skills.js', 'modules.js', 'components.js']);
-  // **Comments are not readers, and this check counted them.** `hazardLead` is
-  // sold by Sensors L3 and read by nothing; it sat on KNOWN_GAPS and was
-  // reported every run - until a *comment* elsewhere mentioned it by name, at
-  // which point the guard decided it was delivered and went quiet. Two comments
-  // mention it today and neither is code.
-  //
-  // That is the fault this very check exists to catch, occurring inside the
-  // check: a thing that looks like it is working and is not. Strip comments
-  // before asking who reads a key.
   const stripComments = (t) => t
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .split('\n').filter((l) => !/^\s*(\/\/|\*)/.test(l)).join('\n')
@@ -199,30 +239,424 @@ section('2. every declared effect has a reader outside its own file');
     .filter((f) => f.endsWith('.js'))
     .map((f) => ({ f, text: stripComments(readFileSync(new URL(`../src/${f}`, import.meta.url), 'utf8')) }));
 
-  const declared = new Map();
-  const note = (key, where) => { if (!declared.has(key)) declared.set(key, where); };
-  for (const n of ALL_NODES) for (const k of Object.keys(n.effect(n.ranks))) note(k, `skill ${n.id}`);
-  for (const m of Object.values(PASSIVE_MODULES)) for (const k of Object.keys(m.effect)) note(k, `passive ${m.id}`);
-  for (const m of Object.values(ACTIVE_MODULES)) for (const k of Object.keys(m.effect)) note(k, `active ${m.id}`);
-  for (const c of COMPONENT_IDS) {
-    for (const lvl of COMPONENTS[c].levels) for (const k of Object.keys(lvl.effect || {})) note(k, `component ${c}`);
-  }
-
-  // Keys known to be sold and not yet delivered, tracked in ROADMAP_STATUS.md.
-  // Anything *not* on this list that has no reader is a hard failure - that is
-  // the M11 regression guard. Shrinking this list is the point; growing it
-  // should take an argument.
-  const KNOWN_GAPS = new Set(['hazardLead']);
-  const gaps = [];
-  for (const [key, where] of declared) {
+  for (const [key, where] of DECLARED) {
+    if (KNOWN_GAPS.has(key)) continue;
     const readers = src
       .filter(({ f }) => !DEFINING.has(f))
       .filter(({ text }) => new RegExp(`\\b${key}\\b`).test(text))
       .map(({ f }) => f);
-    if (!readers.length && KNOWN_GAPS.has(key)) { gaps.push(`${key} (${where})`); continue; }
-    check(`${key} (${where}) is read by the game`, readers.length > 0,
-      'declared, folded into the spec, and never read by anything');
+    check(`${key} (${where}) is named by the game`, readers.length > 0,
+      'declared, folded into the spec, and never mentioned by anything');
   }
+}
+
+// --- the instruments, run rather than re-encoded ------------------------------
+//
+// A witness that reimplements the rule it is testing agrees with itself and
+// with nothing else. These call the drawing and instrument code the game calls
+// and count what came out of it, which is why `instrumentNoise` was lifted out
+// of `drawHUD` rather than copied here.
+
+/** A canvas that draws nothing and remembers how much ink was asked for. */
+function inkCtx() {
+  const c = { ink: 0, ops: 0, globalAlpha: 1 };
+  const nothing = () => {};
+  for (const k of ['save', 'restore', 'translate', 'scale', 'rotate', 'beginPath', 'closePath',
+    'moveTo', 'lineTo', 'arc', 'arcTo', 'ellipse', 'quadraticCurveTo', 'bezierCurveTo', 'rect',
+    'clip', 'setLineDash', 'setTransform', 'drawImage', 'clearRect']) c[k] = nothing;
+  c.measureText = () => ({ width: 10 });
+  c.createLinearGradient = () => ({ addColorStop: nothing });
+  c.createRadialGradient = () => ({ addColorStop: nothing });
+  // Ink, not calls: the beacon gain moves the *alpha* a marker is drawn at, so
+  // counting strokes alone would read a brighter beacon as an identical one.
+  const mark = () => { c.ops++; c.ink += Math.max(0, Math.min(1, c.globalAlpha)); };
+  for (const k of ['stroke', 'fill', 'fillRect', 'strokeRect', 'fillText', 'strokeText']) c[k] = mark;
+  return c;
+}
+
+const CAM = { x: 1000, y: 400, scale: 1 };
+
+/** A stock spec with exactly one key moved. The purest form of the question. */
+const STOCK = deriveFull({}, deriveSkills({}), {});
+const only = (key, value) => ({ ...STOCK, [key]: value });
+
+/**
+ * Move a *module's own* declared number and run it. Actives read `mod.effect`
+ * rather than the loadout, so this is `only()` for the other half of the board:
+ * change the figure the content declares and the behaviour has to follow, which
+ * is what catches a literal written into `abilities.js` beside the data.
+ */
+function withEffect(id, patch, fn) {
+  const mod = ACTIVE_MODULES[id];
+  const saved = mod.effect;
+  mod.effect = { ...saved, ...patch };
+  try { return fn(); } finally { mod.effect = saved; }
+}
+
+/** Fire an active on a parked lander and hand back the ship it acted on. */
+function fired(id, loadout = STOCK, steps = 1, prep = null) {
+  const ship = new Ship();
+  ship.applyLoadout(loadout);
+  ship.reset(0, 0, 100);
+  if (prep) prep(ship);
+  const a = new Abilities(id, loadout);
+  a.trigger(ship);
+  for (let i = 0; i < steps; i++) a.update(1 / 120, { ship });
+  return { ship, a };
+}
+
+/** Drop a lander onto the deepest pad of a mission at a chosen sink rate. */
+function landAt(loadout, vy, levels = MOON_LEVELS, levelIndex = 0) {
+  const { ship, terrain, level } = rig(loadout, levelIndex, levels);
+  const pad = terrain.pads[terrain.pads.length - 1];
+  ship.x = (pad.x1 + pad.x2) / 2;
+  ship.y = pad.y - 30;
+  ship.vx = 0; ship.vy = vy; ship.angle = 0; ship.spin = 0;
+  const idle = { thrust: false, left: false, right: false, hold: false };
+  let ev = null;
+  let bounce = 0;
+  // **Run to the event, never to `ship.landed`.** The settle window sets
+  // `landed` before the grade is decided, so breaking on it reported PERFECT
+  // for every sink rate and made the gearTier witness agree with itself - the
+  // harness lying rather than the upgrade failing, which is the one thing a
+  // witness must not do.
+  for (let i = 0; i < 900 && !ev; i++) {
+    const e = ship.step(1 / 120, idle, level, terrain, i / 120);
+    bounce = Math.max(bounce, -ship.vy);
+    if (e === 'land' || e === 'crash') ev = e;
+  }
+  const RANK = { PERFECT: 3, GOOD: 2, HARD: 1 };
+  return { ev, bounce, hull: ship.hull,
+    rank: ship.landingResult ? (RANK[ship.landingResult.grade] || 0) : 0 };
+}
+
+/** Slide across ground with a horizontal speed already on the clock. */
+function slide(loadout, levels, levelIndex, vx = 30, steepest = false) {
+  const level = levels[levelIndex];
+  const terrain = new Terrain(level, 4242);
+  const ship = new Ship();
+  ship.applyLoadout(loadout);
+  let x = (terrain.pads[terrain.pads.length - 1].x1 + terrain.pads[terrain.pads.length - 1].x2) / 2;
+  if (steepest) {
+    let best = 0;
+    for (let px = 200; px < level.width - 200; px += 20) {
+      const sl = Math.abs(terrain.slopeAt(px));
+      if (sl > best && sl < 0.30) { best = sl; x = px; }
+    }
+  }
+  ship.reset(x, terrain.heightAt(x) - (steepest ? 18 : 20), level.fuel);
+  ship.vx = vx; ship.vy = steepest ? 4 : 6;
+  const x0 = ship.x;
+  const idle = { thrust: false, left: false, right: false, hold: false };
+  for (let i = 0; i < 900; i++) ship.step(1 / 120, idle, level, terrain, i / 120);
+  return Math.abs(ship.x - x0);
+}
+
+/** Seconds of exposure before a status channel reaches a level. */
+function timeToStatus(loadout, hazards, channel, target = 40, prep = null) {
+  const level = { id: 'status-rig', width: 2000, height: 1400, groundBase: 300, rough: 150,
+    gravity: 25, fuel: 120, pads: [{ mult: 2, width: 200 }], hazards };
+  const ship = new Ship();
+  ship.applyLoadout(loadout);
+  ship.reset(500, 300, level.fuel);
+  if (prep) prep(ship);
+  for (let i = 0; i < 24000; i++) {
+    applyForces(ship, level, i / 120, 1 / 120);
+    if (ship.statusLevels[channel] >= target) return i / 120;
+  }
+  return Infinity;
+}
+
+/** Peak gust the atmosphere puts on the hull, with nothing else in the air. */
+function gustPeak(loadout) {
+  const level = { id: 'gust-rig', width: 2600, height: 1400, groundBase: 300, rough: 150,
+    gravity: 42, fuel: 120, pads: [{ mult: 2, width: 200 }], wind: 0, gust: 60, drag: 0, hazards: [] };
+  const terrain = new Terrain(level, 4242);
+  const ship = new Ship();
+  ship.applyLoadout(loadout);
+  const start = spawnFor(level, terrain);
+  ship.reset(start.x, start.y, ship.tankFor(level.fuel));
+  let peak = 0;
+  for (let i = 0; i < 600; i++) {
+    applyForces(ship, level, i / 120, 1 / 120);
+    peak = Math.max(peak, Math.abs(ship.windNow || 0));
+  }
+  return peak;
+}
+
+/** A machine of a known type, and a lander parked beside it. */
+function machineRig(loadout, gap = 80) {
+  const level = { ...MOON_LEVELS[3], enemyBudget: 2, enemySets: ['sentry-turret'] };
+  const terrain = new Terrain(level, 4242);
+  const ship = new Ship();
+  ship.applyLoadout(loadout);
+  ship.reset(0, 0, level.fuel);
+  const field = new EnemyField(level, terrain, 4242);
+  const e = field.enemies[0];
+  ship.x = e.x + gap; ship.y = e.y - 60;
+  return { ship, field, e, level, terrain };
+}
+
+/**
+ * **The witness table.** One entry per key the game sells: how it is delivered,
+ * and a measurement that runs the real code with the declared number moved.
+ *
+ *   flight      the lander behaves differently
+ *   economy     the run is paid differently
+ *   instrument  the player is shown something different, and the flight is not
+ *               touched at all - which is asserted separately in
+ *               `settings-tests.js` for the whole presentation layer
+ *
+ * `measure(on)` returns a number. The gate runs it twice and requires a move.
+ */
+const WITNESS = {
+  // ---- flight ------------------------------------------------------------
+  burnMain: { how: 'flight', measure: (on) => burn(on ? only('burnMain', 0.5) : STOCK, THRUST).used },
+  burnRcs: { how: 'flight', measure: (on) => burn(on ? only('burnRcs', 0.5) : STOCK, SPIN, 0.25).used },
+  thrust: { how: 'flight', measure: (on) => burn(on ? only('thrust', 1.3) : STOCK, THRUST).vy },
+  rcsAccel: { how: 'flight', measure: (on) => burn(on ? only('rcsAccel', 1.4) : STOCK, SPIN, 0.25).spin },
+  sideThrust: { how: 'flight',
+    measure: (on) => {
+      // DIRECT steering is the only mode with a side thruster in it.
+      const { ship, terrain, level } = rig(on ? only('sideThrust', 1.6) : STOCK);
+      ship.y = terrain.heightAt(ship.x) - 520;
+      const x0 = ship.x;
+      const push = { thrust: false, left: true, right: false, hold: false };
+      const set = { steering: 'direct', invertRotation: false };
+      for (let i = 0; i < 60; i++) ship.step(1 / 120, push, level, terrain, i / 120, set);
+      return +(ship.x - x0).toFixed(6);
+    } },
+  fuelCapacity: { how: 'flight',
+    // Flown, not read off the spec: this is the key `flyMission` was silently
+    // dropping, so every loadout sweep flew the Reserve Tank on a stock tank.
+    measure: (on) => {
+      const level = MOON_LEVELS[0];
+      const terrain = new Terrain(level, 909);
+      return flyMission(level, terrain, { loadout: on ? only('fuelCapacity', 1.5) : STOCK }).fuelLeft;
+    } },
+  // 40 px/s is past what stock legs survive and inside what a full gear set
+  // does, so the witness is the difference between walking away and not.
+  gearTier: { how: 'flight', measure: (on) => landAt(on ? only('gearTier', 1.4) : STOCK, 40).ev },
+  restitution: { how: 'flight', measure: (on) => +landAt(on ? only('restitution', 0.75) : STOCK, 30).bounce.toFixed(4) },
+  slopeGrip: { how: 'flight', measure: (on) => +slide(on ? only('slopeGrip', 1.6) : STOCK, MOON_LEVELS, 2, 26, true).toFixed(3) },
+  gripBonus: { how: 'flight', measure: (on) => +slide(on ? only('gripBonus', 3.2) : STOCK, EUROPA_LEVELS, 0).toFixed(3) },
+  hullMax: { how: 'flight',
+    measure: (on) => {
+      const s = new Ship();
+      s.applyLoadout(on ? only('hullMax', 1.4) : STOCK);
+      s.reset(0, 0, 100);
+      let hits = 0;
+      while (s.hull > 0 && hits < 40) { s.damage(50); hits++; }
+      return hits;
+    } },
+  impactResist: { how: 'flight',
+    // **A hard *arrival*, not a hit.** `impactResist` scales the hull cost of a
+    // HARD or off-pad touchdown and nothing else; `damage()` never reads it.
+    // Section 3 had asserted it with `ship.damage(20)` and `<=`, so it compared
+    // 20 against 20 and passed without ever touching the key - a check that
+    // could not fail, which is what this gate exists to find.
+    measure: (on) => landAt(on ? only('impactResist', 0.5) : STOCK, 30).hull },
+  repairOnLanding: { how: 'flight',
+    measure: (on) => {
+      const { ship, terrain, level } = rig(on ? only('repairOnLanding', 0.2) : STOCK);
+      ship.hull = Math.round(ship.hullMax * 0.5);
+      const pad = terrain.pads[terrain.pads.length - 1];
+      ship.x = (pad.x1 + pad.x2) / 2; ship.y = pad.y - 24; ship.vy = 8;
+      const idle = { thrust: false, left: false, right: false, hold: false };
+      for (let i = 0; i < 900 && !ship.landed; i++) ship.step(1 / 120, idle, level, terrain, i / 120);
+      return +(ship.hull / ship.hullMax).toFixed(4);
+    } },
+  hazardResist: { how: 'flight',
+    measure: (on) => timeToStatus(on ? only('hazardResist', 0.6) : STOCK,
+      [{ type: 'radiation', period: 15, duty: 0.45, rate: 30 }], 'radiation') },
+  disturbanceResist: { how: 'flight', measure: (on) => +gustPeak(on ? only('disturbanceResist', 0.6) : STOCK).toFixed(4) },
+  spinDampBonus: { how: 'flight',
+    measure: (on) => {
+      const { ship, terrain, level } = rig(on ? only('spinDampBonus', 0.985) : STOCK);
+      ship.y = terrain.heightAt(ship.x) - 520;
+      ship.spin = 2.0;
+      const idle = { thrust: false, left: false, right: false, hold: false };
+      const set = { steering: 'pro', invertRotation: false };
+      for (let i = 0; i < 240; i++) ship.step(1 / 120, idle, level, terrain, i / 120, set);
+      return +Math.abs(ship.spin).toFixed(6);
+    } },
+  weaponPower: { how: 'flight',
+    measure: (on) => {
+      const { ship, field, e } = machineRig(on ? only('weaponPower', 2) : STOCK);
+      const a = new Abilities('pulse-laser', on ? only('weaponPower', 2) : STOCK);
+      a.trigger(ship);
+      for (let i = 0; i < 60; i++) a.update(1 / 120, { ship, field: field });
+      return +(e.maxHp - e.hp).toFixed(3);
+    } },
+  shieldCapacity: { how: 'flight',
+    measure: (on) => fired('ray-shield', on ? only('shieldCapacity', 2) : STOCK).ship.shieldHp },
+  shieldHazard: { how: 'flight',
+    // Cold is a channel the shield only covers once Shield Harmonics is bought.
+    measure: (on) => timeToStatus(on ? only('shieldHazard', 1) : STOCK,
+      [{ type: 'cold', coldRate: 30 }], 'cold', 40,
+      (s) => { s.shieldActive = true; s.shieldFactor = 0.15; s.shieldHazard = !!(s.loadout.shieldHazard); }) },
+  energyOnKill: { how: 'flight',
+    measure: (on) => {
+      const lo = on ? only('energyOnKill', 1) : STOCK;
+      const { ship, field } = machineRig(lo);
+      const a = new Abilities('pulse-laser', lo);
+      let returned = 0;
+      for (let i = 0; i < 2400; i++) {
+        if (a.ready) a.trigger(ship);
+        for (const ev of a.update(1 / 120, { ship, field })) if (ev.kind === 'charge-returned') returned++;
+      }
+      return returned;
+    } },
+  // ---- flight, declared by an active module rather than by the loadout ----
+  anchorGrip: { how: 'flight',
+    measure: (on) => withEffect('magnetic-anchor', { anchorGrip: on ? 6 : 1.2 },
+      () => fired('magnetic-anchor').ship.anchor) },
+  purgeStatus: { how: 'flight',
+    measure: (on) => withEffect('thermal-purge', { purgeStatus: on ? 0.9 : 0.1 },
+      () => +fired('thermal-purge', STOCK, 1, (s) => { s.statusLevels.heat = 80; }).ship.statusLevels.heat.toFixed(4)) },
+  hazardShield: { how: 'flight',
+    measure: (on) => withEffect('ray-shield', { hazardShield: on ? 0.05 : 0.95 }, () => {
+      const ship = new Ship();
+      ship.applyLoadout(STOCK);
+      ship.reset(500, 300, 120);
+      const a = new Abilities('ray-shield', STOCK);
+      a.trigger(ship);
+      const level = { id: 'rad-rig', width: 2000, height: 1400, groundBase: 300, rough: 150,
+        gravity: 25, fuel: 120, pads: [{ mult: 2, width: 200 }],
+        hazards: [{ type: 'radiation', period: 15, duty: 0.45, rate: 30 }] };
+      for (let i = 0; i < 24000; i++) {
+        applyForces(ship, level, i / 120, 1 / 120);
+        if (ship.statusLevels.radiation >= 40) return i / 120;
+      }
+      return Infinity;
+    }) },
+  laserDps: { how: 'flight',
+    measure: (on) => withEffect('pulse-laser', { laserDps: on ? 26 : 2 }, () => {
+      const { ship, field, e } = machineRig(STOCK);
+      const a = new Abilities('pulse-laser', STOCK);
+      a.trigger(ship);
+      for (let i = 0; i < 60; i++) a.update(1 / 120, { ship, field });
+      return +(e.maxHp - e.hp).toFixed(3);
+    }) },
+  laserRange: { how: 'flight',
+    // Parked 470 px out: inside the shipped reach, outside the one M30a found.
+    measure: (on) => withEffect('pulse-laser', { laserRange: on ? 520 : 120 }, () => {
+      const { ship, field } = machineRig(STOCK, 470);
+      const a = new Abilities('pulse-laser', STOCK);
+      a.trigger(ship);
+      let frames = 0;
+      for (let i = 0; i < 300; i++) { a.update(1 / 120, { ship, field }); if (a.beam) frames++; }
+      return frames;
+    }) },
+
+  // ---- economy -----------------------------------------------------------
+  salvageBonus: { how: 'economy',
+    measure: (on) => Math.round(missionReward({
+      grade: 'PERFECT', padMultiplier: 3, fuelLeft: 50, maxFuel: 100,
+      rareMaterial: 'Ore', firstClear: true, padTier: 1,
+    }).salvage * (on ? 1.2 : 1)) },
+  cargoRecovery: { how: 'economy',
+    measure: (on) => {
+      const haul = { ...freshHaul(), salvageSafe: 100, salvageCargo: 100, materials: { Ore: 40 } };
+      const got = settleHaul(haul, { completed: false, recovered: on ? 0.5 : 0 });
+      return got.salvage + (got.materials.Ore || 0);
+    } },
+
+  // ---- instrument --------------------------------------------------------
+  predict: { how: 'instrument',
+    measure: (on) => {
+      let points = 0;
+      const ctx = inkCtx();
+      ctx.lineTo = () => { points++; };
+      const { ship, terrain, level } = rig(on ? only('predict', 2) : STOCK);
+      ship.y = terrain.heightAt(ship.x) - 700;
+      ship.vx = 0; ship.vy = 0;
+      drawTrajectory(ctx, ship, level, terrain, { scale: 1 });
+      return points;
+    } },
+  beacon: { how: 'instrument',
+    // The pad marker that shows through the weather. Sold by the Hardened
+    // Radar, by Sensors L2/L3 and by a raised Sensor Pulse; read by nothing at
+    // all until M31, and the grep passed it because `abilities.js` contains the
+    // word while reading the module's own field.
+    measure: (on) => {
+      const level = MARS_LEVELS[0];
+      const terrain = new Terrain(level, 4242);
+      const ship = new Ship();
+      ship.applyLoadout(on ? only('beacon', 1.8) : STOCK);
+      ship.reset(0, 0, 100);
+      const ctx = inkCtx();
+      const cam = { ...CAM, x: (terrain.pads[0].x1 + terrain.pads[0].x2) / 2, y: terrain.pads[0].y };
+      drawPadBeacons(ctx, cam, 1440, 900, terrain, level, 3, 0.4, { beacon: beaconGain(ship) });
+      return +ctx.ink.toFixed(4);
+    } },
+  noiseResist: { how: 'instrument',
+    measure: (on) => {
+      const ship = new Ship();
+      ship.applyLoadout(on ? only('noiseResist', 0.3) : STOCK);
+      ship.reset(0, 0, 100);
+      ship.statusLevels.radiation = 80;
+      ship.env.instrumentError = 0.5;
+      return +(instrumentNoise(ship) + instrumentDrift(ship)).toFixed(6);
+    } },
+  threatWarning: { how: 'instrument',
+    measure: (on) => {
+      const level = { ...MOON_LEVELS[3], enemyBudget: 3, enemySets: ['sentry-turret'] };
+      const terrain = new Terrain(level, 4242);
+      const field = new EnemyField(level, terrain, 4242);
+      const ship = new Ship();
+      ship.applyLoadout(STOCK);
+      ship.reset(0, 0, level.fuel);
+      // Park in reach so the machines lock on, then draw them.
+      const e = field.enemies[0];
+      ship.x = e.x + 120; ship.y = e.y - 80;
+      // Draw on the first frame a machine is *tracking*, which is the only
+      // phase Threat Analysis makes visible. Running a fixed number of steps
+      // and drawing whatever state fell out caught them mid-telegraph, where
+      // both loadouts draw the same line and the witness agrees with itself.
+      let drew = null;
+      for (let i = 0; i < 1200 && !drew; i++) {
+        field.update(1 / 120, i / 120, ship);
+        if (field.enemies.some((m) => m.state === 'track')) {
+          const ctx = inkCtx();
+          drawEnemies(ctx, field, ship, 3, { threatWarning: on });
+          drew = ctx.ops;
+        }
+      }
+      return drew;
+    } },
+  revealVisibility: { how: 'instrument',
+    measure: (on) => withEffect('sensor-pulse', { revealVisibility: on ? 1 : 0.3 },
+      () => +fired('sensor-pulse', STOCK, 1, (s) => { s.env.visibility = 0.2; }).ship.env.visibility.toFixed(4)) },
+};
+
+{
+  // The gate itself, and it fails in both directions: a key with no witness,
+  // and a witness for a key nobody sells.
+  const tally = { flight: 0, economy: 0, instrument: 0 };
+  const gaps = [];
+  for (const [key, where] of DECLARED) {
+    const w = WITNESS[key];
+    if (!w) {
+      if (KNOWN_GAPS.has(key)) { gaps.push(`${key} (${where})`); continue; }
+      check(`${key} (${where}) has a witness`, false, 'sold to the player with nothing to measure');
+      continue;
+    }
+    const off = w.measure(false);
+    const on = w.measure(true);
+    tally[w.how]++;
+    check(`${key} (${where}) is delivered - ${w.how}`, off !== on,
+      `unchanged at ${JSON.stringify(off)} with the declared number moved`);
+  }
+  for (const key of Object.keys(WITNESS)) {
+    check(`the witness for ${key} is for something the game still sells`, DECLARED.has(key),
+      'stale witness - nothing declares this key any more');
+  }
+  for (const key of KNOWN_GAPS) {
+    check(`${key} is on KNOWN_GAPS because nothing delivers it`, !WITNESS[key],
+      'it has a witness now - take it off the list');
+  }
+  console.log(`  ${tally.flight} flight · ${tally.economy} economy · ${tally.instrument} instrument`);
   for (const g of gaps) console.log(`  GAP   ${g} - sold to the player, not yet delivered`);
 }
 
@@ -711,6 +1145,252 @@ section('3. turning it on moves the simulation');
       && !/ship\.envelope/.test(l));
     check(`${f} reads the lander's envelope, not the stock constant`, bare.length === 0,
       bare.map((l) => l.trim()).join(' | ').slice(0, 140));
+  }
+}
+
+
+// ---------------------------------------------------------------------------
+section('4. fitting it changes a flown mission');
+
+/**
+ * Section 2 proves a *key* is read. This proves the **thing a player chooses**
+ * is worth choosing: fit the module, or buy the node, and fly a real chapter
+ * with the real autopilot. If nothing about the flight moves, the choice is
+ * decoration however many keys it declares.
+ *
+ * A module is flown on the first body its own `good` field claims, which makes
+ * the claim testable too: a module recommended for Titan has to do something on
+ * Titan. That is the M30g rule with teeth - the route card is derived from
+ * `good`, so a lie there is a lie on the screen a player picks a run from.
+ */
+const NOT_IN_FLIGHT = {
+  'sensor-pulse': 'clears the weather - what you can see, not where you go',
+  'hardened-radar': 'instruments only, and presentation may never reach the simulation',
+  'salvage-drone': 'changes what a mission pays, not how it is flown',
+  'black-box': 'changes what survives a crash, after the flight is over',
+  'threat-analysis': 'draws the tracking arc; the machines behave identically',
+};
+
+/**
+ * Where a node is worth measuring, and what has to be in the air for it.
+ *
+ * `deep` is the prize route with machines up; `home` is the way to the sanctuary
+ * pad, which the M24 rule keeps outside every engagement range. That distinction
+ * is the whole table: a combat node measured on the way home is measured
+ * somewhere nothing can shoot at it, and reads as inert.
+ */
+const NODE_RIG = {
+  'fuel-mix': { body: 'LUNA', route: 'home' },
+  'reserve-tank': { body: 'LUNA', route: 'home' },
+  'inertial-dampers': { body: 'MARS', route: 'home' },                 // gusts
+  'env-seals': { body: 'EUROPA', route: 'home' },                      // radiation
+  // **Every one of these four was measured, not guessed.** The first pass put
+  // them all on the Moon's deep route and read four of them as inert; a scan of
+  // all ten bodies against both routes found each one a place where it is
+  // visible. What it takes is the thing the node answers actually happening:
+  // a hard enough arrival to cost hull, or a machine close enough to kill.
+  'reinforced-struts': { body: 'VENUS', route: 'home' },               // the wall lands hard
+  'field-patching': { body: 'MARS', route: 'home', enemies: true },    // hull to give back
+  capacitor: { body: 'LUNA', route: 'deep', ability: 'pulse-laser' },
+  'energy-on-kill': { body: 'ENCELADUS', route: 'deep', ability: 'pulse-laser' },
+  // Ganymede's field raises `charge`, which the shield only covers once
+  // Harmonics is bought. On Io - the body the *shield* claims - heat never
+  // reaches its bite point for this pilot, so there is nothing to hold off.
+  'shield-harmonics': { body: 'GANYMEDE', route: 'deep', ability: 'ray-shield' },
+};
+
+const FLIGHT_SEED = 4242;
+
+/**
+ * One chapter, flown mission by mission, reduced to what came out of it.
+ *
+ * **The route is the argument.** Flown at the deep pad with machines up, four
+ * flights in five end as a crash, and a crash is insensitive to almost
+ * everything a module does. Flown to the sanctuary pad, nothing can shoot at
+ * you - the M24 guarantee - so a weapon reads as inert. Neither route measures
+ * everything, and picking the wrong one for a module is how it comes out
+ * looking like decoration.
+ */
+function chapterTrace(body, route, opts) {
+  const chapter = chapterFor(body, FLIGHT_SEED);
+  return chapter.levels.map((level) => {
+    const terrain = new Terrain(level, FLIGHT_SEED ^ (level.id.length * 7919));
+    const r = flyMission(level, terrain, {
+      ...opts,
+      padIndex: route === 'deep' ? 0 : terrain.pads.length - 1,
+      enemySeed: 1,
+      settleSecs: 3,
+    });
+    // **Deliberately not the ability counters.** Carrying `fires/hit` in here
+    // made every active differ from an empty slot for free - a module that
+    // fired and did nothing would have passed, which is the whole fault this
+    // section exists to catch. What is compared is the *flight*.
+    //
+    // Compared at **full precision** and including what the machines did. The
+    // rounded figures are a fixture tolerance rather than the flight: they hid
+    // a purge that halved a cold soak, and they hid a capacitor that killed a
+    // second machine. `kills` and `hitsTaken` are the world's response to the
+    // flight; `fires` and `hit` would be the module reporting on itself, which
+    // is exactly what must not count.
+    const c = r.combat || {};
+    return [r.outcome, r.grade, r.hull, r.carried.nodes, r.slid,
+      c.kills, c.hitsTaken, c.shotsFired,
+      JSON.stringify(r.exact)].join(' ');
+  });
+}
+
+/** Missions of this chapter whose flight came out differently. */
+function movedMissions(body, route, withOpts, withoutOpts) {
+  const before = chapterTrace(body, route, withoutOpts);
+  const after = chapterTrace(body, route, withOpts);
+  return after.filter((m, i) => m !== before[i]).length;
+}
+
+{
+  // A module is flown on **every body its own `good` field claims**, which makes
+  // the claim testable too: the route card is derived from `good` (M30g), so a
+  // lie there is a lie on the screen a player picks a run from.
+  //
+  // The gate is "at least one mission of one claimed body flies differently",
+  // and the per-body count is printed rather than asserted. That is deliberate
+  // and it is the honest limit of this instrument: the Thermal Purge answers a
+  // gauge that **this pilot never fills** - measured, it peaks at 10-15% heat
+  // across the whole Io chapter, because it burns in short bursts and heat
+  // falls between them. A person burns far more. Requiring five of five would
+  // be asserting something about the autopilot, not about the module.
+  const report = [];
+  for (const m of allModules()) {
+    if (NOT_IN_FLIGHT[m.id]) continue;
+    const isActive = !!ACTIVE_MODULES[m.id];
+    // Machines follow the module's own cue rather than a second list: a weapon
+    // and a shield need something shooting, and nothing else does.
+    const combat = isActive && m.cue === 'threat';
+    // **Both routes, every claimed body.** Picking one route from the cue read
+    // four things as inert that are not. The way home is short and quiet, so a
+    // status channel never fills; the deep route is long and hostile, so the
+    // sanctuary guarantee stops being in the way. Which one shows a module
+    // working is a property of the module, and guessing it wrong looks exactly
+    // like the module being decoration.
+    const bodies = m.good.length ? m.good : ['LUNA'];
+    const per = [];
+    let total = 0;
+    for (const body of bodies) {
+      for (const route of ['home', 'deep']) {
+        const base = { loadout: STOCK, enemies: combat };
+        const fit = isActive
+          ? { ...base, ability: m.id }
+          : { loadout: deriveFull({}, deriveSkills({}), derivePassive(m.id)), enemies: combat };
+        const n = movedMissions(body, route, fit, base);
+        total += n;
+        if (n) per.push(`${body}/${route} ${n}/5`);
+      }
+    }
+    if (!per.length) per.push(`${bodies.join(',')} nothing`);
+    check(`${m.name} changes a flown mission on a body it claims`, total > 0,
+      `identical across ${bodies.join(', ')} - fitted, flown and indistinguishable from an empty slot`);
+    report.push(`${m.id} ${per.join(' ')}`);
+  }
+  for (const node of ALL_NODES) {
+    if (NOT_IN_FLIGHT[node.id]) continue;
+    const r = NODE_RIG[node.id];
+    if (!check(`${node.id} says where it is worth measuring`, !!r,
+      'add it to NODE_RIG, or to NOT_IN_FLIGHT with a reason')) continue;
+    const base = { loadout: STOCK, enemies: r.enemies != null ? r.enemies : r.route === 'deep', ability: r.ability };
+    const fit = { ...base, loadout: deriveFull({}, deriveSkills({ [node.id]: node.ranks }), {}) };
+    const n = movedMissions(r.body, r.route, fit, base);
+    check(`${node.name} changes a flown ${r.body} chapter`, n > 0,
+      `all 5 missions came out identical on the ${r.route} route`);
+    report.push(`${node.id} ${r.body} ${n}/5`);
+  }
+  console.log(`  ${report.join(' · ')}`);
+}
+
+{
+  // The exemption list fails the other way too. Something parked there that
+  // *does* move a flight is a stale excuse, and this project has been caught by
+  // a stale list four times now.
+  for (const id of Object.keys(NOT_IN_FLIGHT)) {
+    const mod = moduleById(id);
+    const node = findNode(id);
+    check(`NOT_IN_FLIGHT names something real: ${id}`, !!(mod || node));
+    if (!mod) continue;
+    const isActive = !!ACTIVE_MODULES[id];
+    const combat = isActive && mod.cue === 'threat';
+    const base = { loadout: STOCK, enemies: combat };
+    const fit = isActive
+      ? { ...base, ability: id }
+      : { loadout: deriveFull({}, deriveSkills({}), derivePassive(id)), enemies: combat };
+    let moved = 0;
+    for (const body of (mod.good.length ? mod.good : ['LUNA'])) {
+      for (const route of ['home', 'deep']) moved += movedMissions(body, route, fit, base);
+    }
+    check(`${id} really is off the flight path`, moved === 0,
+      `it moves ${moved} flights - take it off NOT_IN_FLIGHT (${NOT_IN_FLIGHT[id]})`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+section('5. and the player can get hold of it');
+
+/**
+ * **Nobody had asked this question, and the answer was five of nine.**
+ *
+ * Ray Shield, Magnetic Anchor, Thermal Purge, Ice Cleats and Hardened Radar had
+ * no grant path at all: the only unlocks were the two starter passives,
+ * `MOON_BLUEPRINTS[0]` on a first chapter clear, and the weapon for surviving a
+ * mission that shot at you. God mode handed over everything, which is why it
+ * never surfaced in a playtest - and the route card recommended four of the five
+ * by name, on the screen a run is picked from.
+ *
+ * That is M30g one level down. It stopped the card naming modules with no
+ * *implementation*; it never asked whether an implemented module was reachable.
+ *
+ * Simulated here rather than read: walk the ladder the way `main.js` does and
+ * see what a player ends up holding.
+ */
+function unlocksAfterLadder(runs = 1) {
+  let owned = [...STARTER_PASSIVES];
+  for (let run = 0; run < runs; run++) {
+    const cleared = [];
+    let sawFire = false;
+    for (const body of PLANET_ORDER) {
+      cleared.push(body);
+      // The weapon: handed over by surviving a mission that shot at you.
+      if (!sawFire && body !== 'LUNA') { sawFire = true; }
+      if (sawFire && !owned.includes(COMBAT_BLUEPRINT)) owned.push(COMBAT_BLUEPRINT);
+      // The first-chapter guarantee, then the per-body grant.
+      if (!MOON_BLUEPRINTS.some((id) => owned.includes(id))) { owned.push(MOON_BLUEPRINTS[0]); continue; }
+      const bp = nextBlueprint(owned, nextPlanet(cleared));
+      if (bp) owned.push(bp);
+    }
+  }
+  return owned;
+}
+
+{
+  const every = allModules().map((m) => m.id);
+  const one = unlocksAfterLadder(1);
+  check('no blueprint is ever granted twice', new Set(one).size === one.length, one.join());
+  const missing = every.filter((id) => !one.includes(id));
+  // A full ladder is ten grants plus the guarantees; the collection carries
+  // between runs, so anything left over must land on the second.
+  const two = unlocksAfterLadder(2);
+  check('every module is obtainable without god mode',
+    every.every((id) => two.includes(id)),
+    `never granted: ${every.filter((id) => !two.includes(id)).join(', ')}`);
+  console.log(`  ${one.length}/${every.length} modules after one full ladder` +
+    `${missing.length ? `, the rest on the next run: ${missing.join(', ')}` : ''}`);
+
+  // And what the route card recommends has to be something you can hold. This
+  // is the check that was missing when M30g derived the card from `good`.
+  for (const body of PLANET_ORDER) {
+    const rec = recommendedFor(body);
+    for (const slot of ['active', 'passive']) {
+      const id = rec[slot];
+      if (!id) continue;
+      check(`${body} recommends a ${slot} the player can obtain: ${id}`, two.includes(id),
+        'the expedition card names kit with no grant path');
+    }
   }
 }
 

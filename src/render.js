@@ -575,11 +575,34 @@ export function drawTerrain(ctx, cam, W, H, terrain, level, time, opts = {}) {
 }
 
 /**
+ * **How far the beacons cut through the weather.**
+ *
+ * `beacon` is sold by the Hardened Radar passive (1.5) and by Sensors L2/L3
+ * (1.3, 1.6), and `ship.beaconBoost` is what a raised Sensor Pulse writes (2.4).
+ * All four were declared, folded into the spec and **read by nothing**: the two
+ * beacon draws took the obscuration and no gain at all, so three separate
+ * things the game sells for "you can still see the pad" did not exist. It is
+ * `hazardLead` again, on a passive, an active and a component track at once -
+ * and M30f's guard missed it because `abilities.js` contains the *string*
+ * `beacon` while reading the module's own field rather than the loadout's key.
+ *
+ * One rule, both draws: the gain multiplies how much of the marker survives the
+ * haze, so kit bought to see through weather brings the target back earlier and
+ * brighter, and buys nothing at all in clear air - where there was never
+ * anything to see through.
+ */
+export function beaconGain(ship) {
+  return (((ship && ship.loadout && ship.loadout.beacon) || 1)
+    * ((ship && ship.beaconBoost) || 1));
+}
+
+/**
  * Material markers that survive the weather, drawn with the pad beacons after
  * the dust. Mars mission 5 drops visibility to 22%, and a reward you cannot see
  * in the storm is the M14 fault again in a different costume.
  */
-export function drawMaterialBeacons(ctx, cam, W, H, terrain, time, strength, opts = {}) {
+export function drawMaterialBeacons(ctx, cam, W, H, terrain, time, rawStrength, opts = {}) {
+  const strength = rawStrength * (opts.beacon || 1);
   if (strength <= 0.02) return;
   const half = W / 2 / cam.scale;
   ctx.save();
@@ -935,7 +958,8 @@ export function drawRadiation(ctx, cam, W, H, terrain, ship, time) {
 }
 
 /** Pad markers only, drawn above the dust so the target never disappears. */
-export function drawPadBeacons(ctx, cam, W, H, terrain, level, time, strength, opts = {}) {
+export function drawPadBeacons(ctx, cam, W, H, terrain, level, time, rawStrength, opts = {}) {
+  const strength = rawStrength * (opts.beacon || 1);
   if (strength <= 0.02) return;
   const half = W / 2 / cam.scale;
   ctx.save();

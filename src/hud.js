@@ -8,6 +8,31 @@ import { normalizeAngle, ENVELOPE } from './ship.js';
 import { nodeWorth } from './economy.js';
 import { WORLDS } from './levels.js';
 
+/**
+ * **How wrong the instruments are allowed to be, and what a Hardened Radar buys.**
+ *
+ * Two channels, deliberately different: radiation *jitters* the needle (a
+ * buzzing readout reads as broken, and you ignore it) and `falseRadar` *drifts*
+ * it (a smooth, confident lie you have to fly around). `noiseResist` cuts both.
+ *
+ * Lifted out of `drawHUD` in M31 so the gate can **measure** the thing rather
+ * than re-encode the expression beside it. A witness that reimplements the rule
+ * it is testing agrees with itself and with nothing else - which is the shape of
+ * every fault this project has recorded. Neither of these touches the
+ * simulation; that is asserted separately.
+ */
+export function instrumentNoise(ship) {
+  const rad = ship.statusLevels ? ship.statusLevels.radiation : 0;
+  const resist = (ship.loadout && ship.loadout.noiseResist) || 1;
+  return clamp(rad / 100, 0, 1) * (ship.env && ship.env.shielded ? 0.25 : 1) * resist;
+}
+
+/** The signed, swimming lie `falseRadar` puts on the readouts. */
+export function instrumentDrift(ship) {
+  return ((ship.env && ship.env.instrumentError) || 0)
+    * ((ship.loadout && ship.loadout.noiseResist) || 1);
+}
+
 export function drawHUD(ctx, W, H, g) {
   const { ship, terrain, level, score, lives, combo, time, compact } = g;
   const uiScale = (g.settings && g.settings.uiScale) || 1;
@@ -47,8 +72,7 @@ export function drawHUD(ctx, W, H, g) {
   ctx.fillText(`${Math.round(fuelPct * 100)}%`, bx + bw, py + 22 * s);
 
   const rad = ship.statusLevels ? ship.statusLevels.radiation : 0;
-  const resist = (ship.loadout && ship.loadout.noiseResist) || 1;
-  const noise = clamp(rad / 100, 0, 1) * (ship.env && ship.env.shielded ? 0.25 : 1) * resist;
+  const noise = instrumentNoise(ship);
 
   const rowY = py + 66 * s;
   const gap = 26 * s;
@@ -68,8 +92,7 @@ export function drawHUD(ctx, W, H, g) {
   // presentation may never reach the simulation; here, a hazard may never leave
   // presentation. It also means no autopilot in this project can measure it,
   // the same blind spot visibility has had since M24.
-  const lie = (ship.env && ship.env.instrumentError) || 0;
-  const drift = lie * ((ship.loadout && ship.loadout.noiseResist) || 1);
+  const drift = instrumentDrift(ship);
   const fuzz = (v, d = 1) => {
     const shown = v + drift * (d === 0 ? 26 : 3.2);
     return (noise > 0.25

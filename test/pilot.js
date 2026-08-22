@@ -23,6 +23,7 @@ export const PILOT_SETTINGS = { steering: 'pro', invertRotation: false };
 import { spawnFor } from '../src/spawn.js';
 import { EnemyField } from '../src/enemies.js';
 import { Abilities } from '../src/abilities.js';
+import { ACTIVE_MODULES } from '../src/modules.js';
 import { nodeWorth } from '../src/economy.js';
 
 const THRUST = 130;
@@ -222,6 +223,36 @@ export function makeCruise(ship, terrain, level, target) {
  */
 export const FUEL_CELL = 22;      // what one cell on the road is worth
 
+/**
+ * **When the pilot presses an active**, one predicate per `cue` a module
+ * declares. M30a gave the pilot a single policy - fire when the HUD's threat
+ * count says something is aiming at you - which is what a player does with a
+ * weapon or a shield and is nothing like what they do with the rest. Under it,
+ * the Magnetic Anchor and the Thermal Purge were provably identical to an empty
+ * slot across a whole chapter: fitted, flown, and unmeasurable.
+ *
+ * Still the *player's* cue rather than the ceiling. `threat` is unchanged to
+ * the line, so every figure M30a measured over 6,400 flights still describes
+ * this policy. The new ones are the same shape of judgement: reach for the
+ * anchor over the pad, the purge when a gauge starts to bite, the pulse when
+ * you cannot see the ground. Deliberately not "fire when it would help most",
+ * which measures the module rather than the experience.
+ */
+export const ABILITY_CUES = {
+  threat: ({ field }) => !!field && field.engaged > 0,
+  final: ({ ship, terrain, targetMid, halfPad }) =>
+    terrain.heightAt(ship.x) - ship.y < 220
+    && Math.abs(ship.x - targetMid) < halfPad + 140
+    && ship.vy > 0,
+  // 25, not the channel's bite point: a player reaches for the purge when the
+  // gauge has visibly started to move, not once it is already costing them.
+  // (And this pilot is thrifty - measured over the Mercury and Io chapters it
+  // peaks at 10-31% heat, so a threshold set at the bite would never fire.)
+  status: ({ ship }) => Object.values(ship.statusLevels || {}).some((v) => v >= 25),
+  blind: ({ ship }) => (ship.env.visibility != null && ship.env.visibility < 0.5)
+    || (ship.env.darkness || 0) > 0.5,
+};
+
 export function flyMission(level, terrain, opts = {}) {
   const ship = new Ship();
   // `opts.loadout` flies the mission with gear on. Without it there was no way
@@ -230,7 +261,7 @@ export function flyMission(level, terrain, opts = {}) {
   // Gyro Stabilizer.
   if (opts.loadout) ship.applyLoadout(opts.loadout);
   const start = spawnFor(level, terrain);
-  ship.reset(start.x, start.y, level.fuel);
+  ship.reset(start.x, start.y, ship.tankFor(level.fuel));
   ship.vx = start.vx;
   ship.vy = start.vy;
 
@@ -248,6 +279,12 @@ export function flyMission(level, terrain, opts = {}) {
   // difference between those two is the whole measurement: how often does the
   // thing do anything at the moment you would reach for it?
   const abilities = opts.ability ? new Abilities(opts.ability, opts.loadout || {}) : null;
+  // The module says when a player would reach for it; `opts.abilityCue`
+  // overrides that for a sweep that wants to ask a different question.
+  const cueName = opts.abilityCue
+    || (opts.ability && ACTIVE_MODULES[opts.ability] && ACTIVE_MODULES[opts.ability].cue)
+    || 'threat';
+  const abilityCue = ABILITY_CUES[cueName] || ABILITY_CUES.threat;
   const abilityStats = { fires: 0, hit: 0, dry: 0, kills: 0, beamSecs: 0 };
   let burstBeam = false;
   // The road: fly the cells in the order they lie between the entry and the
@@ -281,6 +318,11 @@ export function flyMission(level, terrain, opts = {}) {
   let t = 0;
   let event = null;
   const carried = { material: 0, salvage: 0, nodes: 0 };
+  // How far each status channel actually climbed while the lander was flying.
+  // A channel's *consequence* only starts at its bite point, so "did this
+  // mission ever get hot" is a different question from "what is the gauge
+  // reading now", and the second one was all this returned.
+  const peakStatus = {};
 
   while (t < maxT) {
     control(input);
@@ -314,7 +356,7 @@ export function flyMission(level, terrain, opts = {}) {
       if (ship.hull <= 0 && ship.alive) { ship.alive = false; event = 'crash'; }
     }
     if (abilities) {
-      if (abilities.ready && field && field.engaged > 0) {
+      if (abilities.ready && abilityCue({ ship, field, terrain, level, targetMid, halfPad })) {
         if (abilities.trigger(ship)) { abilityStats.fires++; burstBeam = false; }
       }
       const wasActive = abilities.active;
@@ -328,11 +370,30 @@ export function flyMission(level, terrain, opts = {}) {
         if (burstBeam) abilityStats.hit++; else abilityStats.dry++;
       }
     }
+    for (const [k, v] of Object.entries(ship.statusLevels || {})) {
+      if (!(peakStatus[k] >= v)) peakStatus[k] = v;
+    }
     t += step;
     // Reachability: how near the pad did it get, low and slow enough to land?
     const alt = terrain.heightAt(ship.x) - ship.y;
     if (alt < 130 && Math.abs(ship.vy) < 60) closest = Math.min(closest, Math.abs(ship.x - targetMid));
     if (event === 'land' || event === 'crash') break;
+  }
+
+  // **The pilot stopped measuring at the moment of contact**, and a module about
+  // what happens *after* contact could not be seen at all: Ice Cleats change
+  // nothing this function ever returned, because the slide begins on the step
+  // the loop breaks on. `settleSecs` keeps stepping with the controls released
+  // and reports how far the lander travelled after touching down.
+  //
+  // Opt-in, and off by default, because `simSecs` is a recorded fixture figure
+  // and this must not move it. Nothing else in the return changes either.
+  let slid = null;
+  if (opts.settleSecs && (event === 'land' || event === 'crash')) {
+    const idle = { thrust: false, left: false, right: false, hold: false };
+    const x0 = ship.x;
+    for (let i = 0; i < opts.settleSecs * 120; i++) ship.step(step, idle, level, terrain, t + i * step, settings);
+    slid = +Math.abs(ship.x - x0).toFixed(3);
   }
 
   if (abilities && abilities.active) { if (burstBeam) abilityStats.hit++; else abilityStats.dry++; }
@@ -355,6 +416,16 @@ export function flyMission(level, terrain, opts = {}) {
     ability: abilities ? { ...abilityStats, kills: field ? field.kills : 0,
       spent: abilities.used, left: abilities.charges,
       beamSecs: +abilityStats.beamSecs.toFixed(2) } : null,
+    slid,
+    peakStatus,
+    // **The flight at full precision.** Everything above is rounded for a
+    // fixture or a printed table - `x` to the pixel, `fuelLeft` to a tenth -
+    // and that is a tolerance, not the flight. A cold soak that took attitude
+    // authority from 1.00 to 0.84 moved the lander by less than half a pixel on
+    // the way home, so a rounded trace read the Thermal Purge as doing nothing
+    // at all. Nothing consumes this but the loadout gate; adding it cannot move
+    // a recorded figure.
+    exact: { x: ship.x, y: ship.y, vx: ship.vx, vy: ship.vy, fuel: ship.fuel, spin: ship.spin },
     cellsTaken: terrain.fuelCells.filter((c) => c.taken).length,
     cells: terrain.fuelCells.length,
     carried,

@@ -120,6 +120,12 @@ export class Abilities {
           ship.shieldFactor = 1;
         }
         if (this.id === 'magnetic-anchor') ship.anchor = 1;
+        // The pulse's beacon gain has to fall away with it. It never did,
+        // because until M31 nothing read `beaconBoost` at all - a channel that
+        // is written and never read cannot be seen to leak. Now that the pad
+        // markers cash it in, a fired pulse would otherwise light the beacons
+        // for the rest of the mission on one charge.
+        if (this.id === 'sensor-pulse') { ship.beaconBoost = 1; ship.revealed = false; }
         events.push({ kind: 'ability-off', id: this.id });
         return events;
       }

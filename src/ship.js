@@ -153,6 +153,20 @@ export class Ship {
     return this.spec;
   }
 
+  /**
+   * The tank this lander starts a mission with.
+   *
+   * `level.fuel` is what the mission authors; `fuelCapacity` is what the engine
+   * track and the Reserve Tank skill add on top. That multiply was open-coded
+   * in `main.js` and in the loadout rig, and **missing from `flyMission`** - so
+   * every sweep ever flown with `opts.loadout` flew a bigger engine on a stock
+   * tank, and the one skill whose whole effect is the tank could not move a
+   * flown mission at all. One rule, one implementation, three callers.
+   */
+  tankFor(missionFuel) {
+    return Math.round(missionFuel * ((this.loadout && this.loadout.fuelCapacity) || 1));
+  }
+
   reset(x, y, fuel) {
     this.x = x;
     this.y = y;

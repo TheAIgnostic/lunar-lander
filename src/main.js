@@ -13,10 +13,10 @@ import * as Log from './gamelog.js';
 import { worstVisibility } from './forces.js';
 import { missionReward, addReward, scaleSalvage, settleHaul, nodeWorth, haulOf } from './economy.js';
 
-import { isCheckpoint, isExpeditionComplete, PLANET_ORDER } from './route.js';
+import { isCheckpoint, isExpeditionComplete, nextPlanet, PLANET_ORDER } from './route.js';
 import { deriveFull } from './components.js';
 import { deriveSkills } from './skills.js';
-import { derivePassive, MOON_BLUEPRINTS, COMBAT_BLUEPRINT } from './modules.js';
+import { derivePassive, moduleById, nextBlueprint, MOON_BLUEPRINTS, COMBAT_BLUEPRINT } from './modules.js';
 import { EnemyField } from './enemies.js';
 import { evaluateObjective } from './objectives.js';
 import { Abilities, ABILITY } from './abilities.js';
@@ -132,7 +132,7 @@ function startLevel(index, freshSeed = true) {
   const start = spawnFor(level, g.terrain);
   const sx = start.x;
   const sy = start.y;
-  ship.reset(sx, sy, Math.round(level.fuel * (loadout.fuelCapacity || 1)));
+  ship.reset(sx, sy, ship.tankFor(level.fuel));
   ship.vx = start.vx;
   ship.vy = start.vy;
 
@@ -699,12 +699,14 @@ function onLand() {
         g.lives = Math.min(g.run.maxShuttles, g.lives + 1);
         // Blueprint guarantee: finishing a first chapter hands over an active
         // module, so no route can ever demand gear the player was never offered.
+        let grantedBlueprint = null;
         if (!MOON_BLUEPRINTS.some((id) => meta.unlockedBlueprints.includes(id))) {
           const grant = MOON_BLUEPRINTS[0];
           meta.unlockedBlueprints = [...meta.unlockedBlueprints, grant];
           meta.equipped = { ...meta.equipped, active: meta.equipped.active || grant };
           Save.saveMeta(meta);
           particles.text(ship.x, ship.y - 110, 'BLUEPRINT RECOVERED', '#5ff5ff', 22);
+          grantedBlueprint = grant;
         }
         // Clearing a body that had hostile systems on it hands over the weapon.
         // Surviving them is the requirement, not destroying them - the laser
@@ -720,6 +722,22 @@ function onLand() {
         // is further along than it is.
         g.run.cleared = Array.isArray(g.run.cleared) ? g.run.cleared : [];
         if (!g.run.cleared.includes(body)) g.run.cleared.push(body);
+        // **Every body hands over a blueprint, for the body you are about to
+        // fly.** Until M31 the only unlocks were the two starters, the first
+        // chapter's guarantee and the weapon, so five of nine modules could not
+        // be obtained in a normal game while the route card recommended them by
+        // name - M30g's fault one level deeper. Granted *after* the clear is
+        // recorded, so `nextPlanet` reads the ladder as it now stands, and only
+        // when the guarantee above did not already fire this landing.
+        if (!grantedBlueprint) {
+          const bp = nextBlueprint(meta.unlockedBlueprints, nextPlanet(g.run.cleared));
+          if (bp) {
+            meta.unlockedBlueprints = [...meta.unlockedBlueprints, bp];
+            Save.saveMeta(meta);
+            particles.text(ship.x, ship.y - 110,
+              `${(moduleById(bp) || {}).name || 'MODULE'} BLUEPRINT RECOVERED`, '#5ff5ff', 20);
+          }
+        }
         meta.stats.bodies[body] = (meta.stats.bodies[body] || 0) + 1;
         g.run.shuttles = g.lives;
         persistRun();
@@ -981,8 +999,11 @@ function draw() {
     // The beacons answer to whichever is hiding more of the world, so a dark
     // body gets the same "you always have a target" guarantee a stormy one has.
     const hidden = Math.max(1 - vis, dark);
-    R.drawPadBeacons(ctx, cam, W, H, g.terrain, g.level, g.time, hidden, present);
-    R.drawMaterialBeacons(ctx, cam, W, H, g.terrain, g.time, hidden, present);
+    // Sensors, the Hardened Radar and a raised Sensor Pulse all sell "you can
+    // still see the pad"; `beaconGain` is the one place that is cashed in.
+    const seen = { ...present, beacon: R.beaconGain(ship) };
+    R.drawPadBeacons(ctx, cam, W, H, g.terrain, g.level, g.time, hidden, seen);
+    R.drawMaterialBeacons(ctx, cam, W, H, g.terrain, g.time, hidden, seen);
     // ...and the lock line of anything that kills in one shot. Same rule as the
     // beacons: what you must be able to see comes through the weather.
     drawLethalWarnings(ctx, cam, W, H, g.field, g.time, {
