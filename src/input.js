@@ -31,23 +31,23 @@ export const DEFAULT_KEYS = {
   thrust: [' ', 'w', 'arrowup', 'pad:7', 'pad:0'],
   left: ['a', 'arrowleft', 'axis:0-', 'pad:14'],
   right: ['d', 'arrowright', 'axis:0+', 'pad:15'],
-  // **The descent thrusters** (M41), and they take the controls attitude-hold
-  // used to have. Two arguments, one per device.
+  // **The descent thrusters** (M41), and the two devices want different things.
   //
-  // Keyboard: down is down. It is the only default a new player will guess, and
-  // descent is a *primary* flight control - used constantly, on every body -
-  // where holding the attitude is secondary and has been less needed since
-  // M29c's CLASSIC steering started settling the rotation on release.
+  // Keyboard: **Shift**, and attitude hold keeps S and arrow-down (Tom's call).
+  // The first cut had it the other way on the "down is down" argument, and that
+  // reasoning was worth less than the muscle memory of the two people actually
+  // flying this - S has held the attitude since M0.
   //
-  // Pad: **LT is the mirror of RT**, and both are analog. The descent thrusters
-  // are an axis like the main engine, so a trigger gives a fraction of them for
-  // free through the M30 magnitude contract - which is exactly what the left
-  // trigger is shaped for and what a face button could never give.
+  // Pad: **LT, the mirror of RT**, and the reason is mechanical rather than
+  // mnemonic. Both are analog, the descent thrusters are an axis like the main
+  // engine, and the M30 magnitude contract means a trigger gives a *fraction*
+  // of them for free. A face button can only ever give all or nothing, so the
+  // trigger is the one control on the pad that can express this at all - which
+  // is why attitude hold takes L3 there and keeps its keys here.
   //
-  // Attitude hold moves to `c` and L3. Everything here is rebindable from the
-  // settings screen, so this is a default and not a decision.
-  down: ['s', 'arrowdown', 'pad:6'],
-  hold: ['c', 'pad:10'],
+  // Everything is rebindable from the settings screen, so both are defaults.
+  down: ['shift', 'pad:6'],
+  hold: ['s', 'arrowdown', 'pad:10'],
   // **Two active modules since M37**, and the second is a full control rather
   // than a modifier on the first. Tom's playtest reason: *"you need laser for
   // enemies. everyone picks the laser and keeps it"* - one slot was not a
