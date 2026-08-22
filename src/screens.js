@@ -363,12 +363,6 @@ export function screenHTML(s) {
         </div>
         <div class="setting">
           <div class="setting-name">GOD MODE${meta.godMode ? ' · <b style="color:#ffcf4d">ON</b>' : ''}</div>
-          <p class="body">A test switch. Starts a run at <b>any</b> body on the ladder, tops the pot
-          up to ${formatScore(999999)} salvage, research and cores with every material and every
-          blueprint, and keeps it topped up as you spend. It grants resources and a starting
-          position and nothing else — the flight model, the landing bands, the damage numbers and
-          the terrain are untouched, so what you fly under it is the real game.
-          ${meta.godMode ? '<b style="color:#ffcf4d">Every playtest log exported while this is on says so in its header.</b>' : ''}</p>
           <div class="btns">${btn('god', meta.godMode ? 'TURN GOD MODE OFF' : 'TURN GOD MODE ON')}</div>
         </div>
         <div class="setting">

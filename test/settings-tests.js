@@ -18,6 +18,30 @@ const check = (n, c, e = '') => { if (c) pass++; else { fail++; console.log(`  F
 console.log('settings, bindings and the logbook');
 
 {
+  // **God mode does not lose shuttles**, and it is written as a skipped
+  // decrement rather than a topped-up count so nothing downstream meets a life
+  // total that is not a number. Asserted from the source for the same reason
+  // the CONTROLS labels are: `main.js` is the game loop and needs a browser.
+  //
+  // The crash still happens and is still counted - it is the *expedition* that
+  // cannot end. Checked in both directions so the guard cannot quietly widen
+  // into "god mode skips the crash".
+  const loop = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  const at = loop.indexOf('g.lives--');
+  check('god mode does not spend a shuttle on a crash',
+    /!meta\.godMode[^{]*\{\s*$/.test(loop.slice(0, at).trimEnd()),
+    'the only g.lives-- is not guarded by the flag');
+  check('and the crash is still counted',
+    /meta\.stats\.crashes\+\+/.test(loop.slice(at, at + 200)),
+    'god mode should cost you the lander, just not the expedition');
+  check('there is exactly one place a shuttle is spent',
+    loop.split('g.lives--').length - 1 === 1,
+    'a second decrement will not be guarded');
+}
+
+
+{
   // **Every rebindable action has a name on the CONTROLS screen, and every name
   // is for a real action.**
   //

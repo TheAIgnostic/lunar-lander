@@ -1445,6 +1445,32 @@ deep-route engagement 751/800.
 so a player still buys three to five nodes a run — which is the arithmetic that says fifteen is
 enough. Past the point where every tier is covered, more nodes is variety with a falling return.
 
+### M35a — god mode keeps its three landers, and loses its essay (done, this commit)
+
+Two small things Tom asked for, both about the test switch rather than the game.
+
+**Three landers, always.** A crash under god mode no longer spends a shuttle, so an expedition
+cannot end after three failed attempts and a later body can be tested for as long as it takes.
+Written as a **skipped decrement** rather than a topped-up count — the same shape the Phoenix
+Protocol branch beside it uses — so `g.lives` stays inside `maxShuttles` with no second clamp and
+nothing downstream meets a life total that is not a number. **The crash still happens and is still
+counted**; it is the *expedition* that cannot end.
+
+There is exactly one place a shuttle is spent, and `settings-tests.js` asserts all three halves of
+that from the source: the decrement is guarded by the flag, the crash is still counted next to it,
+and there is still only one decrement to guard. Verified in the running game in both directions —
+five crashes inside a real LUNA expedition leave 3 landers and the run open, and with god mode off
+the same crash takes one.
+
+This widens god mode's blast radius for the first time since it was written, so the claim in
+`docs/ARCHITECTURE.md` moved with it: **resources, a starting position and shuttles that are never
+lost**. The flight model, the landing bands, the damage numbers and the terrain are still untouched.
+
+**And the settings entry is a toggle now.** The paragraph explaining what god mode grants is gone;
+it is a name, an ON marker and one button. Nothing else about it changed — it is still stamped into
+the playtest log's header, still amber on the menu and the expedition screen, and `beginExpedition`
+still re-reads the flag itself.
+
 ### M36 — measure what the loadout and the trees did
 
 See "Next task" at the top of this file.

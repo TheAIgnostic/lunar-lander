@@ -892,7 +892,14 @@ function onCrash() {
     g.phoenixHull = g.loadout.phoenix;
     particles.text(ship.x, ship.y - 90, 'PHOENIX PROTOCOL — SHUTTLE RECOVERED', '#5ff5ff', 20);
     Log.log('phoenix', { shuttles: g.lives });
-  } else {
+  } else if (!meta.godMode) {
+    // **God mode does not lose shuttles.** Written as a skipped decrement
+    // rather than a topped-up count, for the same reason the Phoenix branch
+    // above is: `g.lives` stays inside `maxShuttles` with no second clamp, and
+    // nothing downstream has to learn about a life total that is not a number.
+    // The crash still happens, is still counted, and still costs the hold - it
+    // is the *expedition* that cannot end, which is the point of a test switch
+    // for the later bodies.
     g.lives--;
   }
   meta.stats.crashes++;

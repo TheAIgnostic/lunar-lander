@@ -675,7 +675,7 @@ deadlocks. Three rules hold that floor up, and M28 had to repair two of them:
   ignore it.
 
 **God mode is a test switch with a deliberately narrow blast radius.** Settings → GOD MODE grants
-**resources and a starting position**, and nothing else: 999,999 of every currency, every material
+**resources, a starting position and shuttles that are never lost**, and nothing else: 999,999 of every currency, every material
 (read from `components.js`'s own cost tables, so an M28 re-cut cannot leave one behind), every
 blueprint, every body on the ladder startable, and the hangar window held open so the pot can
 actually be spent. It does not touch the flight model, the landing bands, the damage numbers or the
