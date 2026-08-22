@@ -103,10 +103,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
           if (!window.__game) return 'PENDING';
           var kills = 0;
           try {
-            __act('equip:active:pulse-laser');
+            // **`equip:` toggles, so it is not a way to *set* state.** The app
+            // has its own saved loadout: the first run of this probe equipped
+            // the laser and every run after it un-equipped one that was already
+            // there, and the canary failed with NOKILL on a healthy build. Ask
+            // what is actually in the slot, and only toggle if it is wrong.
             __setSeed(4242);
             __goMission('LUNA', 4);
             __act('launch');
+            if (!__game.slots || !__game.slots[0] || __game.slots[0].id !== 'pulse-laser') {
+              __act('equip:active:pulse-laser');
+              __goMission('LUNA', 4);
+              __act('launch');
+            }
+            if (!__game.slots[0] || __game.slots[0].id !== 'pulse-laser') return 'NOWEAPON';
             var f = __field();
             var e = f.enemies.filter(function (m) { return !m.dead; })[0];
             if (!e) return 'NOTHINGTOSHOOT';
