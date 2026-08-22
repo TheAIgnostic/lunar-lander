@@ -64,10 +64,22 @@ the other 19 modules, landing, banking, the supply stop, or any screen.
 
 ## 3. Leads worth pulling, ranked
 
-Ordered by what I would look at first. **Lead 1 is a verified gap I found while writing this and
-deliberately did not fix**, so you have one worked example of the shape.
+Ordered by what I would look at first.
 
-### 1. The exemption list is only half-checked — *verified, unfixed*
+> **Updated after the first audit (2026-08-22).** That session found **eleven** faults and every one
+> was in a blind spot named in §1 — seven of them in code no node test executes. Leads **1** and
+> **7** are closed; **2** is half-closed; **3, 4, 5, 6** are untouched. The findings are in
+> `test/BASELINE.md` under "The first audit". Read them before starting: they are the best available
+> evidence of what this codebase's bugs actually look like.
+
+### 1. ~~The exemption list is only half-checked~~ — **CLOSED** (`27bd46d`)
+
+The gate's `NOT_IN_FLIGHT` reverse check ran only for modules, so four skill nodes were excused on a
+plausible sentence. It checks nodes too now. *Kept here because it is the worked example: a guard
+that covers half its own list reads exactly like a guard.*
+
+<details>
+<summary>the original finding</summary>
 
 `test/loadout-tests.js` §4 keeps `NOT_IN_FLIGHT`: things excused from "fitting this must change a
 flown mission", each with a written reason. The file claims the list "fails the other way too" — an
@@ -87,9 +99,24 @@ So **the four skill nodes on that list are never verified to be off the flight p
 plausible sentence is trusted forever. That is precisely the fault the list exists to prevent, and
 this project has been caught by a stale list four times.
 
-Worth doing: give nodes the same reverse check, and see whether all four are honest.
+</details>
 
-### 2. Two active modules, measured one at a time
+### 2. Two active modules — **half-closed**, and it paid immediately
+
+The first audit found two slot-interaction bugs here: `sensor-pulse` and `thermal-purge` wrote
+visibility as a **max and a min in slot order**, so which slot a module sat in decided the sky
+(measured 0.35 against 1.0); and `flightAssist` could loan a module already held in the other slot,
+duplicating it. Both fixed, both now asserted.
+
+**What is still not covered**: every *other* pair. Two modules were checked for commutativity because
+two were found to collide. Ten actives make 45 pairs. The ship fields they write are `anchor`,
+`shieldActive`, `shieldFactor`, `airBrake`, `cloaked`, `decoy`, `beaconBoost`, `hull`, `env.visibility`,
+`env.darkness`, `statusLevels.*`. **Any two modules touching the same field are a candidate, and
+order-dependence is the specific shape to look for** — `Math.max` against `Math.min`, last-write-wins,
+a teardown that resets a field the other module is still using.
+
+<details>
+<summary>the original wording of this lead</summary>
 
 M37 gave the lander two active slots. **The loadout gate flies modules individually** and the test
 pilot presses on a single cue, so *nothing has ever measured two actives in one mission* except one
@@ -98,6 +125,8 @@ are unexplored: shared ship fields, teardown order, two modules writing the same
 
 Look at what each active writes on the ship (`anchor`, `shieldActive`, `shieldFactor`, `airBrake`,
 `cloaked`, `decoy`, `beaconBoost`) and ask which pairs collide.
+
+</details>
 
 ### 3. Source-grep assertions are text checks wearing a test's clothes
 
@@ -130,11 +159,49 @@ mission in five. Heat was in this state from M5 until M36 and its passive could 
 until the number moved. These two were deliberately left — no complaint to aim at — but if you are
 looking for "sold and not delivered", this is where the next one would be.
 
-### 7. Save migration
+### 7. ~~Save migration~~ — **CLOSED** (`dd09303`)
 
-`coerceMeta` merges onto defaults. Fields added over 40 milestones; only some have explicit coercion.
-A save from an older build that carries a field of the wrong *type* (not just missing) is not
-obviously handled. `save-tests.js` covers corruption and missing fields, less so wrong types.
+A numeric field of the wrong *type* fell through to `+=` string concatenation. Wrong-typed numerics
+fall back to their defaults now, with tests. `save` went 86 → 92 assertions.
+
+---
+
+## 3a. New leads, from what the first audit actually found
+
+These come from the *shape* of the eleven faults rather than from reading the code cold. They are the
+highest-value place to start.
+
+### A. The M29 name-table fault, occurrence six
+
+A name in content indexing a table in code, failing **silently**. It has now been found five times:
+`BUILDERS` (hazard names), `flightAssist`'s tips, the expedition card's `[object Object]`, the
+CONTROLS screen's `undefined` labels, and the brief's HAZARD row. **Only three files read
+`hazardName`/`hazardSpec`: `route.js`, `forces.js`, `screens.js`** — and the fifth fault was a reader
+that did not use them at all.
+
+So the question is not "are the three readers right", it is **"who else prints or switches on a
+content name without going through the accessor"**. Look for `switch` and `if` chains over mission,
+hazard, module, planet or enemy ids anywhere in `screens.js`, `hud.js` and `render.js`.
+
+### B. Silent-drop channels
+
+`gamelog` drops `undefined` fields silently, so *every* landed entry shipped without its numbers and
+nothing noticed. **Anywhere that serialises an object field-by-field has this hole.** The playtest log
+is the one Tom pastes into chat, so a field that quietly vanishes is a debugging tool lying. Check
+every `Log.log(` call site against the object it reads from.
+
+### C. Anything added in M35–M40 that touches a device or a screen
+
+Three of the eleven faults were **new features that never reached the touch layer** (MODULE II,
+ARREST, OVERDRIVE — all purchasable, none pressable on a touch device). The pattern: a feature is
+built, bound on keyboard and pad, tested headlessly, and the fourth input path is forgotten. Audit
+every action in `DEFAULT_KEYS` against the touch buttons in `index.html`, and against the pad.
+
+### D. Voices that hold a gain
+
+Two audio faults were voices built or held open when they should not have been. `audio.js` has no
+unit suite at all. Every `setTargetAtTime` that ramps *to* a value is a candidate for never being
+ramped back.
 
 ---
 

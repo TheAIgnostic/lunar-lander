@@ -1960,7 +1960,62 @@ Two files carry **39% of the codebase**, and that is the whole finding:
 `test/physics-fixture.js` and `test/flight-fixture.js` untouched, which is a complete verification
 that needs none of the conversation that produced this plan.
 
-### Handover — for an audit
+### Handover — more bug fixing
+
+*Written 2026-08-22, after the first audit session found eleven faults in a published, fully green
+game.*
+
+**The state**: content-complete, published on both remotes at `dd09303`, 2,361 assertions passing,
+both fixtures `unchanged`, crossing 641/800. **And eleven real bugs were sitting in it**, including a
+death debrief that paid the *complement* of your haul and three modules with no touch button.
+
+**So the job is unchanged: keep auditing.** `docs/AUDIT.md` is the file for it, now updated with
+which leads are closed, which remain, and four new ones drawn from the shapes the first audit found.
+The eleven findings themselves are in `test/BASELINE.md` under "The first audit" — read them, because
+they are the best evidence available of what this codebase's bugs actually look like.
+
+**One process note, and it matters more than any single bug.** The audit session fixed everything
+well and recorded it **only in a commit message**. No `ROADMAP_STATUS.md` entry, no `BASELINE.md`
+entry, and `AUDIT.md` still called its first lead "unfixed" after that session had fixed it. The docs
+had drifted from the code inside one session. This project's whole discipline is that the next reader
+finds the reasoning in the docs; a finding that lives in `git log` is a finding the next session
+repeats. **End a session by writing what you found where the next person will look.**
+
+**The first prompt for a new session:**
+
+> Repo: `/Users/tomsteiner/Desktop/lunar-lander` (branch `v2`, published on `main`).
+>
+> Read `docs/AUDIT.md` first, then the **"The first audit"** section of `test/BASELINE.md`, then
+> `docs/ARCHITECTURE.md`. You are hunting bugs in a content-complete, published game — not adding
+> features.
+>
+> Run `./test/run-all.sh 20` before anything. Everything passes. **That is the point**: the last
+> audit found eleven faults in a state exactly this green, and seven of them were in code no node
+> test executes.
+>
+> `AUDIT.md` §3 ranks the surviving leads (3, 4, 5, 6 are untouched; 2 is half-closed) and **§3a adds
+> four drawn from what the last audit actually found** — the name-table fault due for its sixth
+> appearance, silent-drop channels in the playtest log, features that never reached the touch layer,
+> and audio voices that hold a gain. Start there rather than reading cold.
+>
+> Four rules, each paid for. **A passing test is not a test that bites** — `./test/mutate.sh` breaks
+> the code on purpose, and zero failures is the finding. **A rig built from whatever the world
+> generated measures the world, not the rule** — §4 lists the five ways that has happened here.
+> **Measure before you decide.** And **§5 lists things that look wrong and are decisions** — read it
+> before "fixing" one; the enemy roster and the fifteen-node skill board are Tom's calls and
+> `skills-tests.js` fails on a sixth node.
+>
+> Show every fault broken before you fix it: a mutation that fails, or a browser repro. Both fixtures
+> must still print `unchanged`, and the encounter-audit figures should hold at 641/800 and 751/800 —
+> if one moves, say which and why.
+>
+> `./macos/build.sh` is the only check that executes the game loop, and it **revokes access to
+> `~/Desktop` until the app is relaunched** — run it after committing, never before.
+>
+> **End the session by writing what you found into `test/BASELINE.md` and marking the leads you
+> closed in `docs/AUDIT.md`.** The last session did neither and the docs drifted inside a day.
+
+### Handover — for the first audit
 
 *Written 2026-08-22, after the session that ran M35–M40 and shipped the game.*
 

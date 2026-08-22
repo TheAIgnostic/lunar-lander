@@ -4963,3 +4963,45 @@ rather than automation. Nothing above 90 Hz; no `setTimeout` left anywhere in th
 
 Full suite green, both fixtures byte-identical, every audit figure unchanged — audio never touches
 the simulation, which is the rule `gamelog` and the accessibility settings live under.
+
+## The first audit — eleven bugs, none found by the suite (2026-08-22)
+
+Run by a different model against `docs/AUDIT.md`, on a game that was content-complete, published, and
+passing 2,348 assertions. **It found eleven real faults.** Recorded here because the session left them
+only in a commit message (`dd09303`), and a finding that is not in the docs is a finding the next
+session repeats.
+
+**Every one of them was in a blind spot `AUDIT.md` had named**, which is the useful part: the doc's
+central claim — *everything green is not everything covered* — was tested and held.
+
+| fault | where | class |
+| --- | --- | --- |
+| the death debrief paid the **complement** of the last leg's haul: die empty 60/40, die carrying 42/10 → 18/30, carrying more → **0/0** | `economy` | logic, and the exact anti-frustration floor M28 built |
+| `sensor-pulse` and `thermal-purge` wrote visibility as a max and a min **in slot order**, so which slot a module sat in decided the sky (0.35 vs 1.0) | `abilities`/`forces` | **two active slots, never measured together** |
+| the `landed` log entry read `vy`/`vx`/`tilt`/`mult` off fields `landingResult` never had — and gamelog drops `undefined` silently, so **every landed entry shipped without its numbers** | `main` | game loop, browser-only |
+| the brief's HAZARD row knew only cave and wind, so Pluto 3 briefed NONE against declared cold and darkness | `screens` | **the M29 name-table fault in a fifth reader** |
+| MODULE II, ARREST and OVERDRIVE had **no touch buttons** — purchasable and unreachable on a touch device | touch layer | browser-only, and new in M35–M37 |
+| `warn()` read the challenger's hold instead of the standing warning's, so a 0.4 s lock silenced status voices for 3 s | `audio` | no node test listens |
+| `laser()` and `setWind(0)` built their voices just to hold them silent | `audio` | same |
+| numeric save fields of the wrong **type** fell through to `+=` string concatenation | `save` | AUDIT.md lead 7 |
+| `flightAssist` could loan a module already in the other slot, duplicating it | `screens` | two-slot interaction |
+| `launch()` logged the module it *replaced* rather than the loaner actually flown | `main` | browser-only |
+| `__preview` salted string mission ids to `NaN` | `main` | dev hook |
+
+Plus dead code: unused imports across `actions`, `render`, `screens`, `validate`, `debug`, `hud`.
+
+### What it says about the instrument
+
+- **The three blind spots are real and productive.** Of eleven faults, four were in `main.js`/
+  `screens.js`, two in `audio.js`, one in the touch layer — seven in code no node test executes.
+- **New systems are where new bugs are.** The slot-order bug, the loaner duplication and the three
+  missing touch buttons all arrived with M35–M37 and nothing existing covered them.
+- **The M29 name-table fault has now appeared five times.** A name in content indexing a table in
+  code, failing silently. Two readers of `hazardName` remain unaudited.
+- **AUDIT.md lead 1 was real**: the exemption list checked only modules. Closed in `27bd46d`.
+
+### What did not move
+
+Both fixtures byte-identical. Crossing **641/800 (80%)**, deep-route engagement 751/800, at-once
+distribution unchanged. Suites after: `loadout` 359 → **363**, `save` 86 → **92**, `enemies` 179 →
+**181**, `route` 130 → **131**.
