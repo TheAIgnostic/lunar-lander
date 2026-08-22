@@ -1403,10 +1403,14 @@ eleven modules and nine skill nodes built, and the test procedures written down.
 >
 > Then build **M35**, under "Next task". **Four of its nodes land cleanly** now that the Kinetic Bomb
 > Rack and the Repair Nanites exist — Autonomous Repair, Shaped Charges, Ordnance Fabricator,
-> Hardpoint Calibration. **The other six cannot be built as written and need an answer from Tom
+> Hardpoint Calibration. **The other five cannot be built as written and need an answer from Tom
 > each**; they are listed under "Open with Tom" with what each one names that this build does not
 > have. Do not invent the system underneath one to make it fit. If the answers are not in the
-> conversation, build the four, say plainly which six you left and why, and stop there.
+> conversation, build the four, say plainly which five you left and why, and stop there.
+>
+> That accounts for nine of the nine nodes left. Navigation Forecast is **not** among them: its
+> reveal half shipped in M34 and its reroll half is dropped, because a route reroll contradicts the
+> fixed ladder.
 >
 > **Enemies are deferred to v1 — Tom's call — so do not touch the roster.**
 >
