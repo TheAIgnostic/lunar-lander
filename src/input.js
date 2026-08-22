@@ -33,6 +33,11 @@ export const DEFAULT_KEYS = {
   right: ['d', 'arrowright', 'axis:0+', 'pad:15'],
   hold: ['s', 'arrowdown', 'pad:6'],
   ability: ['e', 'q', 'pad:2'],
+  // Emergency Arrest (M34). A rebindable action like any other, which is the
+  // whole point of the M30 binding work: `ACTIONS` is derived from this object,
+  // so the settings screen, the rebind rules, the save format and the pad all
+  // learned about it without being told.
+  arrest: ['f', 'pad:3'],
 };
 
 export const ACTIONS = Object.keys(DEFAULT_KEYS);

@@ -59,11 +59,11 @@ export function nextPlanet(cleared = []) {
  * this array, so there is no index a cleared body can be reached through. The
  * ladder behind the player is a display concern, and it is `ladderTrail`.
  */
-export function routeChoices(cleared = [], sector = 1, seed = 0) {
+export function routeChoices(cleared = [], sector = 1, seed = 0, opts = {}) {
   const next = nextPlanet(cleared);
   if (!next) return [];
   const rng = makeRng((seed ^ (sector * 2654435761)) >>> 0);
-  return [{ ...planetCard(next, sector, rng), cleared: false, isNext: true }];
+  return [{ ...planetCard(next, sector, rng, opts), cleared: false, isNext: true }];
 }
 
 /**
@@ -75,11 +75,11 @@ export function routeChoices(cleared = [], sector = 1, seed = 0) {
  * rng is seeded per position rather than per run, so the withheld hazard is
  * stable across re-renders instead of flickering each time the screen redraws.
  */
-export function ladderPreview(cleared = []) {
+export function ladderPreview(cleared = [], opts = {}) {
   const done = new Set(cleared);
   const next = nextPlanet(cleared);
   return PLANET_ORDER.map((id, i) => ({
-    ...planetCard(id, i + 1, makeRng((i + 1) * 2654435761 >>> 0)),
+    ...planetCard(id, i + 1, makeRng((i + 1) * 2654435761 >>> 0), opts),
     position: i + 1,
     cleared: done.has(id),
     isNext: id === next,
@@ -170,14 +170,20 @@ function intensityOf(machines) {
  * off the chapter the player will actually fly rather than inferred, which is
  * the honest number and spreads because it is measured.
  */
-export function planetCard(planetId, sector, rng) {
+export function planetCard(planetId, sector, rng, opts = {}) {
   const p = PLANETS[planetId];
   // **Names, not specs.** A hazard entry is either a bare string or a tuned
   // object, and this card is presentation: `join(', ')` on the raw list printed
   // `weather: [object Object]` for every body M29 authored with a tuned hazard,
   // which was six of the ten, on the screen a player picks a run from.
   const hazards = p.hazards.map(hazardName);
-  const hidden = hazards.length > 1 && rng() < 0.5 ? hazards.pop() : null;
+  // Navigation Forecast buys the half of the forecast the card holds back. The
+  // *draw* is unchanged either way - the same rng call, so a card with the
+  // skill and one without describe the same body - and only whether the held
+  // name is printed differs. Rolling it differently would make the skill change
+  // what the weather **is**, which is a route card lying in a new direction.
+  let hidden = hazards.length > 1 && rng() < 0.5 ? hazards.pop() : null;
+  if (hidden && opts.reveal) { hazards.push(hidden); hidden = null; }
   const machines = peakMachines(planetId);
   return {
     planet: planetId,

@@ -21,7 +21,7 @@ import { planetIcon } from './planeticons.js';
 import { PLANETS, gravityFor } from './planets.js';
 import { PLANET_ORDER, ladderPreview, ladderTrail, routeChoices } from './route.js';
 import { ENVELOPE, normalizeAngle } from './ship.js';
-import { TREES, TREE_IDS, skillCheck } from './skills.js';
+import { TREES, TREE_IDS, skillCheck, skillFeatures, deriveSkills } from './skills.js';
 import { audio, g, input, meta, saveSource, settings, ship, store } from './state.js';
 import { DEG, formatScore } from './util.js';
 
@@ -86,6 +86,11 @@ function ladderHTML(cleared = []) {
     </li>`;
   }).join('');
   return `<ol class="ladder">${rungs}</ol>`;
+}
+
+/** Whether the cards give up the hazard they hold back — Navigation Forecast. */
+function forecastOpts() {
+  return { reveal: deriveSkills(meta.purchasedSkills).hazardReveal > 0 };
 }
 
 export function screenHTML(s) {
@@ -265,7 +270,9 @@ export function screenHTML(s) {
       // startable. The card still says which body it is, and says *why* it is
       // clickable, so a screen full of live cards is never a mystery.
       const god = !!meta.godMode;
-      const cards = ladderPreview().map((c) => {
+      // Navigation Forecast reads off the *skills*, not the equipped loadout:
+      // the ladder screen is shown before a run, where there is no ship yet.
+      const cards = ladderPreview([], forecastOpts()).map((c) => {
         const open = !c.locked || god;
         return bodyCardHTML(c, {
           tag: c.locked
@@ -461,8 +468,9 @@ export function screenHTML(s) {
 
     case 'outfit': {
       const data = meta.banked.data;
-      // The tree opens once something has actually shot at you.
-      const features = { enemies: meta.stats.threatsSeen > 0 };
+      // The tree opens once something has actually shot at you, and the
+      // capstone once five bodies have been cleared. One rule, one place.
+      const features = skillFeatures(meta);
       const trees = TREE_IDS.map((tid) => {
         const tree = TREES[tid];
         const nodes = tree.nodes.map((n) => {
@@ -584,7 +592,7 @@ export function screenHTML(s) {
       // and the screen says so. What is behind the player is the trail above
       // the card - a record, not a menu.
       const cleared = run.cleared || [];
-      const offers = routeChoices(cleared, run.sector, run.seed);
+      const offers = routeChoices(cleared, run.sector, run.seed, forecastOpts());
       g.routeOffers = offers;
       const cards = offers.map((c, i) => bodyCardHTML(c, {
         tag: `<span class="route-tag next">BODY ${cleared.length + 1} OF ${PLANET_ORDER.length}</span>`,

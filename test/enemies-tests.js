@@ -2,6 +2,7 @@
 //   node test/enemies-tests.js
 import { COMBAT, ENEMY_TYPES, ENEMY_IDS, EnemyField, placeEnemies, lineOfSight, muzzleIsSafe, describeThreats } from '../src/enemies.js';
 import { Abilities, ABILITY } from '../src/abilities.js';
+import { findNode } from '../src/skills.js';
 import { ACTIVE_MODULES } from '../src/modules.js';
 import { validateEnemies, sanctuaryClear } from '../src/validate.js';
 import { Terrain } from '../src/terrain.js';
@@ -770,6 +771,76 @@ function shipAt(x, y, loadout = {}) {
   b.trigger(full);
   for (let i = 0; i < 600; i++) b.update(1 / 120, { ship: full, field: null });
   check('and never push past the hull maximum', full.hull === full.hullMax);
+}
+
+// --- Twin-Link Control, and its reach read against what it has to reach
+//
+// **The Pulse Laser's lesson, applied before shipping instead of after.** M30a
+// found a counterplay whose reach was shorter than everything it existed to
+// answer, and it had sat there through four milestones because nothing tied the
+// number to the thing it was for. The arc's first cut was 260 px - half the
+// beam's own reach, which sounded like "nearby" - and it changed nothing in any
+// flown mission on any body. Measured over 664 machines across every mission,
+// the distance to the nearest *other* machine has a median of 455 px, and a
+// 260 px arc found a second target for 12% of them.
+{
+  check('the arc reaches past the closest two machines can ever stand',
+    ABILITY.twinLinkReach > COMBAT.minSpacing * 1.5,
+    `${ABILITY.twinLinkReach} against a ${COMBAT.minSpacing} px minimum spacing`);
+  check('and never further than the beam that carries it',
+    ABILITY.twinLinkReach < ABILITY.laserRange,
+    `${ABILITY.twinLinkReach} against a ${ABILITY.laserRange} px beam`);
+  check('the node sells the arc the runtime applies',
+    findNode('twin-link').effect(1).twinLink > 0);
+
+  // And it does what it says: a second machine standing near the first takes
+  // damage, a fraction of what the target takes, and one standing beyond the
+  // reach takes none.
+  const lvl = { ...MOON_LEVELS[3], enemyBudget: 2, enemySets: ['sentry-turret'] };
+  const terrain = new Terrain(lvl, 4242);
+  const burn = (gap, link) => {
+    const field = new EnemyField(lvl, terrain, 4242);
+    const [a, b] = field.enemies;
+    b.x = a.x + gap; b.y = a.y;
+    const ship = shipAt(a.x + 90, a.y - 70);
+    const ab = new Abilities('pulse-laser', { twinLink: link });
+    ab.trigger(ship);
+    const hpA = a.hp, hpB = b.hp;
+    for (let i = 0; i < 120; i++) ab.update(1 / 120, { ship, field });
+    return { target: hpA - a.hp, second: hpB - b.hp };
+  };
+  const near = burn(300, 0.35);
+  check('the arc carries to a machine standing near the target', near.second > 0,
+    `${near.second.toFixed(1)}`);
+  check('and carries less than the beam itself deals',
+    near.second > 0 && near.second < near.target * 0.6,
+    `${near.target.toFixed(1)} to the target, ${near.second.toFixed(1)} onward`);
+  const far = burn(ABILITY.twinLinkReach + 120, 0.35);
+  check('and does not reach one standing beyond it', far.second === 0, `${far.second.toFixed(1)}`);
+  check('without the node nothing is carried at all', burn(300, 0).second === 0);
+}
+
+// --- Counter-Battery Logic marks the machine that missed
+{
+  const lvl = { ...MOON_LEVELS[3], enemyBudget: 1, enemySets: ['sentry-turret'] };
+  const terrain = new Terrain(lvl, 1000);
+  const field = new EnemyField(lvl, terrain, 1000);
+  const e = field.enemies[0];
+  const ship = shipAt(e.x + 240, e.y - 100);
+  let painted = false;
+  for (let i = 0; i < 2400 && !painted; i++) {
+    ship.hull = ship.hullMax;                    // survive long enough to be missed
+    field.update(1 / 120, i / 120, ship);
+    if (e.painted > 0) painted = true;
+  }
+  check('a shot that goes past you paints the machine that took it', painted);
+  // **The mark is set whatever the loadout says.** Whether it is *drawn* is the
+  // skill's business; a machine being marked is a fact about the world, and
+  // keeping the two apart is what stops a presentation feature reaching into
+  // the simulation.
+  const before = e.painted;
+  for (let i = 0; i < 240; i++) field.update(1 / 120, i / 120, ship);
+  check('and the mark fades on its own', e.painted < before);
 }
 
 // --- the briefing tells the player what is out there

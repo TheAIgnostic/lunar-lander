@@ -36,11 +36,13 @@
 // Section 4 asks the question nobody had asked at all - whether the module can
 // be obtained without god mode. Five of nine could not.
 import { readFileSync, readdirSync } from 'node:fs';
-import { Ship, SHIP, ENVELOPE } from '../src/ship.js';
+import { Ship, SHIP, ENVELOPE, ARREST } from '../src/ship.js';
 import { Terrain, pickupRadius, PICKUP_RADIUS } from '../src/terrain.js';
 import { drawTrajectory, drawPadBeacons, beaconGain } from '../src/render.js';
 import { drawEnemies } from '../src/enemydraw.js';
 import { instrumentNoise, instrumentDrift } from '../src/hud.js';
+import { newRun } from '../src/save.js';
+import { makeRng } from '../src/util.js';
 import { spawnFor } from '../src/spawn.js';
 import { Abilities } from '../src/abilities.js';
 import { EnemyField } from '../src/enemies.js';
@@ -52,7 +54,7 @@ import { ACTIVE_MODULES, PASSIVE_MODULES, derivePassive, allModules, moduleById,
 import { missionReward, settleHaul, freshHaul } from '../src/economy.js';
 import { LANDING, capsFor, evaluateLanding } from '../src/landing.js';
 import { MOON_LEVELS, MARS_LEVELS, EUROPA_LEVELS, chapterFor } from '../src/missions.js';
-import { PLANET_ORDER, nextPlanet } from '../src/route.js';
+import { PLANET_ORDER, nextPlanet, planetCard } from '../src/route.js';
 import { flyMission, CUES_NEEDING_MACHINES } from './pilot.js';
 
 let pass = 0;
@@ -487,6 +489,70 @@ function dronePull(withFlare) {
   return Math.hypot(e.x - ship.x, e.y - ship.y);
 }
 
+/** Spin built by holding an attitude command of a given magnitude. */
+function spinFrom(loadout, amount, secs = 0.5) {
+  const { ship, terrain, level } = rig(loadout);
+  ship.y = terrain.heightAt(ship.x) - 520;
+  const input = { thrust: 0, left: 0, right: amount, hold: 0 };
+  for (let i = 0; i < secs * 120; i++) ship.step(1 / 120, input, level, terrain, i / 120);
+  return Math.abs(ship.spin);
+}
+
+/** Fall onto a pad and press the arrest control at the last moment. */
+function arrestRun(loadout) {
+  const { ship, terrain, level } = rig(loadout);
+  const pad = terrain.pads[terrain.pads.length - 1];
+  ship.x = (pad.x1 + pad.x2) / 2;
+  ship.y = pad.y - 600;
+  ship.vx = 0; ship.vy = 40; ship.angle = 0;
+  const idle = { thrust: 0, left: 0, right: 0, hold: 0, arrest: 0 };
+  let fired = false;
+  for (let i = 0; i < 900; i++) {
+    // Press it the moment the lander is in the window, and only then.
+    idle.arrest = !fired && ship.canArrest(level, terrain) ? 1 : 0;
+    if (idle.arrest) fired = true;
+    const e = ship.step(1 / 120, idle, level, terrain, i / 120);
+    if (e === 'land' || e === 'crash') break;
+  }
+  return { vy: ship.vy, fuel: ship.fuel, fired };
+}
+
+/** How much ink the counter-battery bracket puts on a painted machine. */
+function paintedInk(on) {
+  const level = { ...MOON_LEVELS[3], enemyBudget: 1, enemySets: ['sentry-turret'] };
+  const terrain = new Terrain(level, 4242);
+  const field = new EnemyField(level, terrain, 4242);
+  const ship = new Ship();
+  ship.applyLoadout(STOCK);
+  ship.reset(0, 0, level.fuel);
+  const e = field.enemies[0];
+  ship.x = e.x + 200; ship.y = e.y - 90;
+  e.painted = 1.2;
+  const ctx = inkCtx();
+  drawEnemies(ctx, field, ship, 3, { counterBattery: on });
+  return ctx.ops;
+}
+
+/** Total damage the beam puts out with a second machine standing near the first. */
+function twinLinkRun(loadout) {
+  const level = { ...MOON_LEVELS[3], enemyBudget: 2, enemySets: ['sentry-turret'] };
+  const terrain = new Terrain(level, 4242);
+  const field = new EnemyField(level, terrain, 4242);
+  const ship = new Ship();
+  ship.applyLoadout(loadout);
+  ship.reset(0, 0, level.fuel);
+  const [a, b] = field.enemies;
+  // Stand the pair close together: the arc is a claim about two machines near
+  // each other, so the geometry is placed rather than found.
+  b.x = a.x + 120; b.y = a.y;
+  ship.x = a.x + 90; ship.y = a.y - 70;
+  const before = a.hp + b.hp;
+  const ab = new Abilities('pulse-laser', loadout);
+  ab.trigger(ship);
+  for (let i = 0; i < 120; i++) ab.update(1 / 120, { ship, field });
+  return before - (a.hp + b.hp);
+}
+
 /** A machine of a known type, and a lander parked beside it. */
 function machineRig(loadout, gap = 80) {
   const level = { ...MOON_LEVELS[3], enemyBudget: 2, enemySets: ['sentry-turret'] };
@@ -583,6 +649,50 @@ const WITNESS = {
       for (let i = 0; i < 240; i++) ship.step(1 / 120, idle, level, terrain, i / 120, set);
       return +Math.abs(ship.spin).toFixed(6);
     } },
+  // ---- M34's nine nodes -----------------------------------------------------
+  rcsFinesse: { how: 'flight',
+    // **A quarter-deflection stick, which is the only input this can touch.**
+    // Measured at 1.0 as well, below, because "keyboard-neutral" is the claim
+    // the node is sold on.
+    measure: (on) => +spinFrom(on ? only('rcsFinesse', 1.7) : STOCK, 0.25).toFixed(6) },
+  arrest: { how: 'flight',
+    measure: (on) => +arrestRun(on ? only('arrest', 1) : STOCK).vy.toFixed(4) },
+  steadyHands: { how: 'instrument',
+    measure: (on) => {
+      const ship = new Ship();
+      ship.applyLoadout(on ? only('steadyHands', 1) : STOCK);
+      ship.reset(0, 0, 100);
+      ship.statusLevels.radiation = 80;
+      ship.env.instrumentError = 0.5;
+      ship.steadySecs = 4;                      // flown still for four seconds
+      return +(instrumentNoise(ship) + instrumentDrift(ship)).toFixed(6);
+    } },
+  hazardReveal: { how: 'instrument',
+    // A body whose card is holding something back, asked both ways. The rng is
+    // pinned, so the *draw* is identical and only the printing differs - which
+    // is the property the implementation rests on.
+    measure: (on) => {
+      // Seed 7 is one where the card *does* hold something back — the roll is
+      // the rng's first value, so a seed either withholds on every eligible
+      // body or on none, and 4242 (this file's usual) is one of the nones.
+      for (const id of PLANET_ORDER) {
+        const plain = planetCard(id, 1, makeRng(7));
+        if (!plain.incomplete) continue;
+        const shown = planetCard(id, 1, makeRng(7), { reveal: on });
+        return `${shown.hazards.join(',')}|${shown.incomplete}`;
+      }
+      return 'no body withholds anything';
+    } },
+  extraShuttle: { how: 'economy',
+    measure: (on) => newRun('LUNA', 1, 3 + (on ? 1 : 0)).maxShuttles },
+  phoenix: { how: 'economy',
+    // What a lost shuttle comes back on. Zero is "it does not come back".
+    measure: (on) => (on ? only('phoenix', 0.35) : STOCK).phoenix || 0 },
+  counterBattery: { how: 'instrument',
+    measure: (on) => paintedInk(on) },
+  twinLink: { how: 'flight',
+    measure: (on) => +twinLinkRun(on ? only('twinLink', 0.35) : STOCK).toFixed(3) },
+
   // ---- M33's ordnance ------------------------------------------------------
   //
   // A rig that drops a charge from a fixed height over a machine and reports
@@ -1070,6 +1180,110 @@ section('3. turning it on moves the simulation');
 }
 
 {
+  // --- RCS Finesse: both burners, and the exactness the "stick only" claim rests on
+  //
+  // Mutation-tested into existence. The first version pushed only the right
+  // burner, so dropping the shaping from the *left* line raised nothing at all -
+  // half a node, silently uncovered.
+  for (const side of ['left', 'right']) {
+    const spin = (loadout, amount) => {
+      const { ship, terrain, level } = rig(loadout);
+      ship.y = terrain.heightAt(ship.x) - 520;
+      const input = { thrust: 0, left: 0, right: 0, hold: 0, [side]: amount };
+      for (let i = 0; i < 60; i++) ship.step(1 / 120, input, level, terrain, i / 120);
+      return Math.abs(ship.spin);
+    };
+    const fine = only('rcsFinesse', 1.7);
+    check(`rcs-finesse feathers a quarter-deflection ${side} burner`,
+      spin(fine, 0.25) < spin(STOCK, 0.25) * 0.8,
+      `${spin(STOCK, 0.25).toFixed(4)} -> ${spin(fine, 0.25).toFixed(4)} rad/s`);
+    // **The claim the node is sold on**: a key answers exactly 1 or exactly 0,
+    // and `Math.pow` returns those unchanged, so a keyboard player is not
+    // holding a worse lander. Asserted to the bit rather than to a tolerance.
+    check(`and leaves a held ${side} key bit-identical`,
+      spin(fine, 1) === spin(STOCK, 1),
+      `${spin(STOCK, 1)} vs ${spin(fine, 1)}`);
+    check(`and an untouched ${side} control at exactly zero`,
+      spin(fine, 0) === spin(STOCK, 0));
+  }
+}
+
+{
+  // --- Emergency Arrest: a refusal in four directions, and one use
+  const rigAt = (loadout, { alt = 120, tilt = 0, vy = 40 } = {}) => {
+    const { ship, terrain, level } = rig(loadout);
+    const pad = terrain.pads[terrain.pads.length - 1];
+    ship.x = (pad.x1 + pad.x2) / 2;
+    ship.y = terrain.heightAt(ship.x) - alt;
+    ship.vx = 0; ship.vy = vy; ship.angle = tilt; ship.spin = 0;
+    return { ship, terrain, level };
+  };
+  const press = (r, secs = 1 / 120) => {
+    const input = { thrust: 0, left: 0, right: 0, hold: 0, arrest: 1 };
+    const before = r.ship.vy;
+    for (let i = 0; i < Math.max(1, secs * 120); i++) {
+      r.ship.step(1 / 120, input, r.level, r.terrain, i / 120);
+    }
+    return before - r.ship.vy;
+  };
+  const armed = only('arrest', 1);
+
+  check('the arrest is granted only when the node is bought',
+    rigAt(armed).ship.arrestLeft === 1 && rigAt(STOCK).ship.arrestLeft === 0);
+
+  const saved = press(rigAt(armed));
+  check('pressing it low, upright and falling takes the sink rate off',
+    saved > ARREST.impulse * 0.8, `${saved.toFixed(1)} px/s`);
+  check('and without the node the same press does nothing',
+    press(rigAt(STOCK)) < 1, `${press(rigAt(STOCK)).toFixed(2)} px/s`);
+
+  // Each condition is its own refusal, and each was a mutation that raised
+  // nothing until it was written down.
+  check('it refuses high up', press(rigAt(armed, { alt: ARREST.maxAltitude + 200 })) < 1);
+  check('it refuses tilted over', press(rigAt(armed, { tilt: ARREST.maxTilt + 0.3 })) < 1);
+  check('it refuses while climbing', press(rigAt(armed, { vy: -20 })) < 1);
+
+  // Once a mission, on the edge of the control - held down it must not drain
+  // the tank, and a second press must be refused.
+  {
+    const r = rigAt(armed);
+    const fuel0 = r.ship.fuel;
+    // **Two charges, deliberately, though the node only ever grants one.**
+    // With one, "fires on the edge" and "fires while held" are indistinguishable
+    // - the charge runs out either way - and the mutation that drops the edge
+    // check raised nothing at all. The rule being tested is one press, one
+    // pulse, and it needs a lander that could physically fire twice.
+    const first = press(r, 1.0);
+    check('the mission carries one charge and it is spent', r.ship.arrestLeft === 0);
+    check('and it costs a real share of the tank',
+      fuel0 - r.ship.fuel > r.ship.maxFuel * ARREST.fuelShare * 0.9
+      && fuel0 - r.ship.fuel < r.ship.maxFuel * ARREST.fuelShare * 1.6,
+      `${(fuel0 - r.ship.fuel).toFixed(1)} of ${r.ship.maxFuel}`);
+    // Release, set it up again, press again: there is nothing left.
+    r.ship.y = r.terrain.heightAt(r.ship.x) - 120;
+    r.ship.vy = 40;
+    r.ship.step(1 / 120, { thrust: 0, left: 0, right: 0, hold: 0, arrest: 0 }, r.level, r.terrain, 2);
+    check('and a second one is refused', press(r) < 1, `first ${first.toFixed(1)} px/s`);
+  }
+  {
+    // **One press, one pulse — and it needs a lander that could fire twice.**
+    // With the single charge the node grants, "fires on the edge" and "fires
+    // while held" are indistinguishable, and the mutation that drops the edge
+    // check raised nothing at all against the block above.
+    // Falling at 200 px/s, so that one pulse leaves the lander still falling
+    // and still inside the window: without an edge check the same press spends
+    // the second charge on the very next substep. At a gentler 40 px/s the
+    // pulse takes the lander out of the window by itself and the two rules are
+    // indistinguishable - which is why the first version of this proved nothing.
+    const r = rigAt(armed, { vy: 200, alt: 190 });
+    r.ship.arrestLeft = 2;
+    press(r, 0.5);
+    check('a held control fires exactly once', r.ship.arrestLeft === 1,
+      `${r.ship.arrestLeft} of 2 charges left after half a second of holding it down`);
+  }
+}
+
+{
   // --- the Aero-Brake Foil's second half: it spoils lift as well as dragging
   //
   // One field, two readers, and the drag witness in section 2 only measures
@@ -1423,6 +1637,14 @@ section('4. fitting it changes a flown mission');
  * `good`, so a lie there is a lie on the screen a player picks a run from.
  */
 const NOT_IN_FLIGHT = {
+  // --- M34. Four of the nine change what you are shown or what a *run* is,
+  // and one changes something a boolean pilot cannot express.
+  'rcs-finesse': 'shapes the fractional half of an analog stick, and a key answers exactly 1 or 0',
+  'nav-forecast': 'prints what an expedition card was holding back',
+  'steady-hands': 'settles the instruments; the lander flies the same either way',
+  'counter-battery': 'marks the machine that missed you',
+  'fourth-shuttle': 'changes how many shuttles a run carries, not how one is flown',
+  'phoenix-protocol': 'gives one back after the flight it was lost on',
   'sensor-pulse': 'clears the weather - what you can see, not where you go',
   'hardened-radar': 'instruments only, and presentation may never reach the simulation',
   'salvage-drone': 'changes what a mission pays, not how it is flown',
@@ -1456,6 +1678,12 @@ const NODE_RIG = {
   // Harmonics is bought. On Io - the body the *shield* claims - heat never
   // reaches its bite point for this pilot, so there is nothing to hold off.
   'shield-harmonics': { body: 'GANYMEDE', route: 'deep', ability: 'ray-shield' },
+  // M34. Europa is ice underfoot, so grip shows there; Venus lands hard enough
+  // for a panic burn to be the difference; the arc needs two machines and a
+  // beam, which is the Moon's deep route.
+  'surface-adaptation': { body: 'EUROPA', route: 'home' },
+  'emergency-arrest': { body: 'VENUS', route: 'home' },
+  'twin-link': { body: 'LUNA', route: 'deep', ability: 'pulse-laser' },
 };
 
 const FLIGHT_SEED = 4242;
@@ -1493,7 +1721,7 @@ function chapterTrace(body, route, opts) {
     // is exactly what must not count.
     const c = r.combat || {};
     return [r.outcome, r.grade, r.hull, r.carried.nodes, r.slid,
-      c.kills, c.hitsTaken, c.shotsFired,
+      c.kills, c.hpLeft, c.hitsTaken, c.shotsFired,
       JSON.stringify(r.exact)].join(' ');
   });
 }

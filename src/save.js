@@ -175,6 +175,11 @@ export function newRun(chapterId, seed, shuttles = 3) {
     missionIndex: 0,
     shuttles,
     maxShuttles: shuttles,
+    // Phoenix Protocol fires once an expedition. Declared here rather than left
+    // to appear on first use, so "what is a run" stays answerable by reading
+    // this - and an older save without it reads `undefined`, which is the same
+    // as unused.
+    phoenixUsed: false,
     seed,
     score: 0,
     combo: 0,

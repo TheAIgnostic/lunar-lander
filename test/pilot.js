@@ -329,7 +329,7 @@ export function flyMission(level, terrain, opts = {}) {
   let legStarted = 0;
   const landing = makeControl(ship, terrain, level, opts);
   let control = road.length ? makeCruise(ship, terrain, level, road[0]) : landing;
-  const input = { thrust: false, left: false, right: false, hold: false };
+  const input = { thrust: false, left: false, right: false, hold: false, arrest: 0 };
   const pads = terrain.pads;
   const target = opts.padIndex != null ? pads[opts.padIndex]
     : pads.reduce((a, b) => (b.mult > a.mult ? b : a), pads[0]);
@@ -379,6 +379,12 @@ export function flyMission(level, terrain, opts = {}) {
       // Hull loss is a crash like any other: the run ends where it ends.
       if (ship.hull <= 0 && ship.alive) { ship.alive = false; event = 'crash'; }
     }
+    // **Emergency Arrest**, pressed the way a player presses it: only when the
+    // lander is in the window the skill defines *and* coming down harder than
+    // the gear can absorb. Inert without the node - `arrestLeft` is 0 unless
+    // the loadout granted it - so every recorded figure in `test/BASELINE.md`
+    // is untouched by this existing.
+    input.arrest = ship.arrestLeft > 0 && ship.vy > 30 && ship.canArrest(level, terrain) ? 1 : 0;
     if (abilities) {
       if (abilities.ready && abilityCue({ ship, field, terrain, level, targetMid, halfPad })) {
         if (abilities.trigger(ship)) { abilityStats.fires++; burstBeam = false; }

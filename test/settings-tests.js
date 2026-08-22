@@ -58,11 +58,20 @@ function makeInput() {
 // --- rebinding
 {
   const input = makeInput();
-  const next = input.rebind('thrust', 'f');
-  check('a control can be moved', next.thrust.includes('f'));
-  input._press('f');
+  // **A free key, derived rather than chosen.** This used to move the booster
+  // onto `f`, which was unbound until M34 gave it to Emergency Arrest - at
+  // which point `rebind` correctly refused (it would have left an action with
+  // no keyboard control) and the test died on a null. The rule it is checking
+  // was right and the constant was stale, which is the failure mode a
+  // hard-coded key has every time the default map grows.
+  const taken = new Set(ACTIONS.flatMap((a) => DEFAULT_KEYS[a]));
+  const free = 'zxcvbnmghjkl'.split('').find((k) => !taken.has(k));
+  check('the default map leaves a key free to rebind onto', !!free);
+  const next = input.rebind('thrust', free);
+  check('a control can be moved', next.thrust.includes(free));
+  input._press(free);
   check('the new key flies', input.thrust === true);
-  input._release('f');
+  input._release(free);
   input._press(' ');
   check('the old key no longer does', input.thrust === false);
   input._release(' ');

@@ -110,6 +110,30 @@ export function envelopeFor(gearTier = 1) {
 /** The stock envelope: what a lander with no gear fitted is graded against. */
 export const ENVELOPE = envelopeFor(1);
 
+/**
+ * **Emergency Arrest**, and every number in it is a refusal rather than a gift.
+ *
+ * The spec asks for "close to upright and just above a safe surface ... a short
+ * high-thrust braking pulse at a large fuel cost". The conditions are what make
+ * it a last resort instead of a second engine: it will not fire high, will not
+ * fire tilted, will not fire while climbing, and it takes a quarter of the tank
+ * whether or not it saves you.
+ *
+ * `impulse` is 92 px/s of vertical speed removed at once - a little over what
+ * the stock gear can absorb at 34 px/s, so it turns a survivable-but-bad
+ * arrival into a good one and a genuine disaster into a merely bad one. It is
+ * deliberately not enough to rescue a full-speed dive.
+ */
+export const ARREST = {
+  maxAltitude: 200,     // px above the ground; higher and there is time to fly
+  maxTilt: 0.42,        // rad from upright - about 24 degrees
+  minSink: 6,           // px/s of descent; it is a brake, not a launcher
+  impulse: 92,          // px/s taken off the sink rate, at once
+  spinBleed: 0.35,      // and most of the rotation with it
+  fuelShare: 0.25,      // of a full tank, spent whether it saves you or not
+  flash: 0.5,           // seconds the HUD and the renderer say it fired
+};
+
 // Hull outline in local space (nose toward -y).
 export const HULL = [
   [0, -15], [8, -9], [11, -1], [11, 5], [-11, 5], [-11, -1], [-8, -9],
@@ -151,6 +175,22 @@ export class Ship {
     this.hullMax = Math.round(100 * (l.hullMax || 1));
     this.loadout = l;
     return this.spec;
+  }
+
+  /**
+   * Whether an Emergency Arrest would fire right now: low, upright, falling.
+   *
+   * Exported as its own question because the HUD has to ask it too - a control
+   * that silently does nothing three times out of four is the Pulse Laser's
+   * dry press again, and the answer to that was to make the state readable
+   * rather than to widen the rule.
+   */
+  canArrest(level, terrain) {
+    if (!this.alive || this.landed) return false;
+    if (this.vy < ARREST.minSink) return false;
+    if (Math.abs(normalizeAngle(this.angle)) > ARREST.maxTilt) return false;
+    const alt = terrain ? terrain.heightAt(this.x) - this.y : Infinity;
+    return alt <= ARREST.maxAltitude;
   }
 
   /**
@@ -222,6 +262,14 @@ export class Ship {
     // next - the same rule `thermalDerate` and `rcsStiffness` live under.
     this.airBrake = 1;
     this.cloaked = false;
+    this.steadySecs = 0;
+    // Emergency Arrest: one per mission, and only when the loadout carries it.
+    // Granted in `reset` rather than in `applyLoadout` because `startLevel`
+    // calls them in that order - granting in the other would be wiped a line
+    // later, and would have looked exactly like the skill not working.
+    this.arrestLeft = ((this.loadout && this.loadout.arrest) || 0) > 0 ? 1 : 0;
+    this.arrestHeld = false;
+    this.arrestFired = 0;
     // What the machines chase instead of you, while a flare burns.
     this.decoy = null;
     this.revealed = false;
@@ -361,6 +409,12 @@ export class Ship {
     this.rcsLeft = leftIn > 0;
     this.rcsRight = rightIn > 0;
     this.holding = amountOf(input, 'hold') > 0 && hasFuel && Math.abs(this.spin) > 0.02;
+    // **How long the lander has been flown still**, for Steady Hands. Counted
+    // here because this is the one place that sees every control magnitude, and
+    // read only by the instruments - it multiplies nothing and moves nothing,
+    // which is what keeps the accessibility rule intact in both directions.
+    const quiet = throttleIn < 0.15 && leftIn < 0.15 && rightIn < 0.15;
+    this.steadySecs = quiet ? (this.steadySecs || 0) + dt : 0;
     this.direct = settings.steering === 'direct';
 
     // Partial throttle costs proportionally less. Holding attitude is a button
@@ -376,6 +430,21 @@ export class Ship {
     // 1 unless a force on this level says otherwise, and both lag the force by
     // one substep (1/120 s) because forces are applied at the end of the step -
     // deterministic, and far below anything a player or a fixture can see.
+    // **RCS Finesse, and why it is provably keyboard-neutral.** Raising a
+    // fractional command to a power greater than 1 shrinks it - a stick an
+    // eighth of the way over commands a smaller pulse than it used to, which is
+    // "smaller minimum side-thruster pulses" exactly. And `Math.pow(1, x)` is
+    // **1** and `Math.pow(0, x)` is **0** for any positive x, so the two values
+    // a key can produce come back untouched by IEEE-754 rather than by
+    // convention. That is what makes "stick only" a testable claim instead of a
+    // note in a blurb: `settings-tests.js` asserts the exactness, and the node
+    // is excused from the flown gate because a boolean pilot cannot see it.
+    //
+    // It shapes only the spin term. `rcsLeft`/`rcsRight` stay derived from the
+    // raw magnitude, so a feathered input still counts as firing a thruster for
+    // the audio, the particles and the fuel.
+    const fine = (this.loadout && this.loadout.rcsFinesse) || 1;
+    const feather = (v) => (fine > 1 ? Math.pow(v, fine) : v);
     const rcsAuth = this.spec.rcsAccel * this.rcsStiffness;
     const sideAuth = this.spec.sideThrust * this.rcsStiffness;
     const mainThrust = this.spec.thrust * this.thermalDerate;
@@ -383,8 +452,8 @@ export class Ship {
     if (this.direct) {
       // DIRECT mode: the side thrusters translate instead of rotating, and the
       // hull holds itself upright. Left means left, with no attitude to fly.
-      if (this.rcsLeft) this.vx -= sideAuth * leftIn * dt;
-      if (this.rcsRight) this.vx += sideAuth * rightIn * dt;
+      if (this.rcsLeft) this.vx -= sideAuth * feather(leftIn) * dt;
+      if (this.rcsRight) this.vx += sideAuth * feather(rightIn) * dt;
       this.spin *= Math.pow(0.86, dt * 60);
       this.angle += this.spin * dt;
       this.angle -= this.angle * Math.min(1, dt * 7);   // ease back to level
@@ -392,8 +461,8 @@ export class Ship {
     } else {
       // CLASSIC mode: side burners are attitude control.
       const dir = settings.invertRotation ? -1 : 1;
-      if (this.rcsLeft) this.spin -= rcsAuth * dir * leftIn * dt;
-      if (this.rcsRight) this.spin += rcsAuth * dir * rightIn * dt;
+      if (this.rcsLeft) this.spin -= rcsAuth * dir * feather(leftIn) * dt;
+      if (this.rcsRight) this.spin += rcsAuth * dir * feather(rightIn) * dt;
       if (this.holding) {
         const damp = Math.sign(this.spin) * Math.min(Math.abs(this.spin), 6 * dt);
         this.spin -= damp;
@@ -426,6 +495,27 @@ export class Ship {
       this.vx += this.noseX * mainThrust * throttleIn * dt;
       this.vy += this.noseY * mainThrust * throttleIn * dt;
     }
+    // **Emergency Arrest.** One panic burn a mission, and it is deliberately
+    // hard to reach for: close to upright, low, actually falling, and it costs
+    // a quarter of a full tank. It is not a better engine - it is the thing you
+    // press when the alternative is a crash, and having pressed it you have
+    // less fuel to fly the rest of the mission with.
+    //
+    // Fired on the **edge** of the control, like the ability button: held down
+    // it must not drain the tank, and a player who mashes it should get one
+    // pulse rather than a continuous burn.
+    const arrestIn = amountOf(input, 'arrest') > 0;
+    const arrestEdge = arrestIn && !this.arrestHeld;
+    this.arrestHeld = arrestIn;
+    if (this.arrestFired > 0) this.arrestFired = Math.max(0, this.arrestFired - dt);
+    if (arrestEdge && this.arrestLeft > 0 && this.canArrest(level, terrain)) {
+      this.arrestLeft--;
+      this.arrestFired = ARREST.flash;
+      this.vy -= ARREST.impulse;
+      this.spin *= ARREST.spinBleed;
+      this.fuel = Math.max(0, this.fuel - this.maxFuel * ARREST.fuelShare);
+    }
+
     this.vy += level.gravity * dt;
 
     applyForces(this, level, t, dt, terrain);

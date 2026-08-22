@@ -16,7 +16,7 @@ import { chapterFor } from './missions.js';
 import { PLANET_ORDER, routeChoices } from './route.js';
 import { flightAssist } from './screens.js';
 import { ACTIVE_MODULES, PASSIVE_MODULES, STARTER_PASSIVES } from './modules.js';
-import { buySkill } from './skills.js';
+import { buySkill, skillFeatures } from './skills.js';
 import { audio, g, input, meta, saveSettings, setMeta, settings, ship } from './state.js';
 
 // The loop's verbs, injected by main.js at startup.
@@ -65,7 +65,7 @@ export function act(action) {
       return;
     }
     const res = buySkill(action.slice(6), meta.purchasedSkills, meta.banked.data,
-      { enemies: meta.stats.threatsSeen > 0 });
+      skillFeatures(meta));
     if (res) {
       meta.purchasedSkills = res.purchased;
       meta.banked.data = res.researchData;

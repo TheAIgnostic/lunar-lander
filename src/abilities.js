@@ -27,6 +27,21 @@ export const ABILITY = {
   laserDps: 26,
   shieldPool: 26,       // damage a raised shield absorbs before it collapses
   purgeBlind: 0.35,     // how far visibility drops while the vents are open
+  // How far the Twin-Link arc reaches from the machine it is already burning.
+  //
+  // **Set from a measurement, the way `laserRange` had to be after M30a.** The
+  // first cut was 260 - half the beam's own reach, which sounded like "nearby"
+  // and was not: measured over 664 machines across every mission, the distance
+  // to the *nearest* other machine has a median of 455 px, and a 260 px arc
+  // finds a second target for only **12%** of them. It changed nothing in any
+  // flown mission on any body, which is how the number was caught.
+  //
+  // 460 is the median. It chains about half the time, which is the spec's "can
+  // chain to a nearby machine" rather than "always hits two" - and it stays
+  // well inside the beam's own 520 px reach, so the arc can never find
+  // something the laser could not simply have targeted instead. Both bounds are
+  // asserted in `enemies-tests.js` against the constants they answer.
+  twinLinkReach: 460,
 };
 
 /**
@@ -49,6 +64,7 @@ export class Abilities {
     this.loadout = loadout;
     this.target = null;      // what the laser is burning, for the renderer
     this.beam = null;
+    this.arc = null;         // and where Twin-Link carried it on to
     // **Ordnance outlives the module that released it.** A bomb in the air and
     // a flare on the ground are world objects, so they are stepped whether or
     // not the module is still `active` - the rack is empty the instant you
@@ -150,6 +166,7 @@ export class Abilities {
         this.cooldown = this.cooldownLength;
         this.target = null;
         this.beam = null;
+        this.arc = null;
         if (this.id === 'ray-shield') {
           ship.shieldActive = false;
           ship.shieldHp = 0;
@@ -236,6 +253,7 @@ export class Abilities {
         // without turning the lander into a gunship.
         this.beam = null;
         this.target = null;
+        this.arc = null;
         if (!field) break;
         const range = (this.mod.effect.laserRange || ABILITY.laserRange);
         const t = field.target(ship, range);
@@ -244,6 +262,27 @@ export class Abilities {
         this.beam = { x1: ship.x, y1: ship.y, x2: t.x, y2: t.y };
         const dps = (this.mod.effect.laserDps || ABILITY.laserDps) * (this.loadout.weaponPower || 1);
         const reward = field.damageEnemy(t, dps * dt);
+        // Twin-Link Control. The arc is found from the *target* rather than
+        // from the lander, because what the skill describes is the beam jumping
+        // between two machines that are near each other - not the weapon
+        // acquiring a second one of its own.
+        const link = this.loadout.twinLink || 0;
+        if (link > 0) {
+          let second = null;
+          let best = ABILITY.twinLinkReach;
+          for (const other of field.enemies) {
+            if (other === t || other.dead) continue;
+            const d = Math.hypot(other.x - t.x, other.y - t.y);
+            if (d < best) { best = d; second = other; }
+          }
+          if (second) {
+            this.arc = { x1: t.x, y1: t.y, x2: second.x, y2: second.y };
+            const chained = field.damageEnemy(second, dps * link * dt);
+            if (chained) events.push({ kind: 'kill', enemy: second, reward: chained, x: second.x, y: second.y });
+          } else {
+            this.arc = null;
+          }
+        }
         if (reward) {
           events.push({ kind: 'kill', enemy: t, reward, x: t.x, y: t.y });
           // Energy on Kill returns the charge, so clearing a threat pays for

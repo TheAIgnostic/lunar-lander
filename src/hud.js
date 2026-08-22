@@ -7,6 +7,7 @@ import { clamp, TAU } from './util.js';
 import { normalizeAngle, ENVELOPE } from './ship.js';
 import { nodeWorth } from './economy.js';
 import { WORLDS } from './levels.js';
+import { keyLabel } from './input.js';
 
 /**
  * **How wrong the instruments are allowed to be, and what a Hardened Radar buys.**
@@ -21,16 +22,26 @@ import { WORLDS } from './levels.js';
  * every fault this project has recorded. Neither of these touches the
  * simulation; that is asserted separately.
  */
+export const STEADY = { after: 2, noise: 0.3 };
+
+/** Has the lander been flown still long enough for Steady Hands to settle it? */
+export function steadyNow(ship) {
+  return ((ship.loadout && ship.loadout.steadyHands) || 0) > 0
+    && (ship.steadySecs || 0) >= STEADY.after;
+}
+
 export function instrumentNoise(ship) {
   const rad = ship.statusLevels ? ship.statusLevels.radiation : 0;
   const resist = (ship.loadout && ship.loadout.noiseResist) || 1;
-  return clamp(rad / 100, 0, 1) * (ship.env && ship.env.shielded ? 0.25 : 1) * resist;
+  return clamp(rad / 100, 0, 1) * (ship.env && ship.env.shielded ? 0.25 : 1) * resist
+    * (steadyNow(ship) ? STEADY.noise : 1);
 }
 
 /** The signed, swimming lie `falseRadar` puts on the readouts. */
 export function instrumentDrift(ship) {
   return ((ship.env && ship.env.instrumentError) || 0)
-    * ((ship.loadout && ship.loadout.noiseResist) || 1);
+    * ((ship.loadout && ship.loadout.noiseResist) || 1)
+    * (steadyNow(ship) ? STEADY.noise : 1);
 }
 
 export function drawHUD(ctx, W, H, g) {
@@ -210,6 +221,7 @@ export function drawHUD(ctx, W, H, g) {
   // ---- threats, and the module that answers them
   if (threats) drawThreatPanel(ctx, W, H, g, s);
   if (g.abilities && g.abilities.equipped) drawAbilityPanel(ctx, W, H, g, s);
+  if (ship.arrestLeft > 0 || ship.arrestFired > 0) drawArrestCue(ctx, W, H, g, s);
 
   // ---- off-screen pad chevrons
   drawPadPointers(ctx, W, H, g);
@@ -393,6 +405,41 @@ function drawThreatPanel(ctx, W, H, g, s) {
 }
 
 /** The equipped active: what it is, how many charges are left, and its state. */
+/**
+ * **Emergency Arrest, and whether it would fire right now.**
+ *
+ * A control that silently refuses three presses in four is the Pulse Laser's
+ * dry press again (M30a), and the answer to that was to make the state
+ * readable rather than to loosen the rule. So the cue is dim while the lander
+ * is too high, too tilted or still climbing, and lights the moment all three
+ * conditions are met — which is also the moment a player would think of it.
+ *
+ * It reads `ship.canArrest`, the same question `ship.step` asks, rather than
+ * repeating the three conditions here: one rule, one implementation.
+ */
+function drawArrestCue(ctx, W, H, g, s) {
+  const { ship, terrain, level } = g;
+  const ready = ship.arrestLeft > 0 && ship.canArrest(level, terrain);
+  const fired = ship.arrestFired > 0;
+  const w = 118 * s;
+  const h = 26 * s;
+  const x = 16;
+  const y = H - h - 16 - (g.abilities && g.abilities.equipped ? 58 * s : 0);
+  panel(ctx, x, y, w, h, fired ? 'rgba(255,179,71,0.6)'
+    : ready ? 'rgba(255,179,71,0.45)' : 'rgba(120,140,160,0.22)');
+  ctx.font = `700 ${10 * s}px ${FONT}`;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = fired ? '#fff2c4' : ready ? AMBER : 'rgba(150,168,185,0.6)';
+  ctx.fillText(fired ? 'ARREST FIRED' : 'ARREST', x + 12, y + 17 * s);
+  if (!fired) {
+    ctx.textAlign = 'right';
+    ctx.font = `600 ${9 * s}px ${FONT}`;
+    ctx.fillStyle = ready ? 'rgba(255,179,71,0.8)' : 'rgba(150,168,185,0.45)';
+    ctx.fillText(ready ? keyLabel(g.arrestKey || 'f') : '—', x + w - 12, y + 17 * s);
+  }
+  ctx.textAlign = 'left';
+}
+
 function drawAbilityPanel(ctx, W, H, g, s) {
   const a = g.abilities.readout();
   const w = 210 * s;

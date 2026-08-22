@@ -133,6 +133,12 @@ function startLevel(index, freshSeed = true) {
   const sx = start.x;
   const sy = start.y;
   ship.reset(sx, sy, ship.tankFor(level.fuel));
+  // A shuttle recovered by Phoenix Protocol flies the next mission on what the
+  // node promised, not on a full hull.
+  if (g.phoenixHull) {
+    ship.hull = Math.max(1, Math.round(ship.hullMax * g.phoenixHull));
+    g.phoenixHull = 0;
+  }
   ship.vx = start.vx;
   ship.vy = start.vy;
 
@@ -164,7 +170,11 @@ function beginExpedition(startId = null) {
   const wanted = meta.godMode && startId && PLANET_ORDER.includes(startId) ? startId : PLANET_ORDER[0];
   const position = PLANET_ORDER.indexOf(wanted);
   const seed = g.forcedSeed != null ? g.forcedSeed : (Math.random() * 1e9) | 0;
-  g.run = Save.newRun(wanted, seed);
+  // Fourth Shuttle. Read from the skills at the moment the expedition is
+  // created, which is the only moment it can matter - `maxShuttles` is what
+  // every later "+1 per body cleared" is capped against.
+  const perks = deriveSkills(meta.purchasedSkills);
+  g.run = Save.newRun(wanted, seed, 3 + (perks.extraShuttle > 0 ? 1 : 0));
   // Starting part-way down means the run has to *look* like it got there, or
   // the trail, the sector depth and the completion check all disagree with the
   // screen. The sector is the ladder position, and the chapter seed is the one
@@ -872,7 +882,21 @@ function onCrash() {
   g.combo = 0;
   audio.silence();
   audio.explosion();
-  g.lives--;
+  // **Phoenix Protocol.** Once an expedition, the shuttle that was just lost
+  // comes back - so the decrement is skipped rather than a life being added,
+  // which keeps `g.lives` inside `maxShuttles` without a second clamp. The hold
+  // is *not* recovered: `g.carried` is cleared by the mission ending either
+  // way, so the spec's "and no cargo" is what already happens. The hull it
+  // returns on is applied at the next `applyLoadout`, so it shows on the brief.
+  const phoenixLeft = g.run && (g.loadout && g.loadout.phoenix) > 0 && !g.run.phoenixUsed;
+  if (phoenixLeft) {
+    g.run.phoenixUsed = true;
+    g.phoenixHull = g.loadout.phoenix;
+    particles.text(ship.x, ship.y - 90, 'PHOENIX PROTOCOL — SHUTTLE RECOVERED', '#5ff5ff', 20);
+    Log.log('phoenix', { shuttles: g.lives });
+  } else {
+    g.lives--;
+  }
   meta.stats.crashes++;
   Log.log('crash', {
     mission: g.level && g.level.id, reason: (ship.landingResult && ship.landingResult.blocker) || g.crashReason || 'impact',
@@ -960,6 +984,7 @@ function frame(now) {
 }
 
 function draw() {
+  g.arrestKey = input.bindings.arrest && input.bindings.arrest[0];
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   if (!g.level) {
     ctx.fillStyle = '#05060c';
@@ -998,6 +1023,7 @@ function draw() {
   drawEnemies(ctx, g.field, ship, g.time, {
     ...present,
     threatWarning: !!(g.loadout && g.loadout.threatWarning),
+    counterBattery: !!(g.loadout && g.loadout.counterBattery),
     showPaths: Debug.showEnemyPaths,
   });
   R.drawShip(ctx, ship, g.time, cam);
