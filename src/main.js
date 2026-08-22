@@ -1467,6 +1467,7 @@ input.bindTouchButton(document.getElementById('t-left'), 'left');
 input.bindTouchButton(document.getElementById('t-thrust'), 'thrust');
 input.bindTouchButton(document.getElementById('t-right'), 'right');
 document.getElementById('t-hold') && input.bindTouchButton(document.getElementById('t-hold'), 'hold');
+document.getElementById('t-down') && input.bindTouchButton(document.getElementById('t-down'), 'down');
 const abilityBtn = document.getElementById('t-ability');
 if (abilityBtn) abilityBtn.addEventListener('pointerdown', (ev) => { ev.preventDefault(); useAbility(); });
 // The second slot, and the two held controls the touch bar never had: M37 gave

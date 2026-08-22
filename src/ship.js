@@ -11,6 +11,19 @@ export const SHIP = {
   maxSpin: 3.2,       // rad/s
   spinDamp: 0.995,    // per 1/60s - slight, so RCS still demands attention
   burnMain: 9,        // fuel/s - a full tank is roughly 25s of continuous burn
+  // **The descent thrusters** (M41). Two nozzles on the shoulders firing *up*,
+  // pushing the lander down along its own nose vector. Tom asked for them
+  // because getting *down* is the slow half of a landing on a light body -
+  // Enceladus is 7.3 px/s^2 and its own summary says "every correction lasts
+  // far too long".
+  //
+  // 48 against the main engine's 130, deliberately: this beats gravity, it is
+  // not a second engine. What it is worth depends on where you are, which is
+  // the good part - about six times Enceladus' gravity and three quarters of
+  // Venus', so it transforms the bodies that need it and barely registers on
+  // the ones that do not.
+  downThrust: 48,
+  burnDown: 6,        // cheaper than the main engine, dearer than a burner
   burnRcs: 3.2,
   burnHold: 5,
   sideThrust: 62,     // px/s^2 of lateral push in DIRECT steering
@@ -270,6 +283,7 @@ export class Ship {
     this.alive = true;
     this.landed = false;
     this.thrusting = false;
+    this.descending = false;
     // **Hazard multipliers on the ship's own authority**, both written by
     // forces and both reset by `applyForces` every step, so a body without the
     // hazard cannot inherit one. Heat derates the engine; cold stiffens the
@@ -475,6 +489,12 @@ export class Ship {
     this.rcsLeft = leftIn > 0;
     this.rcsRight = rightIn > 0;
     this.holding = amountOf(input, 'hold') > 0 && hasFuel && Math.abs(this.spin) > 0.02;
+    // Down thrust is an axis like the others, so a trigger gives a fraction of
+    // it. It is refused while the main engine is lit: firing both is only an
+    // expensive way to hover, and letting them cancel makes a stuck control
+    // read as a dead engine.
+    const downIn = hasFuel && throttleIn <= 0 ? amountOf(input, 'down') : 0;
+    this.descending = downIn > 0;
     // **The commanded throttle, kept as a float on purpose.** The booleans above
     // are what a dozen consumers want; `thermal` is the one that must not have
     // one, because heat made by a *button* is device-dependent - a keyboard
@@ -493,6 +513,7 @@ export class Ship {
     if (this.rcsLeft) burn += (this.direct ? this.spec.burnSide : this.spec.burnRcs) * leftIn;
     if (this.rcsRight) burn += (this.direct ? this.spec.burnSide : this.spec.burnRcs) * rightIn;
     if (this.holding && !this.direct) burn += this.spec.burnHold;
+    if (this.descending) burn += this.spec.burnDown * downIn;
     this.fuel = Math.max(0, this.fuel - burn * dt);
 
     // Cold soak stiffens attitude control and heat derates the engine. Both are
@@ -548,6 +569,14 @@ export class Ship {
     if (this.thrusting) {
       this.vx += this.noseX * mainThrust * throttleIn * dt;
       this.vy += this.noseY * mainThrust * throttleIn * dt;
+    }
+    // Along the nose, negated - so a tilted lander is pushed along its own axis
+    // exactly as the main engine is, and pointing the nose still decides where
+    // the force goes. Straight down only when you are upright, which is the
+    // same bargain every other control here makes.
+    if (this.descending) {
+      this.vx -= this.noseX * this.spec.downThrust * downIn * dt;
+      this.vy -= this.noseY * this.spec.downThrust * downIn * dt;
     }
     // **Emergency Arrest.** One panic burn a mission, and it is deliberately
     // hard to reach for: close to upright, low, actually falling, and it costs
@@ -696,6 +725,7 @@ export class Ship {
       Math.hypot(this.vx, this.vy) > LANDING.restSpeed;
     if (!sliding) {
       this.thrusting = false;
+    this.descending = false;
       this.rcsLeft = false;
       this.rcsRight = false;
       this.holding = false;
@@ -900,6 +930,7 @@ export class Ship {
     this.angle = 0;
     this.landed = true;
     this.thrusting = false;
+    this.descending = false;
     this.throttle = 0;
   }
 

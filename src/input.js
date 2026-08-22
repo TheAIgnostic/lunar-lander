@@ -31,7 +31,23 @@ export const DEFAULT_KEYS = {
   thrust: [' ', 'w', 'arrowup', 'pad:7', 'pad:0'],
   left: ['a', 'arrowleft', 'axis:0-', 'pad:14'],
   right: ['d', 'arrowright', 'axis:0+', 'pad:15'],
-  hold: ['s', 'arrowdown', 'pad:6'],
+  // **The descent thrusters** (M41), and they take the controls attitude-hold
+  // used to have. Two arguments, one per device.
+  //
+  // Keyboard: down is down. It is the only default a new player will guess, and
+  // descent is a *primary* flight control - used constantly, on every body -
+  // where holding the attitude is secondary and has been less needed since
+  // M29c's CLASSIC steering started settling the rotation on release.
+  //
+  // Pad: **LT is the mirror of RT**, and both are analog. The descent thrusters
+  // are an axis like the main engine, so a trigger gives a fraction of them for
+  // free through the M30 magnitude contract - which is exactly what the left
+  // trigger is shaped for and what a face button could never give.
+  //
+  // Attitude hold moves to `c` and L3. Everything here is rebindable from the
+  // settings screen, so this is a default and not a decision.
+  down: ['s', 'arrowdown', 'pad:6'],
+  hold: ['c', 'pad:10'],
   // **Two active modules since M37**, and the second is a full control rather
   // than a modifier on the first. Tom's playtest reason: *"you need laser for
   // enemies. everyone picks the laser and keeps it"* - one slot was not a
@@ -209,7 +225,7 @@ function readToken(gp, token) {
 export class Input {
   constructor(target = window) {
     this.keys = new Set();
-    this.touch = { thrust: false, left: false, right: false, hold: false };
+    this.touch = { thrust: false, left: false, right: false, hold: false, down: false };
     // The third source. Keyboard and touch are events; a gamepad is not - the
     // Gamepad API has no per-button event at all, so this is filled by
     // `pollGamepad()` once a frame and read like the other two.

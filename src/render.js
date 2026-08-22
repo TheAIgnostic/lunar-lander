@@ -1052,6 +1052,29 @@ export function drawShip(ctx, ship, time, cam) {
     ctx.closePath();
     ctx.fill();
   }
+  // **The descent thrusters** (M41): two plumes off the shoulders firing *up*,
+  // which is what pushes the lander down. Drawn as a mirrored pair rather than
+  // one nozzle on the nose, so the shape reads as the side burners' cousin -
+  // which is what Tom asked for - and so it can never be mistaken for the main
+  // engine, whose plume is single, orange and points the other way.
+  if (ship.descending) {
+    const flick = 0.8 + Math.random() * 0.4;
+    const len = 15 * flick;
+    for (const side of [-1, 1]) {
+      const grad = ctx.createLinearGradient(side * 7, -10, side * 7, -10 - len);
+      grad.addColorStop(0, 'rgba(220,250,255,0.9)');
+      grad.addColorStop(0.5, 'rgba(140,215,255,0.55)');
+      grad.addColorStop(1, 'rgba(90,180,255,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(side * 4, -10);
+      ctx.lineTo(side * 10, -10);
+      ctx.lineTo(side * 8.5, -10 - len);
+      ctx.lineTo(side * 5.5, -10 - len);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
 
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
@@ -1067,6 +1090,20 @@ export function drawShip(ctx, ship, time, cam) {
   ctx.strokeStyle = CYAN;
   ctx.lineWidth = 2.2;
   ctx.stroke();
+
+  // The descent nozzles, on the shoulders. Drawn always, not only while firing:
+  // a control the lander visibly carries is one a player can go looking for.
+  ctx.strokeStyle = CYAN;
+  ctx.lineWidth = 1.6;
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(side * 4.5, -9.5);
+    ctx.lineTo(side * 6, -12);
+    ctx.moveTo(side * 9, -8);
+    ctx.lineTo(side * 10.5, -10.5);
+    ctx.stroke();
+  }
+  ctx.lineWidth = 2.2;
 
   // Window
   ctx.beginPath();

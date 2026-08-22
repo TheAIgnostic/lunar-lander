@@ -399,7 +399,7 @@ export function screenHTML(s) {
       // content indexing a table in code.
       const names = {
         thrust: 'MAIN BOOSTER', left: 'LEFT BURNER', right: 'RIGHT BURNER',
-        hold: 'ATTITUDE HOLD',
+        down: 'DESCENT THRUSTERS', hold: 'ATTITUDE HOLD',
         ability: 'ACTIVE MODULE I', ability2: 'ACTIVE MODULE II',
         arrest: 'EMERGENCY ARREST', overdrive: 'COMBAT OVERDRIVE',
       };
