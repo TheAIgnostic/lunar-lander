@@ -28,13 +28,13 @@ Everything under `src/` is a plain ES module, loaded directly in the browser and
 | `src/route.js` | the ten-body ladder, the next-body card, the progress trail, checkpoint rule | M9/M27 |
 | `src/components.js` | 5 component tracks, `deriveLoadout` / `deriveFull`, purchase rules, the recommended tier | M10/M11/M28 |
 | `src/skills.js` | 3 skill trees, `deriveSkills`, purchase and gating rules | M11 |
-| `src/modules.js` | **8 active + 9 passive** modules, each active's firing `cue`, the blueprint grant rule | M11/M12/M31/M32 |
+| `src/modules.js` | **10 active + 9 passive** modules, each active's firing `cue`, the blueprint grant rule | M11/M12/M31-M33 |
 | `src/enemies.js` | enemy roster, placement around the prize, telegraphs, projectiles, damage, rewards | M12/M14 |
 | `src/objectives.js` | the optional objectives: conditions judged at touchdown, and six cargo recoveries | M14/M15 |
-| `src/abilities.js` | the active-module runtime: charges, duration, cooldown, effects, teardown | M12/M32 |
+| `src/abilities.js` | the active-module runtime: charges, duration, cooldown, effects, teardown, the player's ordnance | M12/M32/M33 |
 | `src/render.js` | the world: background, terrain, ship, dust, beacons, trajectory, hangar ship | —/M12/M15/M23 |
 | `src/drawkit.js` | the shared drawing vocabulary: palette, type, `throb`, tint helpers, HUD panels | M23 |
-| `src/enemydraw.js` | machines, telegraphs, wrecks, shots, the laser and the shield | M23 |
+| `src/enemydraw.js` | machines, telegraphs, wrecks, shots, the laser, the shield, the player's ordnance | M23/M33 |
 | `src/hud.js` | the instruments: HUD, pointers, panels, gauges | M23 |
 | `src/gamelog.js` | the playtest trace: one sitting's events, as text or JSON | M24 |
 | `src/debug.js` | F3 telemetry overlay, F4 landing-envelope bars, F5 enemy ranges | M0/M12 |
@@ -250,6 +250,38 @@ keyboard's two values first.**
 indistinguishable from the module having failed, so a cloaked lander is drawn translucent and a
 deployed foil is drawn as a foil. Same rule as "if a hazard has a boundary, draw the boundary", from
 the player's side of it.
+
+**The telegraph rule runs both ways.** M12 makes a machine show you the shot before it takes it, and
+`muzzleIsSafe` stops a shot appearing already touching the lander. The player's own ordnance lives
+under the mirror image: a charge is **inert for its first 0.35 s** so it can never go off inside the
+lander that dropped it, the blast circle is drawn **while the fuse burns** at the radius it will
+really use, and the falloff does not care whose lander it is. All three are enforced in
+`abilities.js` rather than drawn in `enemydraw.js` — a rule drawn but not enforced is decoration, and
+a rule enforced but not drawn is a trap. Measured: dropped over an Io turret and left to sit, the
+blast kills the turret and the lander.
+
+**Ordnance outlives the module that released it.** `Abilities` owns `bombs` and `flare` the way it
+owns `beam`, and steps them **outside** the `active` branch — the rack is empty the instant it is
+pressed and the charge has a second of falling still to do. `render.js` draws them off the same
+object.
+
+**A decoy is the cloak's other half, on the same channel.** `ship.cloaked` says *there is no lander*;
+`ship.decoy` says *the lander is over there*. Both are fields on the ship that the machines read, so
+`enemies.js` still knows nothing about modules. A flare pulls **drones only** — a dug-in gun keeps
+shooting at you, which is what stops it being a second cloak — and `_moveDrone` takes what it flies
+at and what it may ram as separate arguments, because ramming never went through the sight check.
+
+**A `good` entry is a claim, and this project only claims what it can show.** The Countermeasure
+Flare lights the ground, which matters most on Pluto — the one body with no drones at all, so the
+only half that body would get is the half no autopilot here can see. It does not claim Pluto. The
+Kinetic Bomb Rack does not claim Mercury for the same reason, measured rather than assumed. The light
+is real; the claim is what a test can stand behind.
+
+**A rig built from whatever the world generated is measuring the world, not the rule.** Three
+milestones running, the first version of a measurement proved less than it looked like it proved:
+M31 picked one route and read four things as inert, M32 parked a lander 60 px from a drone whose
+standoff ring is 195, and M33 measured blast falloff against terrain whose height changed more over
+120 px than the offset being tested. Place what the rule is about; do not go looking for it.
 
 **A thing sold must also be obtainable, and nobody had asked.** Five of the nine modules had no grant
 path at all — Ray Shield, Magnetic Anchor, Thermal Purge, Ice Cleats and Hardened Radar were

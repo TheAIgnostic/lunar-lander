@@ -1206,18 +1206,30 @@ leaks, the drone ram, the nanites' interruption and the foil's lift half. The te
 property of *every* active now rather than a check per module, which also caught the anchor and the
 M31 beacon leak.
 
-### M33 — the two actives that are real features
+### M33 — the two actives that are real features (done, this commit)
 
-- **Kinetic Bomb Rack** — a ship-launched, gravity-affected projectile with a blast. New physics, but
-  `enemies.js` already owns shots and `damageEnemy`. The one with genuine risk: a weapon that can
-  kill the player near their own pad needs the M12 telegraph discipline applied to the *player's*
-  ordnance.
-- **Countermeasure Flare** — retargets drones and lights the ground. Touches the drone's target
-  selection and the darkness channel.
+Shipped as planned, and the risky one behaved as advertised. Figures in the M33 section of
+`test/BASELINE.md`.
 
-**Both unlock three combat skills**, which is why they come before M35.
+- **Kinetic Bomb Rack** — a gravity-affected charge with a blast, under the M12 telegraph rule turned
+  on the *player's* ordnance: inert for its first third of a second, blast circle drawn while the
+  fuse burns, and the falloff does not care whose lander it is. Verified in the game: dropped over an
+  Io turret and left to sit, it kills the turret and the lander.
+- **Countermeasure Flare** — a decoy on `ship.decoy`, the same channel `ship.cloaked` uses. Pulls
+  **drones only**, which is what stops it being a second cloak.
 
-### M34 — the nine skills that need nothing new
+**Both unlock three combat skills**, which is why they came before M35: Shaped Charges, Ordnance
+Fabricator and Hardpoint Calibration all have something to act on now.
+
+**Nine mutations raised zero failures on the first pass**, including one the M32 teardown check
+should have caught: its snapshot could not see a field that starts `null` and is left holding an
+object. Repairing it immediately found `ship.shieldFactor` written by the Ray Shield and never
+declared in `reset()`.
+
+**All ten active modules exist.** The 1.0 module count is complete: ten actives, nine passives, and
+the tenth passive — the Thermal Sink — is blocked on the heat number rather than on work.
+
+### M34 — the nine skills that need nothing new *(next)*
 
 Phoenix Protocol · Fourth Shuttle · Emergency Arrest · RCS Finesse · Surface Adaptation · Steady
 Hands · Counter-Battery Logic · Twin-Link Control · Navigation Forecast *(the reveal half only)*.

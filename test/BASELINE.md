@@ -3735,7 +3735,7 @@ Counted against the spec's own "Full 1.0 target" (section 18), not against inten
 | 50 missions | **50** | — |
 | seven component tracks at four levels | 5 tracks (all reach L4) | **2 tracks** |
 | all 30 skill nodes | 12 (3 trees × 4) | **18 nodes** |
-| ten active modules | 5 | **5** |   ← 8 / **2** after M32
+| ten active modules | 5 | **5** |   ← 8 / 2 after M32, **10 / 0 after M33**
 | ten passive modules | 4 | **6** |   ← 9 / **1** after M31
 | full eight-enemy roster | 2 of the roster, + 1 original | **6 designs** |
 | materials, blueprints, checkpoints, save migration, accessibility | done | — |
@@ -3916,8 +3916,8 @@ broken.
 | Flight | RCS Finesse, Surface Adaptation, Emergency Arrest, Navigation Forecast, Steady Hands, Fourth Shuttle |
 
 **Active modules — 5 of 10 missing:** Kinetic Bomb Rack, Optical Cloak, Repair Nanites,
-Countermeasure Flare, Aero-Brake Foil.  *(**2 of 10 after M32** — the Kinetic Bomb Rack and the
-Countermeasure Flare, which are M33.)*
+Countermeasure Flare, Aero-Brake Foil.  *(2 of 10 after M32; **0 of 10 after M33** — all ten
+actives exist.)*
 
 **Passive modules — 6 of 10 missing:** Ablative Acid Skin, Thermal Sink, Cryo Insulation, Plume
 Vanes, Atmospheric Control Surfaces, Salvage Magnet.  *(**1 of 10 after M31** — only the Thermal
@@ -4328,3 +4328,130 @@ on the next run, which the gate asserts. Worth watching rather than changing: a 
 body 3–4, so it is three or four blueprints a run and roughly five runs to hold everything. That is
 the only progression that compounds across deaths, so a slow drip is the design — but it is now slow
 enough to be a decision somebody should take deliberately.
+
+## M33 — the bomb rack and the flare (2026-08-22)
+
+The two actives the plan called *real features*: the first with physics of its own, the second with a
+hand in the enemy field. Both had to change a flown mission on a body they claim before they counted
+as built.
+
+| module | flown |
+| --- | --- |
+| **Kinetic Bomb Rack** | IO 1/5 home, 2/5 deep · PLUTO 1/5 deep |
+| **Countermeasure Flare** | EUROPA 4/5 both routes · TITAN 4/5 both · GANYMEDE 1/5 home, 3/5 deep |
+
+### The M12 telegraph discipline, turned on the player's own weapon
+
+M12 says a machine shows you the shot before it takes it, and `muzzleIsSafe` says a shot may never
+appear already touching the lander. Turned around, that is three rules, and all three are **enforced**
+rather than merely drawn:
+
+1. **It cannot go off inside you.** A charge is inert for its first 0.35 s — it does not detonate on
+   contact and damages nothing. Released a hand's breadth off the deck it is simply gone.
+2. **It goes off where you can see it will.** The blast circle is on screen *while the fuse burns*,
+   at the radius the charge will actually use. The ring appearing is itself the tell that the thing
+   is now live.
+3. **It does not care whose lander it is.** The same falloff applies to the ship as to a machine.
+
+Verified in the game rather than argued: dropped over an Io turret from 300 px and left to sit, the
+blast **killed the turret and killed the lander** — from a hull already at 50 after enemy fire. The
+screenshot taken a second earlier shows the lander plainly inside its own dashed circle. That is the
+decision the module exists to create, and a weapon that is safe to stand next to would not be one.
+
+### Two numbers authored from measurement
+
+**`bombFuse` is 5 s because of how far a charge falls.** Released with 40 px/s of separation at the
+Moon's 28 px/s², a 2.4 s fuse covers **215 px** — so a charge dropped from a normal crossing altitude
+expired in mid-air over empty ground and the weapon quietly did nothing. At 5 s it covers about
+550 px there and 290 on Enceladus.
+
+**`good` claims Io and Pluto.** Mercury was the obvious third on the design reasoning — a bomb
+answers a thing that cannot move, and Mercury is a turret-and-sniper body — and was **measured and
+dropped**. Across every body, flying the rack with the `overhead` cue:
+
+```
+           home            deep
+LUNA       0 fires         2 fires,  0 kills
+EUROPA     3 fires         3 fires,  0 kills
+TITAN      3 fires, 1 kill 3 fires,  1 kill
+MARS       0 fires         2 fires,  0 kills
+ENCELADUS  1 fire          6 fires,  0 kills
+GANYMEDE   0 fires         0 fires
+IO         1 fire,  1 kill 3 fires,  2 kills
+MERCURY    0 fires         1 fire,   0 kills
+PLUTO      0 fires         2 fires,  1 kill
+VENUS      0 fires         0 fires
+```
+
+Read it as a floor, not a verdict: `overhead` is opportunistic — it fires when the pilot *happens* to
+be above a machine — and a person who decides to overfly a gun will connect far more often than a
+pilot that never detours. But a claim nothing can show is exactly what `good` is not allowed to be.
+
+### The flare is the cloak's other half
+
+The cloak says *there is no lander*; a decoy says *the lander is over there*. It pulls **drones
+only** — a dug-in gun keeps shooting at you, which is what stops it being a second cloak and is what
+the spec asks for. `_moveDrone` takes what it flies at and what it may ram as **separate arguments**,
+so a decoyed drone cannot ram a lander it is not chasing.
+
+`ship.decoy` is the same channel `ship.cloaked` uses: a field on the lander that the machines read,
+so `enemies.js` still knows nothing about modules.
+
+**Pluto is deliberately not claimed.** The flare does two things and this project can measure one:
+pulling drones moves a flown mission, and lighting the ground is presentation, which no autopilot
+here can see — the blind spot `falseRadar` and `darkness` have had since M24. Pluto is the body the
+light would matter most on and **the one body with no drones at all**, so claiming it would be a
+route card recommending kit on a promise nothing can check. The light is real; the claim is only what
+can be shown.
+
+### Nine mutations raised zero failures on the first pass
+
+| mutation | before | after |
+| --- | ---: | ---: |
+| the blast has no falloff | **0** | 1 |
+| a charge never detonates on the ground | **0** | 3 |
+| a charge never detonates on a machine | **0** | 1 |
+| the fuse never expires | **0** | 1 |
+| the flare pulls turrets too | **0** | 1 |
+| the flare never lets go of the decoy | **0** | 1 |
+| a drone rams a decoyed lander anyway | **0** | 1 |
+| a charge arms instantly | 1 | 2 |
+| the blast does not hurt the player | 1 | 2 |
+| ordnance stops when the module closes | 4 | 11 |
+
+**The two detonation triggers cover for each other.** Over a turret standing on the ground, removing
+either one leaves the other to catch the charge and the blast lands in the same place. Each needed
+its own rig: empty ground for the surface trigger, and a drone held still in mid-air for contact —
+the only case where the ground is hundreds of pixels away.
+
+**And the M32 teardown check should have caught the decoy leak and could not.** Its snapshot skipped
+falsy values and walked only the keys it saw *before*, so a field that starts `null` and is left
+holding an object was invisible to it — which is exactly the shape of `ship.decoy`. It compares the
+**union** of both sides now, and the first thing the repair found was that `ship.shieldFactor` is
+written by the Ray Shield and reset by its teardown while never being declared in `reset()`: a lander
+that had raised the shield once carried a field a fresh one did not have. Harmless as it stood, and
+the same rule as `beaconBoost` — a field the ship uses belongs in `reset`, or *"the ship is back as
+it was"* stops being a statement anything can check.
+
+### Two rigs measured nothing until they were rebuilt
+
+**Falloff is a claim about distance**, and on real terrain distance is the wrong number: dropped
+120 px to one side of wherever the generator had put a turret, the ground height between the two
+points differed by more than the offset and a charge that should have clipped the edge of the blast
+measured **zero at both radii**. The machine is *placed* now, not found — same fix in both suites.
+
+That is the third milestone running where the first version of a rig proved less than it looked like
+it proved (M31's routes, M32's drone standoff, M33's terrain). The pattern is worth naming: **a rig
+built from whatever the world happened to generate is measuring the world, not the rule.**
+
+### What did not move
+
+**Both fixtures byte-identical.** Full suite green, every encounter-audit figure identical: campaign
+crossing **642/800 (80%)**, at-once 0: 63.1% · 1: 25.9% · 2: 9.5% · 3: 1.4% · 4: 0.1%, deep-route
+engagement 751/800. The recommendation table is unchanged — the new actives are declared **after** the
+Pulse Laser precisely so they can only fill an empty slot, never displace a decision somebody took.
+
+`loadout-tests.js` 304 → **324**, `enemies-tests.js` 125 → **140**.
+
+**19 modules now**, 13 of them after one full ladder. The blueprint drip is the thing to watch: see
+the note at the end of the M32 section.
