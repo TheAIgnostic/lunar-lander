@@ -2,7 +2,7 @@
 
 import { clamp, lerp, approach, makeRng, formatScore } from './util.js';
 import { keyLabel, isPadToken } from './input.js';
-import { Terrain } from './terrain.js';
+import { Terrain, pickupRadius } from './terrain.js';
 import { LEVELS, endlessLevel } from './levels.js';
 import { CHAPTERS, chapterFor } from './missions.js';
 import { normalizeAngle } from './ship.js';
@@ -412,7 +412,7 @@ function pickups() {
   // One rule, in the terrain, shared with the test pilot - it used to live here
   // where nothing could test it, and the fuel road depends on it being the same
   // rule in both places.
-  for (const got of g.terrain.collect(ship.x, ship.y)) {
+  for (const got of g.terrain.collect(ship.x, ship.y, pickupRadius(ship.loadout))) {
     if (got.kind === 'cargo') {
       particles.sparks(got.x, got.y, 26, 1);
       particles.ring(got.x, got.y, 180, 0.5, '#ff4fd8');

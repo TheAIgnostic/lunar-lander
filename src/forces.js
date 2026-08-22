@@ -15,8 +15,33 @@ import { sanctuaryPad } from './enemies.js';
  * the channels that shield covers. Every force asks this rather than reaching
  * into the loadout itself, so a new mitigation has one place to land.
  */
+/**
+ * Which loadout key answers which status channel.
+ *
+ * `hazardResist` answers every channel; a **per-channel** key answers one. That
+ * is the difference between Environmental Seals, which is general, and the
+ * Ablative Acid Skin, which is Venus' answer and does nothing about cold.
+ *
+ * **Written out rather than built as `channel + 'Resist'`.** The concatenated
+ * version worked and was invisible: `loadout-tests.js` searches the source for
+ * every key the game sells, and a name that is assembled at runtime appears
+ * nowhere, so two new passives read as hollow to the guard that exists to catch
+ * hollow things. A table can also be asserted complete, which a template
+ * literal cannot - `forces-tests.js` requires an entry per `STATUS_CHANNELS`
+ * and requires each one to actually slow its own channel.
+ */
+export const CHANNEL_RESIST = {
+  heat: 'heatResist',
+  cold: 'coldResist',
+  corrosion: 'corrosionResist',
+  radiation: 'radiationResist',
+  charge: 'chargeResist',
+};
+
 export function hazardScale(ship, channel) {
-  const base = (ship.loadout && ship.loadout.hazardResist) || 1;
+  const l = (ship && ship.loadout) || {};
+  const key = CHANNEL_RESIST[channel];
+  const base = (l.hazardResist || 1) * ((key && l[key]) || 1);
   if (!ship.shieldActive) return base;
   const covered = channel === 'radiation' || ship.shieldHazard;
   return covered ? base * (ship.shieldFactor != null ? ship.shieldFactor : 0.15) : base;
@@ -278,7 +303,27 @@ function glide(cfg) {
     id: 'glide',
     apply(ship, level, t, dt) {
       const damp = (ship.loadout && ship.loadout.disturbanceResist) || 1;
-      const up = Math.min(cap, lift * ship.vx * ship.vx) * damp;
+      // **Control surfaces buy authority, not lift.** Stock, the only thing
+      // that decides how much the air holds you up is how fast you are going,
+      // and Titan's own summary has promised "you glide, and you overshoot"
+      // since M5. With a foil the attitude counts too: flare away from the
+      // direction of travel and it bites, tip into it and it sheds.
+      //
+      // **The trim term** is zero without a foil and zero at a level nose, so
+      // it is authority rather than a bonus: what it is worth depends entirely
+      // on how you fly it. Measured live on titan-5 at 120 px/s - 5.10 flared,
+      // 3.91 level, 2.72 tipped forward.
+      //
+      // Note that a foil is not *only* its trim. `damp` above is the same
+      // disturbance resistance a gyro carries, and it scales the raw lift too,
+      // so the Control Surfaces trim about 15% off the float before the
+      // attitude term does anything. That is the module, not the trim, and it
+      // is stated on the module rather than pretended away here.
+      const trim = (ship.loadout && ship.loadout.glideTrim) || 0;
+      const pitch = trim
+        ? clamp(-Math.sin(ship.angle) * Math.sign(ship.vx || 1), -1, 1)
+        : 0;
+      const up = Math.min(cap, lift * ship.vx * ship.vx) * damp * (1 + trim * pitch);
       ship.vy -= up * dt;
       ship.env.lift = up;
     },
@@ -580,8 +625,13 @@ function plumes(cfg) {
         if (Math.abs(dx) > v.radius) continue;
         const falloff = 1 - Math.abs(dx) / v.radius;
         const damp = (ship.loadout && ship.loadout.disturbanceResist) || 1;
+        // Vanes cut the **sideways** shove and leave the lift alone, which is
+        // the module as the spec describes it: on a body at 1.4 m/s2 the column
+        // of vapour is free altitude and the thing that ruins a landing is
+        // being thrown off the pad sideways.
+        const lat = (ship.loadout && ship.loadout.plumeLateral) || 1;
         ship.vy -= v.force * falloff * damp * dt;
-        ship.vx += Math.sign(dx || 1) * v.force * 0.25 * falloff * damp * dt;
+        ship.vx += Math.sign(dx || 1) * v.force * 0.25 * falloff * damp * lat * dt;
       }
       ship.env.plumes = live;
     },

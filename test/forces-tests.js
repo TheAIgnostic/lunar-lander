@@ -1,6 +1,6 @@
 // Unit tests for the force/status interface:  node test/forces-tests.js
 import { readFileSync } from 'node:fs';
-import { applyForces, forcesFor, freshStatus, freshEnv, RADIATION, STATUS_CHANNELS, NON_FORCE_HAZARDS, HEAT, COLD, ACID, MAGNETIC, hazardName } from '../src/forces.js';
+import { applyForces, forcesFor, freshStatus, freshEnv, RADIATION, STATUS_CHANNELS, CHANNEL_RESIST, NON_FORCE_HAZARDS, HEAT, COLD, ACID, MAGNETIC, hazardName } from '../src/forces.js';
 import { PLANETS, PLANET_IDS, gravityFor, gravityPx } from '../src/planets.js';
 import { CHAPTERS } from '../src/missions.js';
 
@@ -114,6 +114,52 @@ console.log('forces and planets');
   const level = { wind: 10 };
   check('force list is cached on the level', forcesFor(level) === forcesFor(level));
   check('cache is not enumerable', !Object.keys(level).includes('__forces'));
+}
+
+// --- a mitigation slot for every channel, and each one has to work
+//
+// The M29 rule - a name in content indexing a table in code must resolve -
+// applied to a table that is indexed by code rather than by content. The
+// per-channel resist keys were briefly built as `channel + 'Resist'`, which
+// works and is invisible: the loadout guard greps the source for every key the
+// game sells, and an assembled name is in no file. Named in `CHANNEL_RESIST`
+// now, so the guard can see them and this can require the set to be complete.
+{
+  for (const channel of STATUS_CHANNELS) {
+    check(`${channel} has a mitigation key`, !!CHANNEL_RESIST[channel]);
+  }
+  for (const key of Object.keys(CHANNEL_RESIST)) {
+    check(`CHANNEL_RESIST names a real channel: ${key}`, STATUS_CHANNELS.includes(key));
+  }
+  // And the key has to bite: raising the same hazard with and without it.
+  const RIGS = {
+    heat: [{ type: 'heat', heatRise: 30 }, true],
+    cold: [{ type: 'cold', coldRate: 30 }, false],
+    corrosion: [{ type: 'acid', acidRate: 30 }, false],
+    radiation: [{ type: 'radiation', period: 20, duty: 0.9, rate: 40 }, false],
+  };
+  // High enough that the radiation belt reaches, low enough that acid is thick.
+  const ground = { heightAt: () => 1400 };
+  for (const [channel, [hazard, thrusting]] of Object.entries(RIGS)) {
+    const level = { id: `resist-${channel}`, width: 2000, hazards: [hazard] };
+    // **Time to a threshold, not the level at the end.** Every channel caps at
+    // 100 and then holds, so a long enough run has each loadout converging on
+    // the same number whatever the resistance was - the same trap the
+    // `hazardResist` measurement in `loadout-tests.js` records.
+    const run = (loadout) => {
+      const ship = mkShip({ y: 200, thrusting, loadout });
+      ship.damageOverTime = () => {};
+      for (let i = 0; i < 300 * 60; i++) {
+        applyForces(ship, level, i / 60, 1 / 60, ground);
+        if (ship.statusLevels[channel] >= 40) return i / 60;
+      }
+      return Infinity;
+    };
+    const bare = run({});
+    const sealed = run({ [CHANNEL_RESIST[channel]]: 0.4 });
+    check(`${CHANNEL_RESIST[channel]} slows ${channel}`, Number.isFinite(bare) && sealed > bare,
+      `${bare.toFixed(1)}s -> ${sealed === Infinity ? 'never' : sealed.toFixed(1) + 's'} to 40%`);
+  }
 }
 
 // --- planets

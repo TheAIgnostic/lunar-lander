@@ -14,8 +14,21 @@ import { buildArchetype } from './archetypes.js';
  * threw "cannot access before initialization" in the single-file build and
  * nowhere else. A node carries its distance `tier` now, and economy prices it.
  */
+/**
+ * How close the lander has to be to sweep something up. The Salvage Magnet
+ * widens it, and `pickupRadius` is the one place that is folded in - both the
+ * game loop and the test pilot call it, the way they already share `collect`
+ * itself. A second copy of the multiply is how the two disagree about what was
+ * picked up, and the fuel road depends on them agreeing.
+ */
+export const PICKUP_RADIUS = 62;
+
+export function pickupRadius(loadout) {
+  return PICKUP_RADIUS * ((loadout && loadout.collectRadius) || 1);
+}
+
 export const MATERIAL_SITE = {
-  radius: 62,
+  radius: PICKUP_RADIUS,
   padGuard: 150,
   // How far a crate hangs above the ground it was left over. M22 brought the
   // crossing crates into this band from the glide line, which had them a mean
@@ -923,7 +936,7 @@ export class Terrain {
    * test pilot so both agree on what counts as picked up - the rule used to
    * live in main.js, where no test could reach it.
    */
-  collect(x, y, radius = 62) {
+  collect(x, y, radius = PICKUP_RADIUS) {
     const got = [];
     for (const c of this.fuelCells) {
       if (c.taken) continue;
@@ -935,7 +948,9 @@ export class Terrain {
     }
     for (const m of this.materialNodes || []) {
       if (m.taken) continue;
-      if (Math.hypot(m.x - x, m.y - y) < Math.max(radius, MATERIAL_SITE.radius)) {
+      // Scaled, not floored at the site radius: a magnet that widened the reach
+      // for fuel cells and not for ore would miss the thing it is named after.
+      if (Math.hypot(m.x - x, m.y - y) < Math.max(radius, MATERIAL_SITE.radius * (radius / PICKUP_RADIUS))) {
         m.taken = true;
         got.push({ ...m, kind: 'material', ref: m });
       }

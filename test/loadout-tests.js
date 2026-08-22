@@ -37,7 +37,7 @@
 // be obtained without god mode. Five of nine could not.
 import { readFileSync, readdirSync } from 'node:fs';
 import { Ship, SHIP, ENVELOPE } from '../src/ship.js';
-import { Terrain } from '../src/terrain.js';
+import { Terrain, pickupRadius, PICKUP_RADIUS } from '../src/terrain.js';
 import { drawTrajectory, drawPadBeacons, beaconGain } from '../src/render.js';
 import { drawEnemies } from '../src/enemydraw.js';
 import { instrumentNoise, instrumentDrift } from '../src/hud.js';
@@ -384,6 +384,40 @@ function gustPeak(loadout) {
   return peak;
 }
 
+/** Park in a live vapour vent and report what it pushed, in each axis. */
+function ventPush(loadout, secs = 2) {
+  const level = chapterFor('ENCELADUS', 4242).levels[4];
+  const terrain = new Terrain(level, 4242);
+  const ship = new Ship();
+  ship.applyLoadout(loadout);
+  ship.reset(terrain.pads[0].x1, terrain.heightAt(terrain.pads[0].x1) - 260, level.fuel);
+  // The vents publish themselves on `env`, and only the ones clear of the
+  // sanctuary are ever live - so ask the force where they are rather than
+  // reading the mission data and hoping.
+  applyForces(ship, level, 0, 1 / 120, terrain);
+  const vent = (ship.env.plumes || [])[0];
+  if (!vent) return { vx: 0, vy: 0 };
+  ship.x = vent.x;
+  ship.vx = 0; ship.vy = 0;
+  for (let i = 0; i < secs * 120; i++) {
+    applyForces(ship, level, i / 120, 1 / 120, terrain);
+    ship.vy = 0;                       // hold station: only the impulse matters
+  }
+  return { vx: ship.vx, vy: 0 };
+}
+
+/** Lift the air makes at a given attitude, crossing at speed. */
+function liftAt(loadout, angle, vx = 120) {
+  const level = chapterFor('TITAN', 4242).levels[4];
+  const terrain = new Terrain(level, 4242);
+  const ship = new Ship();
+  ship.applyLoadout(loadout);
+  ship.reset(terrain.pads[0].x1, terrain.heightAt(terrain.pads[0].x1) - 300, level.fuel);
+  ship.vx = vx; ship.angle = angle;
+  applyForces(ship, level, 0, 1 / 120, terrain);
+  return ship.env.lift || 0;
+}
+
 /** A machine of a known type, and a lander parked beside it. */
 function machineRig(loadout, gap = 80) {
   const level = { ...MOON_LEVELS[3], enemyBudget: 2, enemySets: ['sentry-turret'] };
@@ -480,6 +514,33 @@ const WITNESS = {
       for (let i = 0; i < 240; i++) ship.step(1 / 120, idle, level, terrain, i / 120, set);
       return +Math.abs(ship.spin).toFixed(6);
     } },
+  // ---- M31's five specialists ---------------------------------------------
+  corrosionResist: { how: 'flight',
+    measure: (on) => timeToStatus(on ? only('corrosionResist', 0.55) : STOCK,
+      [{ type: 'acid', acidRate: 12 }], 'corrosion') },
+  coldResist: { how: 'flight',
+    measure: (on) => timeToStatus(on ? only('coldResist', 0.55) : STOCK,
+      [{ type: 'cold', coldRate: 12 }], 'cold') },
+  plumeLateral: { how: 'flight',
+    // Parked in a live vent and asked what it did **sideways**. The vertical
+    // half is checked here too, in the section below, because the module's
+    // whole claim is that it cuts one and leaves the other.
+    measure: (on) => +ventPush(on ? only('plumeLateral', 0.35) : STOCK).vx.toFixed(5) },
+  glideTrim: { how: 'flight',
+    // Nose tipped into the direction of travel: with a foil that sheds lift,
+    // without one the attitude means nothing to the air.
+    measure: (on) => +liftAt(on ? only('glideTrim', 0.7) : STOCK, 0.45).toFixed(6) },
+  collectRadius: { how: 'instrument',
+    // 75 px: outside the stock reach of 62, inside a magnet's 93. Measured
+    // through `terrain.collect` itself, which is the rule both the game loop
+    // and the pilot call.
+    measure: (on) => {
+      const level = MOON_LEVELS[0];
+      const terrain = new Terrain(level, 4242);
+      const cell = terrain.fuelCells[0];
+      return terrain.collect(cell.x + 75, cell.y, pickupRadius(on ? only('collectRadius', 1.5) : STOCK)).length;
+    } },
+
   weaponPower: { how: 'flight',
     measure: (on) => {
       const { ship, field, e } = machineRig(on ? only('weaponPower', 2) : STOCK);

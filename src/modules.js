@@ -92,6 +92,62 @@ export const PASSIVE_MODULES = {
     good: ['MARS', 'PLUTO', 'GANYMEDE'],
     effect: { noiseResist: 0.3, beacon: 1.5 },
   },
+  // --- M31 -----------------------------------------------------------------
+  //
+  // Five specialists, each scaling a channel that already exists. `good` names
+  // only bodies where the thing they answer **measurably happens** - the
+  // loadout gate flies every claim, so a body listed here for flavour is a
+  // failing test rather than a hopeful line on a route card.
+  'ablative-acid-skin': {
+    id: 'ablative-acid-skin', name: 'ABLATIVE ACID SKIN',
+    blurb: 'A sacrificial hull layer. Venus eats it instead of you.',
+    good: ['VENUS'],
+    // One lever, both halves of the spec's "reduces acid and corrosion damage":
+    // the hull cost is driven by how far corrosion is past its bite, so slowing
+    // the build slows the damage. A second key would be two dials on one wire.
+    effect: { corrosionResist: 0.55 },
+  },
+  'cryo-insulation': {
+    id: 'cryo-insulation', name: 'CRYO INSULATION',
+    blurb: 'Keeps the cold out of the attitude thrusters a good while longer.',
+    // Pluto only. The spec lists Europa too, and Europa declares no `cold` at
+    // all - its weather is ice underfoot and radiation overhead - so claiming
+    // it would be a route card recommending kit that does nothing there.
+    good: ['PLUTO'],
+    effect: { coldResist: 0.55 },
+  },
+  'plume-vanes': {
+    id: 'plume-vanes', name: 'PLUME VANES',
+    blurb: 'Splits a vapour jet around the hull. You still rise; you stop being thrown sideways.',
+    good: ['ENCELADUS'],
+    // Lateral only, per the spec's "while preserving some lift". At 1.4 m/s2
+    // the column is free altitude and the sideways shove is what loses the pad.
+    effect: { plumeLateral: 0.35 },
+  },
+  'atmospheric-control-surfaces': {
+    id: 'atmospheric-control-surfaces', name: 'CONTROL SURFACES',
+    blurb: 'Flare to float, tip forward to drop. Thick air becomes something you fly.',
+    good: ['TITAN', 'VENUS'],
+    // Two halves, and on each body only one of them leads: Titan is the glide,
+    // Venus is the gust. Both are real on the body listed.
+    //
+    // Worth knowing before flying it: `disturbanceResist` scales Titan's raw
+    // lift as well as its gusts, so fitting the foil takes about 15% off the
+    // float *before* the attitude term is asked for anything. Measured on
+    // titan-5 at 120 px/s - stock 4.60 whatever the nose is doing, foil 5.10
+    // flared, 3.91 level, 2.72 tipped into the crossing. You trade a little
+    // free altitude for the ability to choose when you have it.
+    effect: { glideTrim: 0.7, disturbanceResist: 0.85 },
+  },
+  'salvage-magnet': {
+    id: 'salvage-magnet', name: 'SALVAGE MAGNET',
+    blurb: 'Sweeps cells, cargo and ore in from half again the distance.',
+    // No body: it answers the map rather than the weather, so it is never the
+    // specialist a route card names. `recommendedFor` simply never returns it,
+    // which is what an empty list means and is checked rather than assumed.
+    good: [],
+    effect: { collectRadius: 1.5 },
+  },
 };
 
 export const STARTER_PASSIVES = ['fuel-recycler', 'gyro-stabilizer'];

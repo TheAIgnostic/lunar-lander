@@ -513,9 +513,10 @@ export function screenHTML(s) {
           <!-- Tom: "how do you unlock blueprints?" - nothing on this screen said,
                and a locked tile reading "Blueprint not yet recovered" is a
                statement of fact rather than an instruction. -->
-          <p class="body">Blueprints are <b>found, not bought</b>. Clearing your first body hands one
-          over, and surviving a mission that shot at you hands over the weapon. They are the one
-          thing a lost expedition never takes back, so what you recover is yours for good.</p>
+          <p class="body">Blueprints are <b>found, not bought</b>. <b>Every body you clear hands one
+          over</b> — picked for the world you are about to fly — and surviving a mission that shot at
+          you hands over the weapon. They are the one thing a lost expedition never takes back, so
+          what you recover is yours for good.</p>
           <div class="grid comps">${slot(ACTIVE_MODULES, 'active')}</div>
         </div>
         <div class="setting"><div class="setting-name">PASSIVE MODULE</div><div class="grid comps">${slot(PASSIVE_MODULES, 'passive')}</div></div>

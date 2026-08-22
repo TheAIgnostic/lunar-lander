@@ -21,6 +21,7 @@ import { Ship } from '../src/ship.js';
  */
 export const PILOT_SETTINGS = { steering: 'pro', invertRotation: false };
 import { spawnFor } from '../src/spawn.js';
+import { pickupRadius } from '../src/terrain.js';
 import { EnemyField } from '../src/enemies.js';
 import { Abilities } from '../src/abilities.js';
 import { ACTIVE_MODULES } from '../src/modules.js';
@@ -327,7 +328,7 @@ export function flyMission(level, terrain, opts = {}) {
   while (t < maxT) {
     control(input);
     event = ship.step(step, input, level, terrain, t, settings);
-    const got = terrain.collect(ship.x, ship.y);
+    const got = terrain.collect(ship.x, ship.y, pickupRadius(ship.loadout));
     // Only the road refuels. Cargo and material are payload - counting them as
     // fuel would have quietly handed the pilot a bigger tank on every mission
     // that had ore in it, and every flight number here would have been a lie.

@@ -82,6 +82,11 @@ export function findNode(id) {
  */
 export const ADDITIVE = new Set([
   'repairOnLanding', 'cargoRecovery', 'threatWarning', 'shieldHazard', 'energyOnKill',
+  // How much attitude authority a control surface gives you over lift. Zero is
+  // "no foil fitted", so it accumulates rather than multiplying - a second
+  // source of it should add reach, and multiplying two fractions would take it
+  // away. Naming it here is the whole of that decision (see `deriveFull`).
+  'glideTrim',
 ]);
 
 /** Effects of every purchased rank, folded together. Pure. */
