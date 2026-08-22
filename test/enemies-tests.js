@@ -5,6 +5,7 @@ import { Abilities, ABILITY } from '../src/abilities.js';
 import { ACTIVE_MODULES } from '../src/modules.js';
 import { validateEnemies, sanctuaryClear } from '../src/validate.js';
 import { Terrain } from '../src/terrain.js';
+import { applyForces } from '../src/forces.js';
 import { Ship } from '../src/ship.js';
 import { spawnFor } from '../src/spawn.js';
 import { MOON_LEVELS, MARS_LEVELS, EUROPA_LEVELS } from '../src/missions.js';
@@ -443,6 +444,150 @@ function shipAt(x, y, loadout = {}) {
   check('the pool takes the damage, not the hull', ship.hull === ship.hullMax);
   shield.update(99, { ship, field: null });
   check('it lets go cleanly', !ship.shieldActive && ship.shieldHp === 0 && ship.shieldFactor === 1);
+}
+
+// --- every active leaves the ship the way it found it
+//
+// **The general form of the M31 beacon leak.** A raised Sensor Pulse set
+// `beaconBoost` and never put it back, and nothing had noticed because until
+// M31 nothing read the field - a channel that is written and never read cannot
+// be *seen* to leak, so the leak becomes a bug on the day it gets a reader.
+//
+// Written per-module first, which mutation-testing showed was worth nothing:
+// leaving `airBrake` at 2.6 or `cloaked` at true for the rest of the mission
+// raised **zero** failures. Stated as a property of every active instead, so a
+// module built later is covered by a test written before it existed.
+{
+  // What a module is *meant* to leave behind. Everything else must come back.
+  //
+  // `env` is deliberately **not** on this list even though two modules write it.
+  // `applyForces` owns that object and resets every channel it can produce at
+  // the top of each step, so the honest test is to run one step of physics
+  // after the module ends and require the ship to be back - which exercises the
+  // real restoration path rather than exempting it. The first version of this
+  // block exempted `env` wholesale and would have missed a module leaking a
+  // channel `applyForces` does not reset.
+  const KEEPS = {
+    'repair-nanites': ['hull'],           // it heals; that is the whole point
+    'thermal-purge': ['statusLevels'],    // it dumps the gauges and they stay dumped
+  };
+  const QUIET = { id: 'teardown-rig', width: 2000, hazards: [] };
+  const snapshot = (ship) => {
+    const out = {};
+    for (const [k, v] of Object.entries(ship)) {
+      if (typeof v === 'number' || typeof v === 'boolean') out[k] = v;
+      else if (v && typeof v === 'object' && !Array.isArray(v)) out[k] = JSON.stringify(v);
+    }
+    return out;
+  };
+  for (const id of Object.keys(ACTIVE_MODULES)) {
+    const mod = ACTIVE_MODULES[id];
+    const ship = shipAt(500, 300);
+    ship.statusLevels.heat = 40;
+    ship.hull = ship.hullMax - 20;
+    applyForces(ship, QUIET, 0, 1 / 120);
+    const before = snapshot(ship);
+    const a = new Abilities(id, { shieldCapacity: 1 });
+    a.trigger(ship);
+    // Run past the whole duration, one substep at a time, with nothing else in
+    // the world - so anything different at the end is the module's doing.
+    for (let i = 0; i < (mod.duration + 1) * 120 && a.active; i++) a.update(1 / 120, { ship, field: null });
+    check(`${id}: it lets go of the lander when it ends`, !a.active);
+    applyForces(ship, QUIET, 1, 1 / 120);
+    const after = snapshot(ship);
+    const keeps = new Set(KEEPS[id] || []);
+    const stuck = Object.keys(before).filter((k) => !keeps.has(k) && before[k] !== after[k]);
+    check(`${id}: every field it wrote falls away with it`, stuck.length === 0,
+      stuck.map((k) => `${k} ${before[k]} -> ${after[k]}`).join(', '));
+  }
+}
+
+// --- the Optical Cloak, and the two things it has to reach
+{
+  const lvl = { ...MOON_LEVELS[3], enemyBudget: 1, enemySets: ['sentry-turret'] };
+  const terrain = new Terrain(lvl, 1000);
+
+  // A gun that is aiming at you stops aiming - the same path cover takes.
+  {
+    const field = new EnemyField(lvl, terrain, 1000);
+    const e = field.enemies[0];
+    const ship = shipAt(e.x + 220, e.y - 90);
+    for (let i = 0; i < 600 && e.state === 'idle'; i++) field.update(1 / 120, i / 120, ship);
+    check('a machine notices an uncloaked lander', e.state !== 'idle', e.state);
+    const cloak = new Abilities('optical-cloak', {});
+    cloak.trigger(ship);
+    cloak.update(1 / 120, { ship });
+    for (let i = 0; i < 300; i++) field.update(1 / 120, i / 120, ship);
+    check('and loses it once the cloak is up', e.state === 'idle', e.state);
+  }
+
+  // **A drone that cannot see you must not ram you either.** Ramming never went
+  // through `_sees` at all, so a cloak wired only into the sight check would
+  // have left the most dangerous machine in the game behaving exactly as
+  // before - the module half-built, and the mutation that proves it raised
+  // zero failures until this existed.
+  {
+    const air = { ...MOON_LEVELS[3], enemyBudget: 1, enemySets: ['seeker-drone'] };
+    const t2 = new Terrain(air, 1000);
+    const droneType = ENEMY_TYPES['seeker-drone'];
+    const fly = (cloaked, offset, steps) => {
+      const field = new EnemyField(air, t2, 1000);
+      const e = field.enemies[0];
+      const homeX = e.homeX;
+      const ship = shipAt(e.x + offset, e.y);
+      for (let i = 0; i < steps; i++) {
+        ship.cloaked = cloaked;                       // held, the way a running module holds it
+        field.update(1 / 120, i / 120, ship);
+      }
+      return { hull: ship.hull, gap: Math.hypot(ship.x - e.x, ship.y - e.y),
+        wander: Math.abs(e.x - homeX), hits: field.hitsTaken };
+    };
+
+    // **Ram range is 44 px and a drone's standoff ring is 195**, so a drone only
+    // ever rams a lander that came to *it*. Parked right on top of one is the
+    // only rig that exercises the path at all - the first version of this check
+    // sat 60 px away, watched the drone back off to its ring, and proved
+    // nothing: the mutation that lets a drone chase a cloaked lander raised
+    // zero failures against it.
+    const onTop = fly(false, 4, 4);
+    const onTopHidden = fly(true, 4, 4);
+    check('a drone rams a lander that flies into it', onTop.hull < 100, `hull ${onTop.hull}`);
+    check('and never touches a cloaked one', onTopHidden.hull === 100, `hull ${onTopHidden.hull}`);
+
+    // And the other half: it must not *shadow* you either. Ramming is the
+    // consequence; being followed is the behaviour.
+    const shadowed = fly(false, 420, 900);
+    const unseen = fly(true, 420, 900);
+    check('a drone closes on an uncloaked lander', shadowed.gap < droneType.standoff + 60,
+      `${shadowed.gap.toFixed(0)} px against a ${droneType.standoff} px ring`);
+    check('and goes back to its patrol against a cloaked one', unseen.gap > droneType.standoff + 120,
+      `${unseen.gap.toFixed(0)} px`);
+  }
+}
+
+// --- the Repair Nanites, and the limitation that is half the module
+{
+  const ship = shipAt(500, 300);
+  ship.hull = 50;
+  const a = new Abilities('repair-nanites', {});
+  a.trigger(ship);
+  for (let i = 0; i < 120; i++) a.update(1 / 120, { ship, field: null });
+  const healed = ship.hull;
+  check('nanites rebuild hull while they run', healed > 50, `50 -> ${healed.toFixed(1)}`);
+  // A fresh wound stops them dead, and does not undo what they already did.
+  ship.damage(10, 'shot');
+  const afterHit = ship.hull;
+  a.update(1 / 120, { ship, field: null });
+  a.update(1 / 120, { ship, field: null });
+  check('a fresh hit stops them', !a.active);
+  check('and what they already repaired stays repaired', ship.hull >= afterHit,
+    `${afterHit} -> ${ship.hull}`);
+  // And they never overfill the tank.
+  const full = shipAt(500, 300);
+  const b = new Abilities('repair-nanites', {});
+  b.trigger(full);
+  for (let i = 0; i < 600; i++) b.update(1 / 120, { ship: full, field: null });
+  check('and never push past the hull maximum', full.hull === full.hullMax);
 }
 
 // --- the briefing tells the player what is out there

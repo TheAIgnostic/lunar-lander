@@ -226,9 +226,14 @@ function atmosphere(cfg) {
       const g2 = gust * damp * shear;
       const w = wind + Math.sin(t * 0.7) * g2 + Math.sin(t * 1.9 + 1.3) * g2 * 0.4;
       ship.windNow = w;
-      if (drag) {
-        ship.vx += (w - ship.vx) * drag * dt;
-        ship.vy += (0 - ship.vy) * drag * 0.5 * dt;
+      // A deployed Aero-Brake Foil is more surface in the same air. Note it
+      // multiplies `drag` rather than adding to it, so on an airless body it
+      // multiplies zero - which is the spec's "poor in vacuum" falling out of
+      // the arithmetic instead of being a special case somebody has to write.
+      const d = drag * (ship.airBrake || 1);
+      if (d) {
+        ship.vx += (w - ship.vx) * d * dt;
+        ship.vy += (0 - ship.vy) * d * 0.5 * dt;
       } else {
         ship.vx += w * dt;
       }
@@ -323,7 +328,11 @@ function glide(cfg) {
       const pitch = trim
         ? clamp(-Math.sin(ship.angle) * Math.sign(ship.vx || 1), -1, 1)
         : 0;
-      const up = Math.min(cap, lift * ship.vx * ship.vx) * damp * (1 + trim * pitch);
+      // The foil's second consequence, and it is one surface rather than two
+      // dials: what drags also spoils. Deploying it on Titan is how you stop
+      // floating, which is the half of "glide control" the trim does not cover.
+      const up = Math.min(cap, lift * ship.vx * ship.vx) * damp * (1 + trim * pitch)
+        / (ship.airBrake || 1);
       ship.vy -= up * dt;
       ship.env.lift = up;
     },

@@ -80,6 +80,10 @@ export class Abilities {
       // heat and cold as well; without it the shield is a radiation answer.
       ship.shieldHazard = (this.loadout.shieldHazard || 0) > 0;
     }
+    // Nanites are interrupted by a fresh wound, so they have to know what the
+    // hull was when they started. Read at the trigger rather than each step,
+    // because the thing being watched for is damage *since you pressed it*.
+    if (this.id === 'repair-nanites') this.watchHull = ship.hull;
     // A purge is instantaneous: it dumps heat and cold the moment it fires.
     if (this.id === 'thermal-purge') {
       const f = this.mod.effect.purgeStatus || 0.7;
@@ -120,6 +124,13 @@ export class Abilities {
           ship.shieldFactor = 1;
         }
         if (this.id === 'magnetic-anchor') ship.anchor = 1;
+        // **Every field an active writes has to fall away with it**, and the
+        // M31 beacon leak is why this is a list rather than a habit: a channel
+        // that is written and never read cannot be seen to leak, so the moment
+        // one gets a reader the leak becomes a bug. `airBrake` is read by two
+        // forces and `cloaked` by every machine on the map.
+        if (this.id === 'aero-brake') ship.airBrake = 1;
+        if (this.id === 'optical-cloak') ship.cloaked = false;
         // The pulse's beacon gain has to fall away with it. It never did,
         // because until M31 nothing read `beaconBoost` at all - a channel that
         // is written and never read cannot be seen to leak. Now that the pad
@@ -153,6 +164,33 @@ export class Abilities {
         break;
       case 'ray-shield':
         ship.shieldActive = true;
+        break;
+      case 'aero-brake':
+        // The atmosphere and the glide both read this. In a vacuum both are
+        // zero already, so the foil is exactly as useless as the spec says.
+        ship.airBrake = this.mod.effect.brakeDrag || 1;
+        break;
+      case 'repair-nanites': {
+        // Interrupted by a fresh wound, per the spec: the nanites are knitting
+        // plate and a new hole stops them. Everything already lost stays
+        // repaired - it ends the burst, it does not undo it.
+        if (ship.hull < (this.watchHull != null ? this.watchHull : ship.hull)) {
+          this.remaining = 0;
+          events.push({ kind: 'repair-interrupted' });
+          break;
+        }
+        const before = ship.hull;
+        ship.hull = Math.min(ship.hullMax, ship.hull + (this.mod.effect.repairPerSecond || 0) * dt);
+        this.watchHull = ship.hull;
+        if (ship.hull > before) events.push({ kind: 'repairing', amount: ship.hull - before });
+        break;
+      }
+      case 'optical-cloak':
+        ship.cloaked = true;
+        // Burning gives you away. Charged against the *throttle* rather than
+        // switched on `thrusting`, so a key and a trigger cost what they
+        // actually command instead of the module being a pad-only feature.
+        this.remaining -= (this.mod.effect.cloakDrain || 0) * (ship.throttle || 0) * dt;
         break;
       case 'pulse-laser': {
         // Auto-tracking, short-ranged and time-limited: it answers a threat

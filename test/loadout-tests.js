@@ -514,6 +514,69 @@ const WITNESS = {
       for (let i = 0; i < 240; i++) ship.step(1 / 120, idle, level, terrain, i / 120, set);
       return +Math.abs(ship.spin).toFixed(6);
     } },
+  // ---- M32's three actives ------------------------------------------------
+  brakeDrag: { how: 'flight',
+    // How fast Titan's air takes a crossing speed off you, with the foil out
+    // and without it. Measured through `applyForces`, so it is the same drag
+    // the mission flies.
+    measure: (on) => withEffect('aero-brake', { brakeDrag: on ? 2.6 : 1 }, () => {
+      const level = chapterFor('TITAN', 4242).levels[0];
+      const terrain = new Terrain(level, 4242);
+      const ship = new Ship();
+      ship.applyLoadout(STOCK);
+      ship.reset(terrain.pads[0].x1, terrain.heightAt(terrain.pads[0].x1) - 320, level.fuel);
+      ship.vx = 140;
+      const a = new Abilities('aero-brake', STOCK);
+      a.trigger(ship);
+      for (let i = 0; i < 180; i++) {
+        a.update(1 / 120, { ship });
+        applyForces(ship, level, i / 120, 1 / 120, terrain);
+      }
+      return +ship.vx.toFixed(5);
+    }) },
+  repairPerSecond: { how: 'flight',
+    measure: (on) => withEffect('repair-nanites', { repairPerSecond: on ? 9 : 0 }, () => {
+      const ship = new Ship();
+      ship.applyLoadout(STOCK);
+      ship.reset(0, 0, 100);
+      ship.hull = 40;
+      const a = new Abilities('repair-nanites', STOCK);
+      a.trigger(ship);
+      for (let i = 0; i < 240; i++) a.update(1 / 120, { ship });
+      return +ship.hull.toFixed(4);
+    }) },
+  cloak: { how: 'flight',
+    // A machine parked in reach, given two seconds to notice a lander. Cloaked,
+    // it never leaves `idle`; uncloaked it is aiming.
+    measure: (on) => withEffect('optical-cloak', { cloak: on ? 1 : 0 }, () => {
+      const { ship, field } = machineRig(STOCK, 200);
+      const a = new Abilities('optical-cloak', STOCK);
+      a.trigger(ship);
+      let tracked = 0;
+      for (let i = 0; i < 240; i++) {
+        a.update(1 / 120, { ship });
+        // With the effect zeroed the module runs and writes nothing, which is
+        // the point: the flag is what the machines read.
+        if (!on) ship.cloaked = false;
+        field.update(1 / 120, i / 120, ship);
+        if (field.enemies.some((m) => m.state !== 'idle')) tracked++;
+      }
+      return tracked;
+    }) },
+  cloakDrain: { how: 'flight',
+    // How much of the cloak a held burn spends. Same duration, same steps, and
+    // the only difference is the throttle.
+    measure: (on) => withEffect('optical-cloak', { cloakDrain: on ? 2 : 0 }, () => {
+      const ship = new Ship();
+      ship.applyLoadout(STOCK);
+      ship.reset(0, 0, 100);
+      ship.throttle = 1;
+      const a = new Abilities('optical-cloak', STOCK);
+      a.trigger(ship);
+      for (let i = 0; i < 120; i++) { ship.throttle = 1; a.update(1 / 120, { ship }); }
+      return +a.remaining.toFixed(5);
+    }) },
+
   // ---- M31's five specialists ---------------------------------------------
   corrosionResist: { how: 'flight',
     measure: (on) => timeToStatus(on ? only('corrosionResist', 0.55) : STOCK,
@@ -894,6 +957,31 @@ section('3. turning it on moves the simulation');
   const cleats = slide(deriveFull({}, deriveSkills({}), derivePassive('ice-cleats')));
   check('ice-cleats shortens the slide on Europa', cleats < bare * 0.95,
     `${bare.toFixed(0)} px -> ${cleats.toFixed(0)} px`);
+}
+
+{
+  // --- the Aero-Brake Foil's second half: it spoils lift as well as dragging
+  //
+  // One field, two readers, and the drag witness in section 2 only measures
+  // one of them: removing the divide in `glide` raised **zero** failures until
+  // this existed. On Titan the whole complaint is the float, so the half that
+  // is not in the drag term is the half a player will feel first.
+  const liftWith = (brake) => {
+    const level = chapterFor('TITAN', 4242).levels[4];
+    const terrain = new Terrain(level, 4242);
+    const ship = new Ship();
+    ship.applyLoadout(STOCK);
+    ship.reset(terrain.pads[0].x1, terrain.heightAt(terrain.pads[0].x1) - 300, level.fuel);
+    ship.vx = 130; ship.angle = 0;
+    ship.airBrake = brake;
+    applyForces(ship, level, 0, 1 / 120, terrain);
+    return ship.env.lift;
+  };
+  const free = liftWith(1);
+  const braked = liftWith(ACTIVE_MODULES['aero-brake'].effect.brakeDrag);
+  check('a deployed foil spoils the lift it also drags against', braked < free * 0.6,
+    `${free.toFixed(3)} -> ${braked.toFixed(3)}`);
+  check('and a stowed one leaves the air exactly as it was', liftWith(1) === free);
 }
 
 {
@@ -1323,9 +1411,13 @@ function movedMissions(body, route, withOpts, withoutOpts) {
   for (const m of allModules()) {
     if (NOT_IN_FLIGHT[m.id]) continue;
     const isActive = !!ACTIVE_MODULES[m.id];
-    // Machines follow the module's own cue rather than a second list: a weapon
-    // and a shield need something shooting, and nothing else does.
-    const combat = isActive && m.cue === 'threat';
+    // Machines follow the module's own cue rather than a second list. The cue
+    // says what has to be happening for a player to reach for it, and two of
+    // the four need something shooting: `threat` obviously, and `hurt`, because
+    // the hull does not go down on its own. Reading this as "threat only" made
+    // the Repair Nanites read as inert - fitted, flown, and never once fired,
+    // because nothing had hurt the lander.
+    const combat = isActive && (m.cue === 'threat' || m.cue === 'hurt');
     // **Both routes, every claimed body.** Picking one route from the cue read
     // four things as inert that are not. The way home is short and quiet, so a
     // status channel never fills; the deep route is long and hostile, so the
@@ -1376,7 +1468,7 @@ function movedMissions(body, route, withOpts, withoutOpts) {
     check(`NOT_IN_FLIGHT names something real: ${id}`, !!(mod || node));
     if (!mod) continue;
     const isActive = !!ACTIVE_MODULES[id];
-    const combat = isActive && mod.cue === 'threat';
+    const combat = isActive && (mod.cue === 'threat' || mod.cue === 'hurt');
     const base = { loadout: STOCK, enemies: combat };
     const fit = isActive
       ? { ...base, ability: id }

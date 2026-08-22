@@ -209,6 +209,12 @@ export class Ship {
     this.hullBurn = 0;
     this.anchor = 1;
     this.beaconBoost = 1;
+    // Written by an active and read elsewhere: the Aero-Brake Foil by both
+    // atmospheric forces, the Optical Cloak by every machine on the map. Reset
+    // here so a module raised on one mission cannot follow the lander to the
+    // next - the same rule `thermalDerate` and `rcsStiffness` live under.
+    this.airBrake = 1;
+    this.cloaked = false;
     this.revealed = false;
     this.hitsTaken = 0;
     this.hitFlash = 0;

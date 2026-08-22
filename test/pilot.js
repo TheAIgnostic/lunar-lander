@@ -252,6 +252,10 @@ export const ABILITY_CUES = {
   status: ({ ship }) => Object.values(ship.statusLevels || {}).some((v) => v >= 25),
   blind: ({ ship }) => (ship.env.visibility != null && ship.env.visibility < 0.5)
     || (ship.env.darkness || 0) > 0.5,
+  // Reach for the nanites once a third of the hull is gone. Not at the first
+  // scratch (the charge is worth more later) and not at death's door (the
+  // module takes five seconds and a fresh hit stops it).
+  hurt: ({ ship }) => ship.hull < ship.hullMax * 0.7,
 };
 
 export function flyMission(level, terrain, opts = {}) {

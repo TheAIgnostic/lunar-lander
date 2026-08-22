@@ -646,9 +646,20 @@ export class EnemyField {
 
   _stepEnemy(e, dt, t, ship, events) {
     const type = typeOf(e);
-    if (type.kind === 'air') this._moveDrone(e, type, dt, ship, events);
+    // **A cloaked lander is, to a machine, no lander at all.** One predicate at
+    // the top rather than a check in each branch: a drone that could not *see*
+    // you but still chased and rammed you would be the module half-built, and
+    // ramming does not go through `_sees` at all. With no target a drone goes
+    // back to its patrol, a gun in `track` loses the lock after 1.2 s, and a
+    // gun already in `telegraph` takes the same `!seen` path that cover takes -
+    // it aborts the shot and says so.
+    //
+    // Shots already in the air are deliberately untouched. A cloak breaks
+    // targeting; it does not erase a bullet that has left the barrel.
+    const target = ship && !ship.cloaked ? ship : null;
+    if (type.kind === 'air') this._moveDrone(e, type, dt, target, events);
 
-    const seen = ship ? this._sees(e, type, ship) : null;
+    const seen = target ? this._sees(e, type, target) : null;
     e.alert = clamp(e.alert + (seen ? dt * 2.5 : -dt * 1.2), 0, 1);
 
     // Out of ammo is out of the fight, permanently. It still stands there and
@@ -666,7 +677,7 @@ export class EnemyField {
       e.timer += dt;
       if (!seen) { if (e.timer > 1.2) { e.state = 'idle'; e.timer = 0; } return; }
       // Turn toward where the lander will be, at a rate slow enough to shake.
-      const lead = this._leadPoint(e, type, ship);
+      const lead = this._leadPoint(e, type, target);
       const want = Math.atan2(lead.y - e.y, lead.x - e.x);
       const d = angleDelta(e.aim, want);
       const turn = Math.min(Math.abs(d), type.turnRate * dt) * Math.sign(d);
@@ -691,7 +702,7 @@ export class EnemyField {
         return;
       }
       if (e.timer <= 0) {
-        this._fire(e, type, ship, events);
+        this._fire(e, type, target, events);
         e.state = 'recover';
         e.timer = type.cooldown;
       }

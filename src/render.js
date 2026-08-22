@@ -994,8 +994,36 @@ export function drawPadBeacons(ctx, cam, W, H, terrain, level, time, rawStrength
 export function drawShip(ctx, ship, time, cam) {
   if (!ship.alive) return;
   ctx.save();
+  // **A cloak the player cannot see is half a module.** The whole effect is
+  // that the machines stop reacting, which is an *absence* - and an absence is
+  // indistinguishable from the module having failed. So the lander goes
+  // translucent and breathes, and burning brings it back toward solid, which is
+  // the same thing the drain is doing to the timer. It never goes fully
+  // invisible: you have to be able to fly it.
+  if (ship.cloaked) {
+    ctx.globalAlpha = 0.30 + 0.10 * throb(time, 1.6, 1) + 0.34 * (ship.throttle || 0);
+  }
   ctx.translate(ship.x, ship.y);
   ctx.rotate(ship.angle);
+
+  // The Aero-Brake Foil, out to the sides and swept back. Drawn before the
+  // hull so the hull sits over it, and only while it is actually deployed -
+  // `airBrake` is 1 the rest of the time, which is what `applyForces` reads.
+  if ((ship.airBrake || 1) > 1) {
+    ctx.strokeStyle = '#9fe8ff';
+    ctx.lineWidth = 2;
+    ctx.globalAlpha *= 0.9;
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(side * 10, -2);
+      ctx.lineTo(side * 26, 7);
+      ctx.lineTo(side * 22, 12);
+      ctx.lineTo(side * 9, 4);
+      ctx.closePath();
+      ctx.stroke();
+    }
+    ctx.globalAlpha /= 0.9;
+  }
 
   // Exhaust plume (drawn behind the hull, pointing down-local).
   if (ship.throttle > 0.02) {

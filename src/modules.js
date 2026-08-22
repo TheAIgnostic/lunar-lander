@@ -55,6 +55,48 @@ export const ACTIVE_MODULES = {
     charges: 2, duration: 1, cooldown: 10,
     effect: { purgeStatus: 0.7 },
   },
+  // --- M32 -----------------------------------------------------------------
+  //
+  // Three actives that need no new system: a surface the atmosphere already
+  // knows how to read, a heal the ship already knows how to apply, and a flag
+  // the enemy field already has a choke point for.
+  'aero-brake': {
+    id: 'aero-brake', name: 'AERO-BRAKE FOIL',
+    blurb: 'Deploys a braking surface. Thick air stops being something you fight.',
+    // The only unbuilt module that served **both** bodies with no active at all
+    // (M30g), which is why it is first of the three. In a vacuum `level.drag`
+    // is 0 and `0 * anything` is 0, so the spec's "poor in vacuum" needs no
+    // special case - it is what the arithmetic already does.
+    good: ['TITAN', 'VENUS'],
+    cue: 'final',
+    charges: 3, duration: 4, cooldown: 6,
+    // One number, two readers, because a deployed surface has two consequences:
+    // it drags, and it spoils lift. `forces.js` reads `ship.airBrake` in both
+    // `atmosphere` and `glide`.
+    effect: { brakeDrag: 2.6 },
+  },
+  'repair-nanites': {
+    id: 'repair-nanites', name: 'REPAIR NANITES',
+    blurb: 'Rebuilds hull while it runs — and a fresh hit stops it dead.',
+    good: ['MARS', 'VENUS'],
+    cue: 'hurt',
+    charges: 2, duration: 5, cooldown: 10,
+    effect: { repairPerSecond: 9 },
+  },
+  'optical-cloak': {
+    id: 'optical-cloak', name: 'OPTICAL CLOAK',
+    blurb: 'The machines lose you. Burn hard and you hand yourself back.',
+    good: ['TITAN', 'PLUTO', 'GANYMEDE'],
+    cue: 'threat',
+    charges: 2, duration: 6, cooldown: 9,
+    // **`cloakDrain` is the spec's "strong thrust disrupts it", as a cost
+    // rather than a switch.** A switch would be a device split: the keyboard
+    // answers exactly 1.0 or 0.0, so "strong thrust" on a key means *any*
+    // thrust, and the module would be usable on a pad and useless without one.
+    // Draining with the throttle scales with whatever the player is holding and
+    // reads the same on both - 6 s coasting, about 2 s under a full burn.
+    effect: { cloak: 1, cloakDrain: 2 },
+  },
   // The Moon has no weather to fight, so the weapon is its recommendation -
   // and it is the only body where a turret is the hardest thing in the sky.
   'pulse-laser': {
