@@ -548,18 +548,35 @@ it now asserts the gyro is worth fitting in *both* named modes rather than in wh
 happens to be.
 
 **Audio is synthesized, and the title screen's bed is too.** There are no audio files in this
-project. The space bed (M29f) is four layers of WebAudio nodes — a detuned drone, filtered noise, two
-high partials, and one sparse beacon ping — and **all of its movement is LFO nodes rather than
-per-frame JavaScript**. That is deliberate: M16 found `engines` writing 240 automation events a
-second forever, and a bed that plays for as long as somebody leaves the title screen up is where that
-fault would hurt most. The graph is built once, the oscillators drive themselves, and the only
-JavaScript that runs afterwards is one `setTimeout` per ping — which stops being rescheduled the
-moment the bed is switched off.
+project. The space bed is **one layer since M40** — a detuned low drone and nothing else — and **all
+of its movement is LFO nodes rather than per-frame JavaScript**. That is deliberate: M16 found
+`engines` writing 240 automation events a second forever, and a bed that plays for as long as
+somebody leaves the title screen up is where that fault would hurt most. The graph is built once and
+the oscillators drive themselves; since M40 no JavaScript runs after it at all.
+
+**It was four layers, and the extra three were the fault.** M29f added filtered noise, two high
+partials at 1320/1976 Hz, and a beacon ping every 9–22 s at 523/784 Hz. Tom heard the result as *"a
+high pitching sound and not the cool space hum"*, and the measurement agreed: raw levels put the ping
+9 dB **under** the drone, but the ear is far more sensitive at 500 Hz than at 55, so what carried was
+the ping and the shimmer rather than the body. **Nothing in the bed runs above 90 Hz now**, and it is
+all routed through one 150 Hz lowpass so a layer added later cannot quietly reintroduce a top end.
+The movement comes from **detuning rather than automation** — 55 against 55.19 Hz beats every five
+seconds or so. Generalise it: **a level is not a loudness**, and a mix judged on dB alone will put
+the thing you notice underneath the thing you meant.
 
 **The bed has exactly one owner: `setState`.** It was briefly given two — `silence()` also switched
 it off "for safety" — and the frame loop calls `silence()` *every frame the game is not in play*, so
 the bed was killed on the one screen it exists for. `silence()` stops the flight voices; the screen
 owns the ambience. One rule, one implementation, again.
+
+**And the exemption was too wide: the wind is a flight voice and it leaked.** `setWind` is only ever
+called from the play loop, so leaving a mission did not turn the wind down, it simply *stopped
+asking* — and a resonant noise voice (Q 3, ~240 Hz) sat open at whatever gain the last atmosphere
+left it on, for the rest of the session. On the title screen that is a whine over the top of the
+drone: measured at gain 0.198 and **8 dB above a clean bed** through 150–400 Hz. `silence()` closes
+it now, guarded so it never builds the voice just to switch it off. The rule is that **only the space
+bed is exempt** from `silence()`, and anything else that holds a gain between missions has to be
+closed by it.
 
 **The rule that holds accessibility honest:** every accessibility setting changes *presentation*
 only — shake, flashing, instrument size, contrast and key bindings never reach the simulation.

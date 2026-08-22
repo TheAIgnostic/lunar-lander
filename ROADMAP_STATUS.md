@@ -1106,6 +1106,51 @@ scheduled until the MVP is stable — the spec says the same.
 
 None.
 
+## Done: M40 — the title bed is a hum again, and a voice that leaked between missions
+
+**Tom:** *"the space soundbed at title screen is not working... it has a high pitching sound and not
+the cool space hum that it had before"* — then, on the rebuild: *"now it is ok"*.
+
+**Two faults, and I chased the wrong one first.** The report opened with "no sound anymore", so I
+spent the first pass proving the bed *starts* — in the dev build, in the bundle, on a click and on a
+keypress. All four worked. It was playing the whole time; it just sounded wrong, and "not working"
+had meant "sounds bad". Read the complaint, not the first sentence of it.
+
+### The leak: `silence()`'s exemption was too wide
+
+`setWind` is only ever called from the play loop, so **leaving a mission did not turn the wind down —
+it stopped asking**, and a resonant noise voice (Q 3, ~240 Hz) sat open at whatever gain the last
+atmosphere left it on for the rest of the session.
+
+| title screen | 150–400 Hz | wind gain |
+| --- | ---: | ---: |
+| clean | −73.4 dB | — |
+| after a windy mission, **before** | **−62.9 dB** | **0.198** |
+| after a windy mission, **after** | −75.4 dB | 0 |
+
+`silence()` closes it now, guarded so it never builds the voice just to switch it off. The standing
+rule is sharper for it: **only the space bed is exempt from `silence()`**, and anything else holding
+a gain between missions has to be closed by it.
+
+### The bed: four layers became one
+
+M29f's bed was a drone, filtered noise, two partials at 1320/1976 Hz, and a beacon ping every 9–22 s
+at 523/784 Hz. **Raw levels put the ping 9 dB under the drone** — and that is exactly why it was
+wrong. The ear is far more sensitive at 500 Hz than at 55, so what carried was the ping and the
+shimmer rather than the body, and the mix had been judged in dB.
+
+Scrapped and rebuilt as **one layer**: 27.5 / 55 / 55.19 / 82.5 Hz through a **150 Hz lowpass**, at
+peak 0.07. **Nothing runs above 90 Hz**, so there is no register left for a whine to live in, and the
+filter states the brief rather than relying on restraint — a layer added later cannot quietly
+reintroduce a top end. The movement is **detuning rather than automation**: 55 against 55.19 beats
+about every five seconds, so it swells on its own. With the beacon gone there is **no JavaScript
+running after the graph is built at all**, which is the M16 rule finally reaching zero.
+
+**The generalisation worth keeping: a level is not a loudness.** A mix judged on dB alone will put
+the thing you notice underneath the thing you meant.
+
+---
+
 ## Done: M39 — one list, pick two
 
 **Tom, on the M37 screen:** *"This is not good design to have the slots twice. you should be able to

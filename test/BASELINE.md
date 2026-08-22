@@ -4925,3 +4925,41 @@ also needed a second case before it could fail.
 
 Both fixtures byte-identical, crossing 641/800, every audit figure unchanged.
 `skills-tests.js` 127 → **149**.
+
+## M40 — the title bed is a hum again (2026-08-22)
+
+Tom: *"a high pitching sound and not the cool space hum that it had before"*. Two faults, and the
+first pass chased the wrong one — the report opened "no sound anymore", so the bed was proved to
+*start* in four configurations before it became clear it had been playing all along and simply
+sounded wrong.
+
+### The wind voice leaked between missions
+
+`setWind` is only called from the play loop, so leaving a mission stopped asking rather than turning
+it down. Measured on the title screen:
+
+| | 150–400 Hz | wind gain |
+| --- | ---: | ---: |
+| clean | −73.4 dB | — |
+| after a windy mission, before | **−62.9 dB** | **0.198** |
+| after a windy mission, after | −75.4 dB | 0 |
+
+### The bed was four layers and is now one
+
+The old mix, max-hold over 26 s on a clean title screen:
+
+```
+drone    55 Hz   -39.8 dB      <- the body
+fifth    83 Hz   -55.4 dB
+wind    522 Hz   -85.7 dB
+beacon  523 Hz   -47.6 dB      <- 9 dB under the drone, and the thing you hear
+shimmer 1976 Hz  -94.0 dB
+```
+
+**Raw level said the ping was quiet; the ear says otherwise** — sensitivity at 500 Hz is far above
+55 Hz, so the mix had been judged in the wrong units. Rebuilt as a single layer: 27.5 / 55 / 55.19 /
+82.5 Hz through a 150 Hz lowpass at peak 0.07, movement from detuning (55 vs 55.19 beats every ~5 s)
+rather than automation. Nothing above 90 Hz; no `setTimeout` left anywhere in the bed.
+
+Full suite green, both fixtures byte-identical, every audit figure unchanged — audio never touches
+the simulation, which is the rule `gamelog` and the accessibility settings live under.

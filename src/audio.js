@@ -91,6 +91,17 @@ export class Audio {
     this._rcsOn = null;
     if (this.laserVoice) this.laserVoice.g.gain.setTargetAtTime(0, this.ctx.currentTime, 0.02);
     this.engines(false, false);
+    // **The wind is a flight voice too, and it used to leak.** `setWind` is only
+    // ever called from the play loop, so leaving a mission simply *stopped
+    // asking* - and a resonant noise voice (Q 3, ~240 Hz) sat open at whatever
+    // gain the last atmosphere left it on, for the rest of the session. On the
+    // title screen it reads as a whine over the top of a 55 Hz drone: measured
+    // at gain 0.198 and 8 dB above a clean bed through 150-400 Hz.
+    //
+    // Guarded rather than unconditional, for the reason the space bed gives:
+    // never build a voice just to switch it off. Only the *space bed* is
+    // exempt from this method, and it says why above.
+    if (this.windVoice) this.setWind(0);
   }
 
   _env(node, peak, attack, decay) {
@@ -284,37 +295,36 @@ export class Audio {
   }
 
   /**
-   * **The space bed: the title screen's ambience.**
+   * **The space bed: the title screen's ambience. A hum, and nothing else.**
    *
    * Everything in this file is synthesized - there are no audio files in this
-   * project and there is not going to be one for this - so it is built out of
-   * the same nodes as the engines, just slower and much quieter.
+   * project and there is not going to be one - so it is built out of the same
+   * nodes as the engines, just slower and much quieter.
    *
-   * Four layers, and each is doing a specific job:
+   * **M40 scrapped the previous bed and rebuilt it as this.** That one had four
+   * layers: a drone, filtered noise, two high partials, and a beacon ping every
+   * 9-22 seconds at 523 and 784 Hz. Tom heard the result as *"a high pitching
+   * sound and not the cool space hum"*, and the measurement agreed with him -
+   * raw levels put the ping 9 dB under the drone, but the ear is far more
+   * sensitive at 500 Hz than at 55, so the thing you actually noticed was the
+   * ping and the shimmer rather than the body. **Nothing here now runs above
+   * 90 Hz**, so there is no register left for a whine to live in.
    *
-   *  - **the drone** is the body: two sines a few cents apart at 55 Hz and a
-   *    triangle a fifth above. The detune is the point - they beat against each
-   *    other about every seven seconds, so the bed never sits still without
-   *    anything having to move it.
-   *  - **the wind** is filtered noise with its band drifting on a 90-second
-   *    cycle. It reads as distance rather than as weather, because the band is
-   *    narrow and centred low.
-   *  - **the shimmer** is two quiet high partials that swell against each other
-   *    on a slower cycle again, so the top of the mix breathes instead of
-   *    sitting as a fixed hiss.
-   *  - **the beacon** is one sparse ping, 9 to 22 seconds apart. It is what
-   *    stops the bed being wallpaper: something out there is still transmitting.
+   * It is one layer, and its movement comes from **detuning rather than from
+   * automation**: 55 and 55.19 Hz beat against each other about every five
+   * seconds, so the hum swells and thins on its own without anything writing to
+   * a parameter. A fifth underneath at low level gives it a floor, and one very
+   * slow gain LFO breathes it over half a minute.
    *
-   * **All the movement is LFO nodes, not per-frame JavaScript.** M16 found
+   * **All the movement is LFO nodes, not per-frame JavaScript** (M16 found
    * `engines` writing 240 automation events a second forever, and a bed that
-   * plays for as long as somebody leaves the title screen up is exactly where
-   * that fault would be worst. The graph is built once, the oscillators run
-   * themselves, and the only JavaScript that ever runs afterwards is one
-   * `setTimeout` per beacon ping - which stops being rescheduled the moment the
-   * bed is switched off.
+   * plays for as long as somebody leaves the title screen up is where that
+   * would hurt most). Since M40 there is no `setTimeout` here either - the
+   * beacon was the only JavaScript that ever ran after the graph was built, and
+   * it is gone with the ping.
    *
-   * It is deliberately very quiet (peak 0.085 against the engines' 0.55). A
-   * title bed that competes with the UI blips is a title bed people turn off.
+   * Deliberately very quiet (peak 0.07 against the engines' 0.55). A title bed
+   * that competes with the UI blips is a title bed people turn off.
    */
   spaceBed(on) {
     if (!this.ready) return;
@@ -329,67 +339,44 @@ export class Audio {
       out.gain.value = 0;
       out.connect(this.master);
 
-      // A slow LFO helper: an oscillator driving a param through a gain.
-      const lfo = (rate, depth, target, base) => {
-        const o = this.ctx.createOscillator();
-        const g = this.ctx.createGain();
-        o.type = 'sine';
-        o.frequency.value = rate;
-        g.gain.value = depth;
-        o.connect(g).connect(target);
-        target.value = base;
-        o.start();
-        return o;
-      };
+      // Everything goes through one lowpass well under 100 Hz. It is the whole
+      // brief - "just space hum" - expressed as a filter rather than as
+      // restraint, so a layer added later cannot quietly reintroduce a top end.
+      const filt = this.ctx.createBiquadFilter();
+      filt.type = 'lowpass';
+      filt.frequency.value = 150;
+      filt.Q.value = 0.5;
 
-      // --- the drone
-      const droneGain = this.ctx.createGain();
-      droneGain.gain.value = 0.055;
-      const droneFilt = this.ctx.createBiquadFilter();
-      droneFilt.type = 'lowpass';
-      droneFilt.frequency.value = 240;
-      droneFilt.Q.value = 0.7;
-      droneFilt.connect(droneGain).connect(out);
-      for (const [type, freq] of [['sine', 55], ['sine', 55.19], ['triangle', 82.4]]) {
+      const hum = this.ctx.createGain();
+      hum.gain.value = 0.07;
+      filt.connect(hum).connect(out);
+
+      // 55 and 55.19 beat every ~5 s; the octave under gives it a floor and the
+      // fifth a little colour. Nothing above 90 Hz.
+      for (const [type, freq, level] of [
+        ['sine', 27.5, 0.55],
+        ['sine', 55, 1],
+        ['sine', 55.19, 0.85],
+        ['triangle', 82.5, 0.14],
+      ]) {
         const o = this.ctx.createOscillator();
         o.type = type;
         o.frequency.value = freq;
         const g = this.ctx.createGain();
-        g.gain.value = freq > 60 ? 0.35 : 1;
-        o.connect(g).connect(droneFilt);
+        g.gain.value = level;
+        o.connect(g).connect(filt);
         o.start();
       }
-      // The drone breathes, very slightly, on a 25-second cycle.
-      lfo(0.04, 0.018, droneGain.gain, 0.055);
 
-      // --- the wind
-      const wind = this.ctx.createBufferSource();
-      wind.buffer = this.noiseBuf;
-      wind.loop = true;
-      const windFilt = this.ctx.createBiquadFilter();
-      windFilt.type = 'bandpass';
-      windFilt.Q.value = 1.6;
-      const windGain = this.ctx.createGain();
-      windGain.gain.value = 0.02;
-      wind.connect(windFilt).connect(windGain).connect(out);
-      lfo(0.011, 130, windFilt.frequency, 260);    // ~90 s sweep
-      lfo(0.017, 0.011, windGain.gain, 0.02);
-      wind.start();
-
-      // --- the shimmer
-      const shimmer = this.ctx.createGain();
-      shimmer.gain.value = 0.006;
-      shimmer.connect(out);
-      for (const [freq, rate] of [[1320, 0.023], [1976, 0.031]]) {
-        const o = this.ctx.createOscillator();
-        o.type = 'sine';
-        o.frequency.value = freq;
-        const g = this.ctx.createGain();
-        g.gain.value = 0.5;
-        o.connect(g).connect(shimmer);
-        lfo(rate, 0.5, g.gain, 0.5);
-        o.start();
-      }
+      // One slow breath, ~30 s. An oscillator driving the gain through a gain.
+      const lo = this.ctx.createOscillator();
+      const lg = this.ctx.createGain();
+      lo.type = 'sine';
+      lo.frequency.value = 0.033;
+      lg.gain.value = 0.018;
+      lo.connect(lg).connect(hum.gain);
+      hum.gain.value = 0.07;
+      lo.start();
 
       this.bed = { out };
     }
@@ -398,51 +385,6 @@ export class Audio {
     // Long fades either way: a bed that snaps on is a bed you notice, and the
     // whole job is not being noticed.
     this.bed.out.gain.setTargetAtTime(on ? 1 : 0, t, on ? 1.6 : 0.5);
-
-    if (on) this._scheduleBeacon();
-    else if (this._beaconTimer) { clearTimeout(this._beaconTimer); this._beaconTimer = null; }
-  }
-
-  /**
-   * One distant ping, then book the next one. The chain reschedules only while
-   * the bed is on, so switching the bed off ends it rather than leaving a timer
-   * running for the rest of the session.
-   */
-  _scheduleBeacon() {
-    if (this._beaconTimer) clearTimeout(this._beaconTimer);
-    const wait = 9000 + Math.random() * 13000;
-    this._beaconTimer = setTimeout(() => {
-      this._beaconTimer = null;
-      if (!this._bedOn || !this.ready) return;
-      this._beacon();
-      this._scheduleBeacon();
-    }, wait);
-  }
-
-  _beacon() {
-    if (!this.ready || this.muted) return;
-    const t = this.ctx.currentTime;
-    // Two partials a fifth apart with a long tail, through a lowpass that
-    // closes as it decays - a signal arriving from a long way off.
-    const filt = this.ctx.createBiquadFilter();
-    filt.type = 'lowpass';
-    filt.frequency.setValueAtTime(2600, t);
-    filt.frequency.exponentialRampToValueAtTime(420, t + 2.6);
-    const g = this.ctx.createGain();
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.05, t + 0.05);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 3.0);
-    filt.connect(g).connect(this.master);
-    for (const [freq, level] of [[523.25, 1], [783.99, 0.45]]) {
-      const o = this.ctx.createOscillator();
-      o.type = 'sine';
-      o.frequency.value = freq;
-      const og = this.ctx.createGain();
-      og.gain.value = level;
-      o.connect(og).connect(filt);
-      o.start(t);
-      o.stop(t + 3.2);
-    }
   }
 
   /** Wind bed for atmosphere levels. */
