@@ -7,7 +7,7 @@ bugs, not adding features — the game is content-complete and published.
 one is where the bugs actually are.
 
 ```bash
-./test/run-all.sh 20        # everything. ~4 minutes. 2,348 assertions, 11 suites, 2 fixtures, 2 sweeps
+./test/run-all.sh 20        # everything. ~4 minutes. 2,406 assertions, 12 suites, 2 fixtures, 2 sweeps
 node test/loadout-tests.js  # the gate. ~4 s, and the one that catches the most
 ./test/mutate.sh …          # break the code on purpose (§4)
 ./macos/build.sh            # the only check that executes the game loop. Run it AFTER committing
@@ -20,7 +20,7 @@ access to `~/Desktop`** until the app is relaunched. Commit first. This has cost
 
 ## 1. Start here: everything green is not everything covered
 
-The suite is 2,348 assertions and passes. **It cannot see three whole classes of fault**, and every
+The suite is 2,406 assertions and passes. **It cannot see three whole classes of fault**, and every
 bug found by a human in the last four sessions was in one of them.
 
 | blind spot | size | what shipped through it |
@@ -67,9 +67,8 @@ the other 19 modules, landing, banking, the supply stop, or any screen.
 Ordered by what I would look at first.
 
 > **Updated after the second audit (2026-08-22).** Two sessions, sixteen faults, **every one in a
-> blind spot named in §1.** Leads **1** and **7** are closed; **2** is half-closed; **3** and **4**
-> are surveyed and clean but unenforced; **5** and **6** are untouched and are design calls rather
-> than repairs. Of §3a, **A** found a sixth occurrence, **B** found one, **C** is closed and **D**
+> blind spot named in §1.** Leads **1**, **2** and **7** are closed; **3** and **4** are surveyed and
+> clean but unenforced; **5** and **6** are untouched and are design calls rather than repairs. Of §3a, **A** found a sixth occurrence, **B** found one, **C** is closed and **D**
 > found one. The findings are in `test/BASELINE.md` under "The first audit" and "The second audit".
 > Read them before starting: they are the best available evidence of what this codebase's bugs
 > actually look like.
@@ -103,19 +102,36 @@ this project has been caught by a stale list four times.
 
 </details>
 
-### 2. Two active modules — **half-closed**, and it paid immediately
+### 2. ~~Two active modules~~ — **CLOSED** (`test/slot-order.js`)
 
 The first audit found two slot-interaction bugs here: `sensor-pulse` and `thermal-purge` wrote
 visibility as a **max and a min in slot order**, so which slot a module sat in decided the sky
 (measured 0.35 against 1.0); and `flightAssist` could loan a module already held in the other slot,
-duplicating it. Both fixed, both now asserted.
+duplicating it. The second audit did the other 43 pairs.
 
-**What is still not covered**: every *other* pair. Two modules were checked for commutativity because
-two were found to collide. Ten actives make 45 pairs. The ship fields they write are `anchor`,
-`shieldActive`, `shieldFactor`, `airBrake`, `cloaked`, `decoy`, `beaconBoost`, `hull`, `env.visibility`,
-`env.darkness`, `statusLevels.*`. **Any two modules touching the same field are a candidate, and
-order-dependence is the specific shape to look for** — `Math.max` against `Math.min`, last-write-wins,
-a teardown that resets a field the other module is still using.
+**720 ordered comparisons** — 45 pairs × 4 firing schedules × 2 loadouts × 2 beds — replicating
+`simulate`'s exact per-step order and diffing every observable field, discovered by walking the
+objects rather than from a list. **One divergence**, `repair-nanites` + `bomb-rack`, bounded at
+exactly one simulation step: the rack is the only thing that wounds the lander from *inside* a slot's
+update, and the nanites' interrupt reads `hull`. The interrupt fires in both orders, one tick apart,
+and the hull differs by one tick of repair (0.075 bare, to five decimals). Left alone and bounded by
+assertion rather than fixed — see `test/BASELINE.md`, "Lead 2 closed".
+
+It is now a gate in `run-all.sh` rather than a lead here. **Two things about it are worth carrying
+into whatever you audit next:**
+
+- **It carries a positive control and prints what it caught.** Three separate versions of this rig
+  reported a clean zero, and only the last zero meant anything: the first had the lander outside the
+  laser's 520 px reach so nine pairs measured an inert slot, and the second put the Titan station at
+  **x = −7 on a 3,000 px map**. A sweep reporting zero is indistinguishable from a sweep that is not
+  looking, so the file ends by building a pair that *is* order-dependent and failing if it cannot see
+  it. **Any rig whose finding is an absence needs one of these.**
+- **A finding that vanishes when you fix the rig is not automatically an artefact.** The nanites/bomb
+  divergence disappeared at a valid station — and was still real. The mechanism had been reasoned out;
+  it was then *placed* rather than hunted, and it reproduced exactly. §4's rule cuts both ways.
+
+It is deliberately **not** in `mutate.sh`'s suite list (~10 s), so a mutation that breaks
+commutativity raises zero there. `run-all.sh` is what catches it.
 
 <details>
 <summary>the original wording of this lead</summary>
@@ -309,9 +325,26 @@ the world rather than the rule.**
 - **the axis** — self-harm measured by stepping sideways while the charge landed 120 px *below*, so
   the offset under test was swamped by the one that was not.
 - **the ceiling** — an audio parity rig where both sides pinned at a clamp and therefore agreed.
+- **the reach** — the slot-order sweep parked the lander wherever `width * 0.3` fell, outside the
+  beam's 520 px, so `pulse-laser` fired at nothing and nine of its pairs measured one live module
+  against an inert slot. It reported a clean zero.
+- **the map** — the fix for that took `enemies[0].x - 200` unconditionally and put the Titan station
+  at **x = −7 on a 3,000 px level**, then reported an order-dependence from outside the world.
 
 **Place the thing your claim is about. Do not go looking for it.** And when a measurement says
 *everything* is broken, or *nothing* is, suspect the measurement first.
+
+**Two corollaries, both paid for by the slot-order sweep.**
+
+*A rig whose finding is an absence must prove it can see.* Three versions of that sweep reported a
+clean zero and only the last one meant anything. So it ends by constructing a fault of the shape it
+is hunting and failing if it does not catch it, and it prints what it caught. **If your conclusion is
+"nothing is wrong", the rig needs a positive control before that sentence is worth writing down.**
+
+*And the rule cuts both ways: a finding that disappears when you fix the rig is not automatically an
+artefact.* The one real divergence in that sweep vanished at a valid station — because the rig had
+stopped creating the condition, not because the mechanism was imaginary. It was reasoned out, then
+**placed**, and reproduced exactly. Do not let "the rig was wrong" become a reason to stop looking.
 
 ---
 
@@ -359,7 +392,7 @@ machines at once  0: 63.1%  1: 25.9%  2: 9.5%  3: 1.4%  4: 0.1%
 An honest summary from the model that wrote it:
 
 **The simulation is the well-tested part** — physics, terrain, forces, economy, the loadout, the
-skill trees. 2,348 assertions, a gate that refuses anything sold and not delivered, and mutation
+skill trees. 2,406 assertions, a gate that refuses anything sold and not delivered, and mutation
 testing on everything added in the last ten milestones.
 
 **The layer between the simulation and the player is the untested part** — the loop, the screens, the

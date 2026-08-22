@@ -927,7 +927,7 @@ reports a timeout with a full tank — which reads exactly like a broken autopil
 ## Reading order for a new session
 
 0. **Auditing rather than building? `docs/AUDIT.md` first.** It is where the bugs are: the three
-   classes of fault this project's 2,348 assertions cannot see, the ranked leads, and the list of
+   classes of fault this project's 2,406 assertions cannot see, the ranked leads, and the list of
    things that look wrong and are decisions.
 1. `ROADMAP_STATUS.md` — what is done, what is next, and the decisions behind both.
 2. This file — what each module owns and the rules that hold the design together.

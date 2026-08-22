@@ -83,9 +83,9 @@ two of the three are not test problems:
 
 ---
 
-## 2. The three ways a rig lies, all of them observed
+## 2. The ways a rig lies, all of them observed
 
-Three milestones running, the first version of a measurement proved less than it looked like it
+Several milestones running, the first version of a measurement proved less than it looked like it
 proved. The failure mode is always the same shape: **the rig was built from whatever the world
 happened to generate, so it measured the world rather than the rule.**
 
@@ -100,10 +100,39 @@ happened to generate, so it measured the world rather than the rule.**
   under test, and a charge that should have clipped the edge of the blast measured zero at *every*
   radius. The machine is placed now, not found.
 
+- **The slot-order sweep — the reach, and then the map.** It parked the lander at `width * 0.3` and
+  300 px up, wherever that fell. The nearest machine was outside `ABILITY.laserRange`, so
+  `pulse-laser` fired, acquired nothing, and all nine of its pairs measured one live module against
+  an inert slot — and it reported a clean zero. The fix took `enemies[0].x - 200` unconditionally,
+  which on Titan is **x = −7 on a 3,000 px level**, and reported a fault from outside the world.
+
 **The rule: place the thing your claim is about. Do not go looking for it.** And when a measurement
 comes back saying *everything* is broken, or *nothing* is — suspect the measurement first. M30g's
 near-miss is the canonical one: a check reported 20 of 20 recommendations missing because the names
 were title case and the modules are uppercase.
+
+### If your finding is an absence, the rig needs a positive control
+
+"Nothing is wrong" is the one conclusion a broken rig and a working rig produce identically. Three
+versions of `slot-order.js` reported a clean zero and only the last one meant anything.
+
+So a sweep whose result is *no divergence* now has to end by **building the fault it is hunting and
+failing if it cannot see it**. That file constructs two probe modules in the shape of the M37
+visibility fault, runs them through the same machinery, and prints what it caught:
+
+```
+positive control: visibility 0.35 against 1, by slot order alone
+```
+
+Those are the numbers the real fault measured. Copy the pattern for anything whose headline is a zero.
+
+### And the rule cuts both ways
+
+A finding that **disappears when you fix the rig is not automatically an artefact.** The one real
+divergence in that sweep vanished once the station was moved onto the map — because the rig had
+stopped creating the condition, not because the mechanism was imaginary. It was reasoned out from the
+step order, *placed* deliberately, and reproduced exactly: one tick, every time. Do not let "the rig
+was wrong" become a reason to stop looking.
 
 ---
 
@@ -156,6 +185,13 @@ the wrong cue a module is fitted, fired and provably identical to an empty slot.
 **And if it writes a field on the ship**, the teardown check in `enemies-tests.js` covers it with no
 work from you: snapshot, run the module out, run one step of physics, require the lander back. Add
 what it is *meant* to leave behind to `KEEPS`, and nothing else.
+
+**A new active also joins `slot-order.js` for free** — it sweeps every pair of `ACTIVE_MODULES`, both
+ways round, across four firing schedules and two loadouts, and diffs every observable field by
+walking the objects rather than from a list. So "which slot it is fitted into changes the mission" is
+a failing test rather than something somebody has to think to check. The one known exception is
+`repair-nanites` + `bomb-rack`, which differs by exactly one simulation step and is bounded by
+assertion; `test/BASELINE.md` has the measurement.
 
 ---
 

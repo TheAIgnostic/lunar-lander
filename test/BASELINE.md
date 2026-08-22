@@ -5153,3 +5153,95 @@ call, so it was left alone.**
 Both fixtures byte-identical. Crossing **641/800 (80%)**, deep-route engagement **751/800 (94%)**,
 at-once distribution identical to the digit. Suites after: `forces` 160 → **170**, `settings`
 222 → **242**. Nothing else moved.
+
+
+---
+
+## Lead 2 closed — the other 43 module pairs (2026-08-22)
+
+`AUDIT.md` lead 2 has been half-closed since the first audit: two of the forty-five active pairs were
+checked for slot-order dependence, because those two were the ones found to collide. This is the
+other forty-three, and it is now a permanent gate — `test/slot-order.js`, run by `run-all.sh`.
+
+**720 ordered comparisons — 45 pairs × 4 firing schedules × 2 loadouts × 2 beds. One divergence, and
+it is bounded at a single simulation step.**
+
+### What it measures, and why not a flight
+
+It does *not* fly a mission and diff the outcome. §4 already records why: four flights in five to the
+deep pad end as a crash, and a crash is insensitive to almost everything. Instead it replicates
+`simulate`'s per-step order exactly — `ship.step` (which runs `applyForces`), then each slot's
+`update` **in slot order** — holds the lander where both modules can register, and diffs every
+observable field, **discovered by walking the objects** rather than from a list written by reading the
+code. State is keyed by *module*, not by slot: in the reversed run slot 0 holds the other module, so
+comparing slot against slot reports a difference on all 45 pairs.
+
+Four schedules, because "two modules at once" is four questions: both at once; A first with B's
+trigger 1 s later; B first; and both, twice. The staggers are keyed on the **module**, not the slot —
+staggering by slot index would confound "which fired first" with "which slot it is in".
+
+### The one asymmetry, measured
+
+`field.update` runs before *both* slots, so enemy fire lands identically either way. **The bomb rack
+is the only thing in the game that wounds the lander from inside a slot's own update**, so it is the
+only damage that can land between slot 0 and slot 1 — and `repair-nanites` interrupts on
+`ship.hull < watchHull`. Whether the blast is seen this tick or the next therefore depends on the slot.
+
+Placed deliberately — titan-1, which has no machines, the lander held 100 px up so the charge
+detonates well inside its 150 px radius, nothing else near the hull:
+
+| | nanites in slot I | nanites in slot II |
+| --- | --- | --- |
+| interrupt fires | yes, at 2.3917 s | yes, at 2.3833 s |
+| hull, bare | 48.7373 | 48.6623 |
+| hull, fully researched | 72.1423 | 72.0523 |
+
+The gap is **one step** (0.0084 s against a step of 0.00833 s) and the hull difference is **exactly
+one tick of repair** — 0.07500 bare (9/s ÷ 120) and 0.09000 researched (9 × 1.2 ÷ 120), to five
+decimals. The interrupt happens in both orders; only the tick it lands on moves.
+
+**Left alone rather than fixed.** Making it commute means restructuring `combat()` so all ordnance
+steps before any module applies — a change to the loop both fixtures regress against, for 0.075 hull
+on a 100-hull lander that no player can perceive and that cannot change whether the repair is
+interrupted. The bound is asserted instead, so it can never quietly grow.
+
+### Three rigs that lied first, all §4 shapes
+
+Worth recording in full, because the sweep reported a clean zero in all three states and only one of
+those zeros meant anything.
+
+1. **The lander was out of range.** First cut parked it at `width * 0.3`, 300 px up — wherever that
+   fell. The nearest machine was beyond `ABILITY.laserRange` (520 px), so `pulse-laser` fired,
+   acquired nothing, and **all nine of its pairs measured one live module against an inert slot**.
+   Caught by a sanity pass asking what each module actually *wrote*: nine wrote fields, `pulse-laser`
+   wrote nothing.
+2. **The lander was off the map.** The fix took `enemies[0].x - 200` unconditionally, which on Titan
+   is **x = −7 on a 3,000 px level**. That run reported an order-dependence — a real-looking finding
+   measured somewhere the game never puts a lander. It vanished at a valid station.
+3. **And then the reverse trap.** Because it vanished, the temptation was to record "no fault". But
+   the mechanism reasoned out in (2) was structural, so it was *placed* rather than hunted — and it
+   is real, and it is one tick. **A finding that disappears when the rig is fixed is not
+   automatically a rig artefact.**
+
+### The gate proves it can see, every run
+
+The lesson of all three is that a sweep reporting zero is indistinguishable from a sweep that is not
+looking. So `slot-order.js` ends with a **positive control**: two probe modules in the shape of the
+M37 fault, one writing `visibility` as a max and one as a min, straight in, in slot order, wrapping
+the real `Abilities` so everything else is the machinery under test. It prints what it caught:
+
+```
+positive control: visibility 0.35 against 1, by slot order alone
+```
+
+0.35 against 1.0 — the same two numbers the first audit measured on the real fault. And end to end:
+reintroducing the actual M37 code makes the gate fail and name the pair.
+
+```
+FAIL  the slot a module sits in changes nothing
+      sensor-pulse+thermal-purge [both at once, bare, venus-4] ship.env.visibility 0.35/1
+```
+
+It is deliberately **not** in `mutate.sh`'s suite list — it takes ~10 s and `mutate.sh` is built to be
+run a dozen times in a sitting. The cost is that a mutation breaking commutativity raises zero there;
+`run-all.sh` is what catches it.

@@ -18,6 +18,10 @@ echo "=== unit: loadout reaches the sim ===" && node test/loadout-tests.js | tai
 echo "=== unit: terrain grammar ===" && node test/terrain-tests.js  | tail -2
 echo "=== unit: enemies + abilities ===" && node test/enemies-tests.js | tail -2
 echo "=== unit: settings + bindings ===" && node test/settings-tests.js | tail -2
+# A gate, not a measurement: "which slot it is in decided the sky" is a bug.
+# Deliberately not in `mutate.sh`'s list - it takes ~10 s and mutate.sh is meant
+# to be run a dozen times in a sitting.
+echo "=== gate: two actives, either way round ===" && node test/slot-order.js | tail -3
 echo "=== unit: objectives + gradient ===" && node test/objectives-tests.js | tail -2
 echo "=== regression: physics (no pilot) ===" && node test/physics-fixture.js | tail -2
 echo "=== regression: flight outcomes ===" && node test/flight-fixture.js | tail -2
