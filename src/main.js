@@ -16,7 +16,7 @@ import { missionReward, addReward, scaleSalvage, settleHaul, nodeWorth, haulOf }
 import { isCheckpoint, isExpeditionComplete, nextPlanet, PLANET_ORDER } from './route.js';
 import { deriveFull } from './components.js';
 import { deriveSkills } from './skills.js';
-import { derivePassive, moduleById, nextBlueprint, MOON_BLUEPRINTS, COMBAT_BLUEPRINT } from './modules.js';
+import { derivePassive, moduleById, nextBlueprint, ACTIVE_SLOTS, MOON_BLUEPRINTS, COMBAT_BLUEPRINT } from './modules.js';
 import { EnemyField } from './enemies.js';
 import { evaluateObjective } from './objectives.js';
 import { Abilities, ABILITY } from './abilities.js';
@@ -115,8 +115,24 @@ function startLevel(index, freshSeed = true) {
   g.field = new EnemyField(level, g.terrain, g.seed ^ (levelSeedSalt(level) | 0));
   // A loaner, if the expedition has been given one, flies in place of whatever
   // is equipped - it is lent for the run, never added to the player's gear.
-  const activeId = (g.run && g.run.loaner) || (meta.equipped && meta.equipped.active);
-  g.abilities = new Abilities(activeId, loadout);
+  // **Two active slots since M37.** Tom's playtest reason: *"you need laser for
+  // enemies, everyone picks the laser and keeps it"* - with one slot the choice
+  // was never between ten modules, it was between the weapon and going unarmed,
+  // so nine of them were theoretical. A loaner still flies in place of the
+  // *first* slot only: it is lent for the run and must not quietly consume the
+  // second choice a player made for themselves.
+  const equipped = meta.equipped || {};
+  const activeId = (g.run && g.run.loaner) || equipped.active;
+  // `slots` is always length two and an empty slot is a real `Abilities` with
+  // no module, not a null - `equipped` is false on it, `update` is a no-op, and
+  // every consumer can iterate without asking which slots are filled.
+  // **One slot per `ACTIVE_SLOTS`**, so the loadout screen, the equip rule and
+  // the runtime all count the slots from the same list rather than three places
+  // agreeing by hand. The first slot is the one a loaner replaces.
+  g.slots = ACTIVE_SLOTS.map((key, i) => new Abilities(i === 0 ? activeId : equipped[key], loadout));
+  // Slot 0 by its old name, because a dozen readers want "the module" and the
+  // debug hooks are documented in terms of it.
+  g.abilities = g.slots[0];
   if (g.run) {
     g.run.attempts = g.run.attempts || {};
     const key = level.missionId || level.id;
@@ -296,12 +312,13 @@ function launch() {
     // no force has run at launch, so ship.env still reads the default 1.
     visWorst: worstVisibility(lv),
     machines: g.field && !g.field.empty ? g.field.summary().total : 0,
-    active: (meta.equipped && meta.equipped.active) || '', passive: (meta.equipped && meta.equipped.passive) || '',
+    active: [(meta.equipped || {}).active, (meta.equipped || {}).active2].filter(Boolean).join('+') || '',
+    passive: (meta.equipped && meta.equipped.passive) || '',
   });
-  const active = meta.equipped && meta.equipped.active;
-  if (active) meta.stats.moduleFlights[active] = (meta.stats.moduleFlights[active] || 0) + 1;
-  const passive = meta.equipped && meta.equipped.passive;
-  if (passive) meta.stats.moduleFlights[passive] = (meta.stats.moduleFlights[passive] || 0) + 1;
+  const eq = meta.equipped || {};
+  for (const id of [eq.active, eq.active2, eq.passive]) {
+    if (id) meta.stats.moduleFlights[id] = (meta.stats.moduleFlights[id] || 0) + 1;
+  }
   Save.saveMeta(meta);
 }
 
@@ -342,7 +359,9 @@ function simulate(dt) {
 function combat(dt) {
   const events = [];
   if (g.field) events.push(...g.field.update(dt, g.levelTime, ship));
-  if (g.abilities) events.push(...g.abilities.update(dt, { ship, field: g.field, terrain: g.terrain, level: g.level }));
+  for (const a of g.slots || []) {
+    events.push(...a.update(dt, { ship, field: g.field, terrain: g.terrain, level: g.level }));
+  }
   for (const e of events) combatEffect(e);
   if (ship.hull <= 0 && ship.alive && !ship.landed) {
     ship.alive = false;
@@ -530,7 +549,7 @@ function effects(dt) {
   }
 
   audio.engines(ship.thrusting && !ship.landed, (ship.rcsLeft || ship.rcsRight) && !ship.landed);
-  audio.laser(!!(g.abilities && g.abilities.beam));
+  audio.laser((g.slots || []).some((a) => a.beam));
   if (g.level.wind || g.level.gust) audio.setWind(Math.abs(ship.windNow || 0) / 60);
   else audio.setWind(0);
 }
@@ -603,7 +622,7 @@ function onLand() {
     centreFrac: ship.landingResult ? ship.landingResult.centerFrac : 1,
     fuelFrac: ship.maxFuel > 0 ? ship.fuel / ship.maxFuel : 0,
     hullLost: ship.hullMax > 0 ? (ship.hullMax - ship.hull) / ship.hullMax : 0,
-    abilityUses: g.abilities ? g.abilities.used : 0,
+    abilityUses: (g.slots || []).reduce((n, a) => n + a.used, 0),
     // Every status channel, not just radiation. M29 authors objectives against
     // heat, cold, corrosion and charge, and a channel that is not in this
     // snapshot reads as 0 - which is an objective that is always met, the
@@ -627,7 +646,7 @@ function onLand() {
     carried: { ...g.carried },
     materialLeft: g.terrain.materialLeft ? haulOf(g.terrain.materialLeft()) : null,
     hull: Math.round(ship.hull), hullMax: ship.hullMax,
-    abilityUsed: g.abilities ? g.abilities.used : 0,
+    abilityUsed: (g.slots || []).reduce((n, a) => n + a.used, 0),
   };
   store.setBest(g.level.id, total);
   if (g.score > store.high) { g.newRecord = true; store.high = g.score; }
@@ -862,9 +881,11 @@ function recordFlight(grade) {
     // counterplay the design is built around, so it is counted like a kill.
     st.threatsPassed += g.field.live.length;
   }
-  const active = meta.equipped && meta.equipped.active;
-  if (active && g.abilities && g.abilities.used) {
-    st.moduleUses[active] = (st.moduleUses[active] || 0) + g.abilities.used;
+  // Both slots, and each one credited to the module that was actually in it -
+  // the logbook counts what a module did, so a slot with nothing in it counts
+  // nothing and a loaner is credited to the loaner.
+  for (const a of g.slots || []) {
+    if (a.id && a.used) st.moduleUses[a.id] = (st.moduleUses[a.id] || 0) + a.used;
   }
 }
 
@@ -990,6 +1011,12 @@ function frame(now) {
 
 function draw() {
   g.arrestKey = input.bindings.arrest && input.bindings.arrest[0];
+  // One label per slot, read off the live bindings so a rebind shows on the HUD
+  // rather than the panel claiming a key the player has moved.
+  g.abilityKeys = [
+    (input.bindings.ability || [])[0],
+    (input.bindings.ability2 || [])[0],
+  ];
   g.overdriveKey = input.bindings.overdrive && input.bindings.overdrive[0];
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   if (!g.level) {
@@ -1032,10 +1059,10 @@ function draw() {
     showPaths: Debug.showEnemyPaths,
   });
   R.drawShip(ctx, ship, g.time, cam);
-  if (g.abilities) {
-    drawBeam(ctx, g.abilities.beam, g.time);
+  for (const a of g.slots || []) {
+    drawBeam(ctx, a.beam, g.time);
     // Under the ship, so a charge falling away from the lander reads as leaving.
-    drawOrdnance(ctx, g.abilities, g.time);
+    drawOrdnance(ctx, a, g.time);
   }
   drawShield(ctx, ship, ABILITY.shieldPool * ((g.loadout && g.loadout.shieldCapacity) || 1), g.time);
   particles.drawTexts(ctx);
@@ -1330,17 +1357,23 @@ input.bind('f3', () => { Debug.toggle(); });
 input.bind('`', () => { Debug.toggle(); });
 input.bind('f4', () => { Debug.showEnvelope = !Debug.showEnvelope; });
 input.bind('f5', () => { Debug.showEnemyPaths = !Debug.showEnemyPaths; });
-/** Fire the equipped active module. */
-const useAbility = () => {
-  if (g.state !== 'play' || !g.abilities) return;
-  if (g.abilities.trigger(ship)) {
-    audio.arpeggio([880, 1174.66], 0.05, 'triangle', 0.11);
-    particles.ring(ship.x, ship.y, 120, 0.35, '#7ef2d0');
-  } else if (g.abilities.equipped) {
-    audio.blip(180, 0.06, 'square', 0.06);
+/** Fire one of the two equipped active modules. */
+const useAbility = (slot = 0) => {
+  const a = (g.slots || [])[slot];
+  if (g.state !== 'play' || !a) return false;
+  if (a.trigger(ship)) {
+    // The second slot answers a fifth higher, so two modules never sound alike -
+    // an audible difference is the only feedback a player gets that the button
+    // they pressed is the one they meant.
+    audio.arpeggio(slot ? [1174.66, 1567.98] : [880, 1174.66], 0.05, 'triangle', 0.11);
+    particles.ring(ship.x, ship.y, 120, 0.35, slot ? '#ffcf4d' : '#7ef2d0');
+    return true;
   }
+  if (a.equipped) audio.blip(180, 0.06, 'square', 0.06);
+  return false;
 };
-input.bindAction('ability', useAbility);
+input.bindAction('ability', () => useAbility(0));
+input.bindAction('ability2', () => useAbility(1));
 // While the CONTROLS screen is listening, the next key press lands on the
 // selected control instead of doing whatever it normally does.
 input.bind('*', (key) => {
@@ -1454,7 +1487,7 @@ window.__logJSON = () => Log.asJSON(meta);
 window.__logClear = () => Log.clearLog();
 window.__setState = (name) => { setState(name); return g.state; };   // drive any screen in a test
 window.__audio = audio;   // so a test can count what actually gets played
-window.__useAbility = () => (g.abilities ? g.abilities.trigger(ship) : false);
+window.__useAbility = (slot = 0) => useAbility(slot);
 
 window.__setSeed = (n) => { g.forcedSeed = n == null ? null : (n | 0); return g.forcedSeed; };
 window.__advance = advance;

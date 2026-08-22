@@ -387,7 +387,8 @@ export function screenHTML(s) {
       // content indexing a table in code.
       const names = {
         thrust: 'MAIN BOOSTER', left: 'LEFT BURNER', right: 'RIGHT BURNER',
-        hold: 'ATTITUDE HOLD', ability: 'ACTIVE MODULE',
+        hold: 'ATTITUDE HOLD',
+        ability: 'ACTIVE MODULE I', ability2: 'ACTIVE MODULE II',
         arrest: 'EMERGENCY ARREST', overdrive: 'COMBAT OVERDRIVE',
       };
       const rows = ACTIONS.map((a) => {
@@ -491,13 +492,20 @@ export function screenHTML(s) {
         </div>`;
       }).join('');
 
+      // **The other active slot, named rather than assumed.** With two of them a
+      // tile has three states, not two: in this slot, in the other one, or free.
+      // Saying which is what stops "I picked it and nothing happened" - the
+      // module moved, and the screen has to show that it did.
+      const otherActive = { active: 'active2', active2: 'active' };
       const slot = (map, kind) => Object.values(map).map((mod) => {
         const owned = meta.unlockedBlueprints.includes(mod.id);
         const on = (meta.equipped[kind] === mod.id);
-        return `<button class="tile mod${on ? ' on' : ''}${owned ? '' : ' locked'}"
+        const elsewhere = otherActive[kind] && meta.equipped[otherActive[kind]] === mod.id;
+        return `<button class="tile mod${on ? ' on' : ''}${elsewhere ? ' elsewhere' : ''}${owned ? '' : ' locked'}"
             data-action="${owned ? `equip:${kind}:${mod.id}` : 'noop'}" ${owned ? '' : 'disabled'}>
           <span class="world">${mod.name}</span>
-          <span class="best">${owned ? mod.blurb : 'Blueprint not yet recovered.'}</span>
+          <span class="best">${!owned ? 'Blueprint not yet recovered.'
+            : elsewhere ? `In the other slot — pick it here to move it.` : mod.blurb}</span>
         </button>`;
       }).join('');
 
@@ -515,15 +523,21 @@ export function screenHTML(s) {
         <div class="stats"><span>RESEARCH DATA</span><b>${formatScore(data)}</b></div>
         <div class="trees">${trees}</div>
         <div class="setting">
-          <div class="setting-name">ACTIVE MODULE</div>
+          <div class="setting-name">ACTIVE MODULES — TWO SLOTS</div>
           <!-- Tom: "how do you unlock blueprints?" - nothing on this screen said,
                and a locked tile reading "Blueprint not yet recovered" is a
                statement of fact rather than an instruction. -->
           <p class="body">Blueprints are <b>found, not bought</b>. <b>Every body you clear hands one
           over</b> — picked for the world you are about to fly — and surviving a mission that shot at
           you hands over the weapon. They are the one thing a lost expedition never takes back, so
-          what you recover is yours for good.</p>
+          what you recover is yours for good. <b>You carry two actives at once</b> — the weapon and
+          something else — on <kbd>${keyLabel((input.bindings.ability || [])[0] || 'e')}</kbd> and
+          <kbd>${keyLabel((input.bindings.ability2 || [])[0] || 'x')}</kbd>. A module can only sit in
+          one slot; putting it in the other moves it.</p>
+          <div class="slot-name">SLOT I — <kbd>${keyLabel((input.bindings.ability || [])[0] || 'e')}</kbd></div>
           <div class="grid comps">${slot(ACTIVE_MODULES, 'active')}</div>
+          <div class="slot-name">SLOT II — <kbd>${keyLabel((input.bindings.ability2 || [])[0] || 'x')}</kbd></div>
+          <div class="grid comps">${slot(ACTIVE_MODULES, 'active2')}</div>
         </div>
         <div class="setting"><div class="setting-name">PASSIVE MODULE</div><div class="grid comps">${slot(PASSIVE_MODULES, 'passive')}</div></div>
         <div class="btns">${btn('back', 'DONE', true, 'SPACE')}</div>

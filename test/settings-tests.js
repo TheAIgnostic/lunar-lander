@@ -18,6 +18,29 @@ const check = (n, c, e = '') => { if (c) pass++; else { fail++; console.log(`  F
 console.log('settings, bindings and the logbook');
 
 {
+  // **The runtime carries one ability slot per `ACTIVE_SLOTS`**, asserted from
+  // the source because `main.js` is the game loop and needs a browser.
+  //
+  // M37 added the second slot and the mutation that quietly builds it empty
+  // raised **zero failures** in every suite - not because nothing checks it,
+  // but because nothing in node can reach that line at all. Same answer as
+  // M36's second thrust site: when the honest reason is "nothing goes there",
+  // state the rule where it can be read.
+  const loop = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  check('the loop builds its slots from ACTIVE_SLOTS',
+    /g\.slots\s*=\s*ACTIVE_SLOTS\.map\(/.test(loop),
+    'a hand-written slot list will drift from the equip rule and the screen');
+  check('and steps every slot rather than one',
+    /for \(const a of g\.slots \|\| \[\]\) \{\s*events\.push/.test(loop),
+    'a slot that is not stepped is a module that never runs');
+  check('and the second ability is bound to its own action',
+    /bindAction\('ability2'/.test(loop) && /bindAction\('ability'/.test(loop),
+    'both slots need a control of their own');
+}
+
+
+{
   // **God mode does not lose shuttles**, and it is written as a skipped
   // decrement rather than a topped-up count so nothing downstream meets a life
   // total that is not a number. Asserted from the source for the same reason

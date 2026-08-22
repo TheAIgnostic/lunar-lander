@@ -320,6 +320,27 @@ export function nextBlueprint(unlocked = [], planetId = null) {
   return pick ? pick.id : null;
 }
 
+/**
+ * **Put a module in a slot, or take it out — the whole rule, in one place.**
+ *
+ * There are two active slots since M37 and a passive one, and with two actives
+ * a click has three outcomes rather than two: fill, clear, or *move*. Picking a
+ * module that already sits in the other active slot moves it, because two
+ * copies of the same rack would be two independent charge pools — which is not
+ * a choice between modules, it is a way to carry six charges of one.
+ *
+ * Pure, and here rather than in `actions.js`, because the dispatch needs a
+ * browser to import and this rule is worth a test.
+ */
+export const ACTIVE_SLOTS = ['active', 'active2'];
+
+export function equipInto(equipped = {}, kind, id) {
+  const next = { ...equipped, [kind]: equipped[kind] === id ? null : id };
+  const other = kind === 'active' ? 'active2' : kind === 'active2' ? 'active' : null;
+  if (other && next[kind] && next[other] === next[kind]) next[other] = null;
+  return next;
+}
+
 /** Passive effects only; actives apply while triggered, not at derive time. */
 export function derivePassive(passiveId) {
   const m = PASSIVE_MODULES[passiveId];

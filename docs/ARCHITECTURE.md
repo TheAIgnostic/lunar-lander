@@ -31,7 +31,7 @@ Everything under `src/` is a plain ES module, loaded directly in the browser and
 | `src/modules.js` | **10 active + 10 passive** modules, each active's firing `cue`, the blueprint grant rule | M11/M12/M31-M33/M36 |
 | `src/enemies.js` | enemy roster, placement around the prize, telegraphs, projectiles, damage, rewards | M12/M14 |
 | `src/objectives.js` | the optional objectives: conditions judged at touchdown, and six cargo recoveries | M14/M15 |
-| `src/abilities.js` | the active-module runtime: charges, duration, cooldown, effects, teardown, the player's ordnance | M12/M32/M33 |
+| `src/abilities.js` | the active-module runtime: charges, duration, cooldown, effects, teardown, the player's ordnance. **Two slots since M37** | M12/M32/M33/M37 |
 | `src/render.js` | the world: background, terrain, ship, dust, beacons, trajectory, hangar ship | —/M12/M15/M23 |
 | `src/drawkit.js` | the shared drawing vocabulary: palette, type, `throb`, tint helpers, HUD panels | M23 |
 | `src/enemydraw.js` | machines, telegraphs, wrecks, shots, the laser, the shield, the player's ordnance | M23/M33 |
@@ -720,6 +720,24 @@ only, built to be pasted into a conversation or exported. It records what was *m
 grade, fuel, hull, seed) rather than what was intended, because "that felt wrong" is only debuggable
 against numbers. Nothing in the game reads it back, so a log that is broken or full cannot change a
 flight — the same rule the accessibility settings live under.
+
+**Two active slots, and the reason is the sharpest playtest finding in the file.** Tom, 2026-08-22:
+*"everyone picks the laser and keeps it."* One slot was never a choice between ten modules — it was
+the weapon against going unarmed, so nine modules were theoretical no matter how well they worked.
+`ACTIVE_SLOTS` is the one list the loadout screen, `equipInto` and `startLevel` all count from;
+`g.slots` is always that long, an **empty slot is a real `Abilities` with no module** rather than a
+null so every consumer can iterate without asking which are filled, and the first slot is the one a
+loaner replaces. A module may sit in only one slot — picking it in the other **moves** it, because
+two copies of a rack are two independent charge pools, which is not a choice between modules but a
+way to carry six charges of one.
+
+**And `main.js` is unreachable from node, so rules that live in it are asserted from the source.**
+Building the second slot empty, and stepping only the first, both raised **zero failures** in every
+suite — not because nothing checks them but because no node test can execute the game loop.
+`settings-tests.js` reads `main.js` and requires that the slots are built from `ACTIVE_SLOTS`, that
+every slot is stepped, and that both abilities have a bound action. Same answer as `engineThrust`'s
+second caller in M36: when the honest reason a mutation survives is *"nothing goes there"*, state the
+rule where it can be read rather than building a rig that cannot exist.
 
 **The rule that holds the upgrade system together:** components, skills and the equipped passive are
 *derived* into a per-run ship spec at mission start (`deriveFull` then `ship.applyLoadout`). The

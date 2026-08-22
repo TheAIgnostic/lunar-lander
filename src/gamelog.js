@@ -68,7 +68,7 @@ export function asText(meta = null) {
     if (meta.godMode) head.push('*** GOD MODE WAS ON — resources granted, any body startable ***');
     const comp = Object.entries(meta.componentLevels || {}).map(([k, v]) => `${k}${v}`).join(' ');
     head.push(`components ${comp}`);
-    head.push(`skills ${Object.keys(meta.purchasedSkills || {}).length} · equipped ${(meta.equipped && [meta.equipped.active, meta.equipped.passive].filter(Boolean).join('+')) || 'nothing'}`);
+    head.push(`skills ${Object.keys(meta.purchasedSkills || {}).length} · equipped ${(meta.equipped && [meta.equipped.active, meta.equipped.active2, meta.equipped.passive].filter(Boolean).join('+')) || 'nothing'}`);
     head.push(`banked salvage ${b.salvage || 0} · data ${b.data || 0} · cores ${b.cores || 0}`);
     head.push(`career attempts ${st.attempts || 0} · landings ${st.landings || 0} · crashes ${st.crashes || 0} · hits ${st.hitsTaken || 0}`);
   }

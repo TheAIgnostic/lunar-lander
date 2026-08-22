@@ -26,7 +26,7 @@ export const ship = new Ship();
 const loaded = Save.loadMeta();
 export let meta = loaded.meta;
 export function setMeta(m) { meta = m; }
-meta.equipped = meta.equipped || { active: null, passive: STARTER_PASSIVES[0] };
+meta.equipped = { active: null, active2: null, passive: STARTER_PASSIVES[0], ...(meta.equipped || {}) };
 meta.unlockedBlueprints = meta.unlockedBlueprints && meta.unlockedBlueprints.length
   ? meta.unlockedBlueprints : [...STARTER_PASSIVES];
 export const saveSource = loaded.source;

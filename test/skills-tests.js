@@ -1,6 +1,6 @@
 // Skills, modules and the folded loadout:  node test/skills-tests.js
 import { TREES, ALL_NODES, deriveSkills, skillCheck, buySkill, findNode } from '../src/skills.js';
-import { ACTIVE_MODULES, PASSIVE_MODULES, derivePassive, recommendedFor, MOON_BLUEPRINTS } from '../src/modules.js';
+import { ACTIVE_MODULES, PASSIVE_MODULES, derivePassive, recommendedFor, MOON_BLUEPRINTS, equipInto, ACTIVE_SLOTS } from '../src/modules.js';
 import { deriveFull } from '../src/components.js';
 import { Ship, SHIP } from '../src/ship.js';
 
@@ -8,6 +8,50 @@ let pass = 0, fail = 0;
 const check = (n, c, e = '') => { if (c) pass++; else { fail++; console.log(`  FAIL  ${n}  ${e}`); } };
 
 console.log('skills and modules');
+
+{
+  // **Two active slots (M37), and a module may sit in only one of them.**
+  //
+  // Tom's playtest reason for the second slot: *"you need laser for enemies,
+  // everyone picks the laser and keeps it"* - with one slot the choice was
+  // never between ten modules, it was between the weapon and going unarmed.
+  //
+  // The rule is `equipInto` rather than three lines in `actions.js`, because
+  // the dispatch needs a browser to import and this is worth checking: with two
+  // slots a click has **three** outcomes, not two.
+  check('there are exactly two active slots', ACTIVE_SLOTS.length === 2, ACTIVE_SLOTS.join());
+
+  const empty = { active: null, active2: null, passive: null };
+  const one = equipInto(empty, 'active', 'pulse-laser');
+  check('picking a module fills the slot', one.active === 'pulse-laser');
+  check('and leaves the other slot alone', one.active2 === null);
+
+  const two = equipInto(one, 'active2', 'ray-shield');
+  check('the second slot fills independently', two.active === 'pulse-laser' && two.active2 === 'ray-shield');
+
+  check('picking the same module again clears it',
+    equipInto(two, 'active', 'pulse-laser').active === null);
+
+  // The move, which is the case that only exists because there are two slots.
+  const moved = equipInto(two, 'active2', 'pulse-laser');
+  check('picking a module held in the other slot moves it',
+    moved.active2 === 'pulse-laser' && moved.active === null,
+    JSON.stringify(moved));
+  check('and never leaves the same module in both slots',
+    !ACTIVE_SLOTS.every((k) => moved[k] === 'pulse-laser'));
+
+  // Two of the same rack would be two independent charge pools, which is the
+  // thing the rule exists to prevent - asserted over every active, not just one.
+  for (const id of Object.keys(ACTIVE_MODULES)) {
+    const both = equipInto(equipInto(empty, 'active', id), 'active2', id);
+    check(`${id} cannot be carried twice`, !(both.active === id && both.active2 === id));
+  }
+
+  // The passive slot is untouched by any of it.
+  check('the passive slot is not an active slot',
+    equipInto(two, 'passive', 'ice-cleats').active === 'pulse-laser');
+}
+
 
 // ---------------------------------------------------------------------------
 // **FIVE NODES PER TREE, AND THE SHAPE THEY MAKE. Tom's decision, 2026-08-22.**

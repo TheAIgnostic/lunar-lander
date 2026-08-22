@@ -1106,6 +1106,51 @@ scheduled until the MVP is stable — the spec says the same.
 
 None.
 
+## Done: M37 — two active modules
+
+**Tom's playtest call, 2026-08-22:** *"you need laser for enemies. playtest have shown that everyone
+picks the laser and keeps it. so two active modules from now on."*
+
+That is the sharpest kind of finding this project gets, because it is about a choice that was never
+really offered. **One active slot was not a choice between ten modules — it was the weapon against
+going unarmed**, and nine modules were theoretical. Every one of them had been built, proved to
+change a flown mission on a body it claims, and made obtainable; none of that mattered while the slot
+they competed for was already spoken for.
+
+- **Two slots, on `E` and `X`, and `pad:2` (X) and `pad:3` (Y)** — the two ability buttons side by
+  side under the thumb. **Emergency Arrest moved off Y to LB (`pad:4`)** to make room.
+- **A module may sit in only one slot.** Picking one held in the other **moves** it, because two
+  copies of a rack would be two independent charge pools — not a choice between modules, a way to
+  carry six charges of one. `equipInto` in `modules.js` is the whole rule, pure and tested, and
+  `actions.js` calls it rather than restating it.
+- **The runtime builds one slot per `ACTIVE_SLOTS`**, so the screen, the equip rule and the loop all
+  count slots from one list. A third slot would need no new arithmetic anywhere.
+- **The HUD stacks a panel per filled slot**, each labelled with its own live binding, and the arrest
+  and overdrive cues sit above the stack rather than at a fixed offset.
+- **A save from before the second slot loads with it empty**, coerced to an explicit shape so
+  "missing" and "empty" are not two states every reader has to handle.
+
+**Two mutations raised zero and both were real.** The save coercion had nothing checking it — now it
+does. And building the second slot empty raised nothing in any suite, because `main.js` is the game
+loop and **no node test can reach that line at all**: it is asserted structurally in
+`settings-tests.js`, the same answer M36 gave for the second thrust site. When the honest reason is
+"nothing goes there", state the rule where it can be read.
+
+**The blueprint paragraph on that screen now fills the block** rather than sitting centred at 44
+characters in the middle of a full-bleed grid. `44ch` is a reading-length rule and it is right on the
+narrow screens; inside a `.setting` on a wide one it stranded the text.
+
+**Nothing balance-related moved**: both fixtures byte-identical, crossing 641/800, every
+encounter-audit figure the same. This adds a slot, not power to a slot — and what it really does is
+make the other nine actives worth owning.
+
+**Worth watching, and it is a real question:** the second slot is a straight increase in what a
+player carries, and the loadout gate measures modules **one at a time**. Nobody has yet measured what
+*two* actives do to the crossing, and the honest answer is that this instrument cannot — the pilot
+presses on one cue. It wants a human.
+
+---
+
 ## Next task
 
 **Testing and bug fixes.** The content is finished: ten bodies, 50 missions, 20 modules, 15 skill

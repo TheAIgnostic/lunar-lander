@@ -94,6 +94,15 @@ h2 {
 .eyebrow { font-size: 11px; letter-spacing: .28em; margin-bottom: 6px; }
 .tag { color: #93b3c8; font-size: 13px; margin: 0 0 20px; letter-spacing: .04em; }
 .body { color: #a9c6d8; font-size: 13.5px; line-height: 1.65; margin: 12px auto 18px; max-width: 44ch; }
+/* 44ch is a reading-length rule and it is right on the narrow screens. On a wide
+   one it strands a paragraph in the middle of a full-bleed grid of tiles, so
+   inside a `.setting` it runs the width of the block and lines up with them. */
+.screen.wide .setting .body { max-width: none; margin-left: 0; margin-right: 0; }
+/* Two active slots (M37): a heading per slot, and a tile that is filled in the
+   *other* slot reads as spoken-for rather than as free. */
+.slot-name { color: #7f9db0; font-size: 11px; letter-spacing: .16em; margin: 14px 0 6px; }
+.slot-name kbd { margin-left: 2px; }
+.tile.mod.elsewhere { opacity: .62; border-style: dashed; }
 .body b { color: #dff6ff; }
 
 .verdict {

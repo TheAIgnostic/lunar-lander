@@ -80,8 +80,9 @@ export const Debug = {
       if (near) rows.push(['  nearest', `${near.e.type} ${near.e.state} ${near.d.toFixed(0)} px`]);
       rows.push(['hull', `${Math.round(ship.hull)} / ${ship.hullMax}${ship.shieldActive ? ` · shield ${ship.shieldHp.toFixed(0)}` : ''}`]);
     }
-    if (g.abilities && g.abilities.equipped) {
-      const a = g.abilities.readout();
+    for (const slot of (g.slots || [])) {
+      if (!slot.equipped) continue;
+      const a = slot.readout();
       rows.push(['module', `${a.name} ${a.charges}/${a.maxCharges}` +
         `${a.active ? ` active ${a.remaining.toFixed(1)}s` : a.cooldown > 0 ? ` cd ${a.cooldown.toFixed(1)}s` : ' ready'}`]);
     }

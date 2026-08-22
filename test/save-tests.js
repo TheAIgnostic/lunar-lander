@@ -347,6 +347,20 @@ console.log('save, migration and recovery');
 // default off and be cleared by NEW GAME. A flag that quietly persisted into
 // what someone thinks is a fresh game would make every number after it a lie.
 {
+  // **Two active slots since M37**, and a save written before them has one.
+  // The loadout screen and `startLevel` both index `active2` directly, so
+  // "missing" and "empty" must not be two states to handle - a mutation that
+  // drops it from the coercion raised nothing until this was written down.
+  {
+    const older = JSON.stringify({ version: 2, equipped: { active: 'pulse-laser', passive: 'ice-cleats' } });
+    const eq = loadMeta({ get: () => older, set: () => {} }).meta.equipped;
+    check('a save from before the second slot loads with it empty', eq.active2 === null,
+      JSON.stringify(eq));
+    check('and keeps what it already had', eq.active === 'pulse-laser' && eq.passive === 'ice-cleats');
+    const newer = JSON.stringify({ version: 2, equipped: { active: 'pulse-laser', active2: 'ray-shield', passive: null } });
+    check('and a save with two actives keeps both',
+      loadMeta({ get: () => newer, set: () => {} }).meta.equipped.active2 === 'ray-shield');
+  }
   check('god mode is off on a new save', defaultMeta().godMode === false);
 
   const s = mkStore();

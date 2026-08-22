@@ -947,6 +947,60 @@ function shipAt(x, y, loadout = {}) {
   }
 }
 
+// --- two active modules run in the same mission, and both let go
+//
+// **The teardown rule is a property of every active** (M32), and M37 gave the
+// lander two of them at once. Two modules writing the ship at the same time is
+// a new way for that rule to break: one module's teardown must not undo the
+// other's field, and neither may be left behind.
+{
+  const lvl = MOON_LEVELS[3];
+  const terrain = new Terrain(lvl, 1000);
+
+  // A shield and a foil: different fields, different durations, run together.
+  const ship = shipAt(600, 400);
+  const a = new Abilities('ray-shield', {});
+  const b = new Abilities('aero-brake', {});
+  check('two slots hold two different modules', a.id !== b.id && a.equipped && b.equipped);
+  a.trigger(ship);
+  b.trigger(ship);
+  // One step first: a module raises its fields in `update`, not in `trigger` -
+  // the shield is set at the trigger and the foil is not, so checking straight
+  // after pressing both reads one of them as dead.
+  a.update(1 / 120, { ship, terrain, level: lvl });
+  b.update(1 / 120, { ship, terrain, level: lvl });
+  check('both come on', ship.shieldActive === true && ship.airBrake > 1,
+    `shield ${ship.shieldActive} foil ${ship.airBrake}`);
+  // Step them the way the loop does - both, every substep.
+  let bothRan = 0;
+  for (let i = 0; i < 12 * 120; i++) {
+    a.update(1 / 120, { ship, terrain, level: lvl });
+    b.update(1 / 120, { ship, terrain, level: lvl });
+    if (a.active && b.active) bothRan++;
+  }
+  check('and they overlap rather than taking turns', bothRan > 0, `${bothRan} substeps`);
+  check('the shield let go', ship.shieldActive === false);
+  check('and so did the foil', ship.airBrake === 1);
+
+  // The charges are separate pools: spending one may not spend the other.
+  const s2 = shipAt(600, 400);
+  const laser = new Abilities('pulse-laser', {});
+  const cloak = new Abilities('optical-cloak', {});
+  const before = cloak.charges;
+  laser.trigger(s2);
+  check('firing one slot does not spend the other', cloak.charges === before);
+  check('and the other is still ready to fire', cloak.ready === true);
+
+  // An empty second slot is a real object, not a null - the loop iterates both
+  // without asking which are filled, so an empty one has to be a safe no-op.
+  const s3 = shipAt(600, 400);
+  const none = new Abilities(null, {});
+  check('an empty slot is honest about being empty', !none.equipped);
+  check('an empty slot refuses to fire', none.trigger(s3) === false);
+  check('and stepping it does nothing at all',
+    none.update(1 / 120, { ship: s3, terrain, level: lvl }).length === 0);
+}
+
 // --- the briefing tells the player what is out there
 {
   for (const lvl of ARMED) {

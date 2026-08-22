@@ -210,7 +210,15 @@ export function drawHUD(ctx, W, H, g) {
 
   // ---- threats, and the module that answers them
   if (threats) drawThreatPanel(ctx, W, H, g, s);
-  if (g.abilities && g.abilities.equipped) drawAbilityPanel(ctx, W, H, g, s);
+  // Bottom-left is a stack: the module panels first, then the arrest cue, then
+  // the overdrive. `abilityRows` is what everything above them counts against.
+  let abilityRows = 0;
+  (g.slots || []).forEach((slot, i) => {
+    if (!slot.equipped) return;
+    drawAbilityPanel(ctx, W, H, g, s, slot, abilityRows, (g.abilityKeys || [])[i]);
+    abilityRows++;
+  });
+  g.abilityRows = abilityRows;
   if (ship.arrestLeft > 0 || ship.arrestFired > 0) drawArrestCue(ctx, W, H, g, s);
   if (ship.overdriveLeft > 0 || ship.overdrive > 0 || ship.overheat > 0) {
     drawOverdriveCue(ctx, W, H, g, s);
@@ -417,7 +425,7 @@ function drawArrestCue(ctx, W, H, g, s) {
   const w = 118 * s;
   const h = 26 * s;
   const x = 16;
-  const y = H - h - 16 - (g.abilities && g.abilities.equipped ? 58 * s : 0);
+  const y = H - h - 16 - (g.abilityRows || 0) * (52 * s);
   panel(ctx, x, y, w, h, fired ? 'rgba(255,179,71,0.6)'
     : ready ? 'rgba(255,179,71,0.45)' : 'rgba(120,140,160,0.22)');
   ctx.font = `700 ${10 * s}px ${FONT}`;
@@ -455,7 +463,7 @@ function drawOverdriveCue(ctx, W, H, g, s) {
   const x = 16;
   // Stacked above the arrest cue when both are carried, so neither is hidden.
   const arrestShown = ship.arrestLeft > 0 || ship.arrestFired > 0;
-  const y = H - h - 16 - (g.abilities && g.abilities.equipped ? 58 * s : 0)
+  const y = H - h - 16 - (g.abilityRows || 0) * (52 * s)
     - (arrestShown ? (h + 6) : 0);
   panel(ctx, x, y, w, h, running ? 'rgba(95,245,255,0.6)'
     : hot ? 'rgba(255,90,90,0.45)' : 'rgba(95,245,255,0.32)');
@@ -475,12 +483,18 @@ function drawOverdriveCue(ctx, W, H, g, s) {
   ctx.textAlign = 'left';
 }
 
-function drawAbilityPanel(ctx, W, H, g, s) {
-  const a = g.abilities.readout();
+/**
+ * One equipped active, and there are **two slots since M37**. `row` is how many
+ * panels are already stacked below this one, so the layout is a count rather
+ * than a special case for "the second one" - a third slot would need no new
+ * arithmetic, and an empty first slot does not leave a gap.
+ */
+function drawAbilityPanel(ctx, W, H, g, s, slot, row, keyName) {
+  const a = slot.readout();
   const w = 210 * s;
   const h = 46 * s;
   const x = 16;
-  const y = H - h - 16;
+  const y = H - h - 16 - row * (h + 6);
   const accent = a.active ? 'rgba(126,242,208,0.5)' : a.blocker ? 'rgba(120,140,160,0.3)' : 'rgba(95,245,255,0.3)';
   panel(ctx, x, y, w, h, accent);
   ctx.font = `700 ${11 * s}px ${FONT}`;
@@ -490,7 +504,7 @@ function drawAbilityPanel(ctx, W, H, g, s) {
   ctx.textAlign = 'right';
   ctx.font = `600 ${10 * s}px ${FONT}`;
   ctx.fillStyle = 'rgba(160,190,215,0.75)';
-  ctx.fillText(a.blocker ? a.blocker : a.active ? 'ACTIVE' : 'E', x + w - 12, y + 18 * s);
+  ctx.fillText(a.blocker ? a.blocker : a.active ? 'ACTIVE' : keyLabel(keyName || 'e'), x + w - 12, y + 18 * s);
   ctx.textAlign = 'left';
 
   // charge pips, then a bar that fills while it recharges and drains while it runs

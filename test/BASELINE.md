@@ -4857,3 +4857,46 @@ Audit: deep-route engagement 751/800 and the at-once distribution identical; fli
 1.17x; sweep-everything landings 114/1000 → 111/1000.
 
 `forces-tests.js` 147 → **160**, `loadout-tests.js` 350 → **359**.
+
+## M37 — two active modules (2026-08-22)
+
+Tom's playtest call: *"you need laser for enemies. playtest have shown that everyone picks the laser
+and keeps it. so two active modules from now on."*
+
+**A finding about a choice that was never offered.** Ten actives had been built, each proved to change
+a flown mission on a body it claims and each made obtainable — and none of that mattered, because the
+one slot they competed for was already spoken for by the weapon.
+
+| | before | after |
+| --- | --- | --- |
+| active slots | 1 | **2** — `E` / `X`, pad X / **Y** |
+| Emergency Arrest | `f`, pad **Y** | `f`, pad **LB** |
+| a module in both slots | — | refused; picking it in the other **moves** it |
+
+Verified in the game: Pulse Laser in slot I and Ray Shield in slot II, fired on `E` and `X`, **both
+active in the same substep**, separate charge pools, both panels stacked on the HUD with the arrest
+and overdrive cues lifted above them.
+
+### Two mutations raised zero, and one of them cannot be tested any other way
+
+| mutation | before | after |
+| --- | ---: | ---: |
+| a module may sit in both slots | 12 | 12 |
+| the save drops the second slot | **0** | 1 |
+| the second slot is built empty | **0** | 1 (structural) |
+| only the first slot is stepped | **0** | 1 (structural) |
+
+The save coercion was simply untested. The other two are `main.js` — **the game loop, which no node
+test can execute** — so they are asserted from the source, the same answer M36 gave for
+`engineThrust`'s second caller.
+
+### What did not move
+
+**Both fixtures byte-identical.** Crossing 641/800, deep-route engagement 751/800, at-once
+distribution and every other audit figure unchanged. This adds a slot rather than power to a slot.
+
+**What has not been measured**: what *two* actives do to the crossing. The loadout gate flies modules
+one at a time and the pilot presses on a single cue, so this instrument cannot answer it. A human can.
+
+`skills-tests.js` 109 → **127**, `enemies-tests.js` 163 → **173**, `settings-tests.js` 220 → **223**,
+`save-tests.js` 83 → **86**.

@@ -117,6 +117,12 @@ function coerceMeta(raw) {
   m.discoveredPlanets = Array.isArray(raw.discoveredPlanets) && raw.discoveredPlanets.length
     ? raw.discoveredPlanets : d.discoveredPlanets;
   m.unlockedBlueprints = Array.isArray(raw.unlockedBlueprints) ? raw.unlockedBlueprints : [];
+  // **Two active slots since M37**, and an older save has only one. Merged onto
+  // an explicit shape rather than taken as-is, so `active2` is `null` on a save
+  // written before it existed instead of `undefined` - the loadout screen and
+  // `startLevel` both index it directly, and "the key is missing" and "the slot
+  // is empty" should not be two different states to handle.
+  m.equipped = { active: null, active2: null, passive: null, ...(raw.equipped || {}) };
   m.version = SAVE_VERSION;
   return m;
 }

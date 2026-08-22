@@ -15,7 +15,7 @@ import { settleHaul } from './economy.js';
 import { chapterFor } from './missions.js';
 import { PLANET_ORDER, routeChoices } from './route.js';
 import { flightAssist } from './screens.js';
-import { ACTIVE_MODULES, PASSIVE_MODULES, STARTER_PASSIVES } from './modules.js';
+import { ACTIVE_MODULES, PASSIVE_MODULES, STARTER_PASSIVES, equipInto } from './modules.js';
 import { buySkill, skillFeatures } from './skills.js';
 import { audio, g, input, meta, saveSettings, setMeta, settings, ship } from './state.js';
 
@@ -82,7 +82,9 @@ export function act(action) {
       return;
     }
     const [, kind, id] = action.split(':');
-    meta.equipped = { ...meta.equipped, [kind]: meta.equipped[kind] === id ? null : id };
+    // The rule - fill, clear, or move out of the other active slot - is
+    // `equipInto` in `modules.js`, so it can be tested without a browser.
+    meta.equipped = equipInto(meta.equipped, kind, id);
     Save.saveMeta(meta);
     flow.renderOverlay();
     return;
@@ -172,7 +174,7 @@ export function act(action) {
     }
     g.confirmWipe = false;
     setMeta(Save.resetAll(meta));
-    meta.equipped = { active: null, passive: STARTER_PASSIVES[0] };
+    meta.equipped = { active: null, active2: null, passive: STARTER_PASSIVES[0] };
     meta.unlockedBlueprints = [...STARTER_PASSIVES];
     Save.saveMeta(meta);
     Log.clearLog();

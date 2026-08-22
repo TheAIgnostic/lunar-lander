@@ -32,12 +32,22 @@ export const DEFAULT_KEYS = {
   left: ['a', 'arrowleft', 'axis:0-', 'pad:14'],
   right: ['d', 'arrowright', 'axis:0+', 'pad:15'],
   hold: ['s', 'arrowdown', 'pad:6'],
+  // **Two active modules since M37**, and the second is a full control rather
+  // than a modifier on the first. Tom's playtest reason: *"you need laser for
+  // enemies. everyone picks the laser and keeps it"* - one slot was not a
+  // choice between ten modules, it was the weapon and nine things nobody could
+  // afford to carry.
   ability: ['e', 'q', 'pad:2'],
+  ability2: ['x', 'pad:3'],
   // Emergency Arrest (M34). A rebindable action like any other, which is the
   // whole point of the M30 binding work: `ACTIONS` is derived from this object,
   // so the settings screen, the rebind rules, the save format and the pad all
   // learned about it without being told.
-  arrest: ['f', 'pad:3'],
+  //
+  // **Moved off Y (`pad:3`) in M37**, which the second module now holds - the
+  // two ability buttons belong side by side under the thumb, and LB is the
+  // nearest free control.
+  arrest: ['f', 'pad:4'],
   // Combat Overdrive (M35). The Combat tree's capstone, and a rebindable action
   // for the same reason Emergency Arrest is: `ACTIONS` is derived from this
   // object, so the settings screen, the rebind rules, the save format and the
