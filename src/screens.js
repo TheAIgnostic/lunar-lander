@@ -891,21 +891,57 @@ export function flightAssist() {
   };
 }
 
-export function crashReason() {
-  if (ship.lostToFire) {
-    return ship.damageSource === 'ram'
-      ? 'A drone rammed the hull and it came apart.'
-      : 'The hull failed under fire. Nothing left to absorb the next hit.';
-  }
-  if (ship.landingResult && ship.landingResult.blocker && ship.landingResult.grade === 'CRASH') {
-    return ship.landingResult.blocker;
-  }
-  const tilt = Math.abs(normalizeAngle(ship.angle)) / DEG;
-  if (g.terrain.ceiling && ship.contact && ship.contact.y < g.terrain.height * 0.5) return 'Struck the ice ceiling.';
-  if (ship.fuel <= 0) return 'Tanks dry on final approach.';
+/**
+ * **What a hazard death is called.** Keyed on the `source` string the force
+ * hands `damageOverTime`, which is the same shape as `HAZARD_TIPS` above and
+ * the same shape as `BUILDERS` in `forces.js` - a name written in one file
+ * indexing a table in another. `settings-tests.js` asserts an entry for every
+ * source any force actually passes, because the failure mode is silence: a
+ * missing key falls through to the generic line and nobody sees a gap.
+ */
+const HAZARD_DEATHS = {
+  eruption: 'A fountain caught the lander and burned through the hull.',
+  acid: 'The air ate through the hull. Too long down in the thick of it.',
+  radiation: 'The belt burned through the hull on the way in.',
+  hazard: 'The weather took the hull apart.',
+};
+
+/**
+ * **Why the lander was lost, as one short tag.** The prose the crash screen
+ * prints and the `reason` the playtest log records are two presentations of
+ * this one answer, because they were two answers and only one of them worked:
+ * the log line read `g.crashReason`, **a property nothing in the codebase has
+ * ever assigned**, so every lander lost to a gun, a ram, its own charge or the
+ * weather was filed as `reason=impact` in the trace Tom pastes into chat.
+ *
+ * The screen had the other half of the fault - it knew about fire and the
+ * ceiling and every landing axis, and nothing at all about a hazard - so a hull
+ * emptied by Io's fountains got the off-pad line about level ground, in mid-air.
+ */
+export function crashCause() {
+  if (ship.lostToFire) return ship.damageSource === 'ram' ? 'ram' : (ship.damageSource || 'fire');
+  if (ship.lostToHazard) return ship.damageSource || 'hazard';
+  if (ship.landingResult && ship.landingResult.blocker && ship.landingResult.grade === 'CRASH') return 'landing';
+  if (g.terrain && g.terrain.ceiling && ship.contact && ship.contact.y < g.terrain.height * 0.5) return 'ceiling';
+  if (ship.fuel <= 0) return 'dry';
   const env = ship.envelope || ENVELOPE;
-  if (Math.abs(ship.vy) > env.HARD.vy) return `Descent rate ${(Math.abs(ship.vy) / 6).toFixed(1)}, far outside the envelope.`;
-  if (Math.abs(ship.vx) > env.HARD.vx) return `Lateral drift ${(Math.abs(ship.vx) / 6).toFixed(1)}. The legs sheared off.`;
-  if (tilt > 15) return `Attitude ${tilt.toFixed(0)}° off vertical at contact.`;
+  if (Math.abs(ship.vy) > env.HARD.vy) return 'descent';
+  if (Math.abs(ship.vx) > env.HARD.vx) return 'drift';
+  if (Math.abs(normalizeAngle(ship.angle)) / DEG > 15) return 'attitude';
+  return 'off-pad';
+}
+
+export function crashReason() {
+  const cause = crashCause();
+  if (cause === 'ram') return 'A drone rammed the hull and it came apart.';
+  if (cause === 'blast') return 'Your own charge went off too close. The hull did not take it.';
+  if (ship.lostToFire) return 'The hull failed under fire. Nothing left to absorb the next hit.';
+  if (ship.lostToHazard) return HAZARD_DEATHS[cause] || HAZARD_DEATHS.hazard;
+  if (cause === 'landing') return ship.landingResult.blocker;
+  if (cause === 'ceiling') return 'Struck the ice ceiling.';
+  if (cause === 'dry') return 'Tanks dry on final approach.';
+  if (cause === 'descent') return `Descent rate ${(Math.abs(ship.vy) / 6).toFixed(1)}, far outside the envelope.`;
+  if (cause === 'drift') return `Lateral drift ${(Math.abs(ship.vx) / 6).toFixed(1)}. The legs sheared off.`;
+  if (cause === 'attitude') return `Attitude ${(Math.abs(normalizeAngle(ship.angle)) / DEG).toFixed(0)}° off vertical at contact.`;
   return 'Touched down off the pad. The surface is not level enough to hold a lander.';
 }

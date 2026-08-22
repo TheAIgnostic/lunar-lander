@@ -332,6 +332,7 @@ export class Ship {
     this.hitsTaken = 0;
     this.hitFlash = 0;
     this.lostToFire = false;
+    this.lostToHazard = false;
     if (!this.spec) this.applyLoadout(null);
     this.hull = this.hullMax;
   }
@@ -366,7 +367,15 @@ export class Ship {
     this.hull = Math.max(0, this.hull - left);
     this.hullBurn = 0.6;                 // a slow glow, not the hit flash
     if (this.hull <= 0) {
+      // Not enemy fire, and `lostToFire` keeps that meaning - the test pilot
+      // reports it and the flight fixture records it. **But a hull emptied by
+      // the weather still has to be sayable**, and until now nothing could say
+      // it: `crashReason()` has branches for fire, the ceiling, a dry tank and
+      // every landing axis, and none for a hazard, so a lander dissolved in
+      // mid-air over Io was told *"Touched down off the pad. The surface is not
+      // level enough to hold a lander."* This is the flag that branch reads.
       this.lostToFire = false;
+      this.lostToHazard = true;
       this.damageSource = source;
     }
     return left;
@@ -417,6 +426,7 @@ export class Ship {
     const destroyed = this.hull <= 0;
     if (destroyed) {
       this.lostToFire = source !== 'impact';
+      this.lostToHazard = false;
       this.damageSource = source;
     }
     return { absorbed, damage: left, hull: this.hull, destroyed };

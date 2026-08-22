@@ -983,5 +983,174 @@ function makeInput() {
   }
 }
 
+
+
+{
+  // --- **Nothing reads a `g` that nothing writes.** --------------------------
+  //
+  // The generalisation of a fault this project has now shipped four times: an
+  // identifier that is *read* on a path no node test executes and *assigned*
+  // nowhere. Three of them were free variables and crashed the game (M30e's
+  // `ship`, M31's `rad`, M35's `bonus`). The fourth was quieter and shipped
+  // longer: `main.js` logged a crash as
+  //
+  //     reason: (ship.landingResult && ship.landingResult.blocker) || g.crashReason || 'impact'
+  //
+  // and **nothing in the codebase has ever assigned `g.crashReason`.** A
+  // property read is not a ReferenceError, so it did not throw - it just
+  // silently fell through, and every lander lost to a gun, a ram, its own
+  // charge or the weather was filed as `reason=impact` in the playtest log Tom
+  // pastes into chat. A field of a debugging tool that was only ever right by
+  // accident.
+  //
+  // `g` is the shared mutable state, so the honest set of keys is "declared in
+  // `state.js`, or assigned by somebody" - and a read outside that set is a
+  // name that can only ever be `undefined`. Structural, because these three
+  // files need a browser (AUDIT.md section 4, case 3).
+  const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  const read = (f) => strip(readFileSync(new URL(`../src/${f}`, import.meta.url), 'utf8'));
+  const files = ['state.js', 'main.js', 'screens.js', 'actions.js', 'hud.js', 'render.js', 'debug.js'];
+  const texts = new Map(files.map((f) => [f, read(f)]));
+
+  const state = texts.get('state.js');
+  const literal = state.slice(state.indexOf('export const g = {'));
+  check('the g literal is findable', literal.length > 100);
+  // `key:` and shorthand `key,` alike.
+  const keys = new Set([...literal.matchAll(/^ {2}([A-Za-z_$][\w$]*)\s*[:,]/gm)].map((m) => m[1]));
+  // Plus every key anything assigns onto g - the state object is grown at
+  // runtime on purpose (`g.slots`, `g.carried`, `g.lastResult`).
+  for (const t of texts.values()) {
+    for (const m of t.matchAll(/\bg\.([A-Za-z_$][\w$]*)\s*(?:=[^=]|\+\+|--|\+=|-=)/g)) keys.add(m[1]);
+  }
+  check('g declares a state object worth checking', keys.size > 30, String(keys.size));
+
+  // Only the three that import the real `g`; elsewhere `g` is a parameter or a
+  // local, and a local named `g` would make this guard lie.
+  const dangling = [];
+  for (const f of ['main.js', 'screens.js', 'actions.js']) {
+    for (const m of texts.get(f).matchAll(/\bg\.([A-Za-z_$][\w$]*)/g)) {
+      if (!keys.has(m[1])) dangling.push(`${f}: g.${m[1]}`);
+    }
+  }
+  check('nothing reads a g property nothing ever writes', dangling.length === 0,
+    [...new Set(dangling)].join(', '));
+}
+
+
+{
+  // **Every hazard that can empty the hull has something to say about it.**
+  //
+  // `crashReason()` knew about enemy fire, the ice ceiling, a dry tank and all
+  // four landing axes, and nothing at all about the weather - so a lander taken
+  // apart in mid-air by Io's fountains was told *"Touched down off the pad. The
+  // surface is not level enough to hold a lander."* Measured: io-3's vent
+  // empties a 100-hull lander in 35.5 s, and the loss carries
+  // `damageSource: 'eruption'` with `lostToFire` false.
+  //
+  // The table is keyed on the `source` string a force hands `damageOverTime`,
+  // which is the `BUILDERS` shape again - a name written in one file indexing a
+  // table in another, failing silently. So it is asserted the way `BUILDERS`
+  // and the tips table are: every source resolves, and nothing in the table is
+  // for a source nothing passes.
+  const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  const screens = strip(readFileSync(new URL('../src/screens.js', import.meta.url), 'utf8'));
+  const forces = strip(readFileSync(new URL('../src/forces.js', import.meta.url), 'utf8'));
+  const shipSrc = strip(readFileSync(new URL('../src/ship.js', import.meta.url), 'utf8'));
+  const loop = strip(readFileSync(new URL('../src/main.js', import.meta.url), 'utf8'));
+
+  const from = screens.indexOf('const HAZARD_DEATHS = {');
+  const to = screens.indexOf('};', from);
+  check('the hazard-death table is findable', from > 0 && to > from);
+  const named = new Set([...screens.slice(from, to).matchAll(/^ {2}([a-zA-Z]+):/gm)].map((m) => m[1]));
+
+  // Every source string any force actually passes, plus the parameter default.
+  // Balanced rather than regex: one call site reads
+  // `damageOverTime(hull * ... * hazardScale(ship, 'heat') * dt, 'eruption')`,
+  // and a lazy `[^)]*` stops at the inner close and reports the wrong string -
+  // which is the same class of quiet miss this block exists to catch.
+  const callSources = (text) => {
+    const out = [];
+    for (let i = text.indexOf('damageOverTime('); i >= 0; i = text.indexOf('damageOverTime(', i + 1)) {
+      let j = i + 'damageOverTime('.length;
+      let depth = 1;
+      for (; j < text.length && depth > 0; j++) {
+        if (text[j] === '(') depth++;
+        else if (text[j] === ')') depth--;
+      }
+      const args = text.slice(i + 'damageOverTime('.length, j - 1);
+      const last = [...args.matchAll(/'([a-z]+)'/g)].pop();
+      // The final quoted string at depth zero of the argument list is `source`.
+      const tail = args.slice(args.lastIndexOf(','));
+      if (last && /'([a-z]+)'/.test(tail)) out.push(tail.match(/'([a-z]+)'/)[1]);
+    }
+    return out;
+  };
+  const sources = new Set(callSources(forces));
+  const fallback = (shipSrc.match(/damageOverTime\(amount, source = '([a-z]+)'\)/) || [, ''])[1];
+  if (fallback) sources.add(fallback);
+  check('some force actually raises a hazard death', sources.size >= 3, [...sources].join(', '));
+  for (const src of sources) {
+    check(`a hazard death by '${src}' can be described`, named.has(src),
+      'the generic line is what a missing key falls through to, and nobody sees a gap');
+  }
+  for (const k of named) {
+    check(`the '${k}' line is for a source something passes`, sources.has(k), k);
+  }
+
+  // And the two readers agree, because they were two answers to one question
+  // and only the screen's worked.
+  check('the crash screen classifies through crashCause',
+    /export function crashCause\(\)/.test(screens) && /const cause = crashCause\(\);/.test(screens));
+  check('and the playtest log records the same classification',
+    /reason: \(ship\.landingResult && ship\.landingResult\.blocker\) \|\| crashCause\(\)/.test(loop),
+    'the log line used to reach for g.crashReason, which nothing assigns');
+  check('a hull emptied by the weather is flagged as such',
+    /this\.lostToHazard = true;/.test(shipSrc) && /lostToHazard = false/.test(shipSrc),
+    'set on a hazard death and cleared everywhere else, or the branch is unreachable');
+}
+
+
+
+{
+  // **A voice that has already arrived is not re-scheduled.**
+  //
+  // `engines` has carried this guard since M16, where per-frame automation was
+  // found writing 240 events a second forever and Tom heard it as a click while
+  // holding a key. **`silence()` put it straight back**: it cleared `_mainOn`
+  // and `_rcsOn` before asking, so the equality test could never hit, and the
+  // frame loop calls `silence()` every frame the game is not in play. Measured
+  // live on the title screen - a screen with no engines on it - at **240
+  // automation events a second**, the same number to the digit, all of them
+  // setting values the voices already held. 4 in the first second and 0 a
+  // second after.
+  //
+  // `laser` and `setWind` are asked every frame too and had no guard at all.
+  // `audio.js` has no unit suite and nothing in node can hear it, so the honest
+  // assertion is the shape (AUDIT.md section 4, case 3).
+  const audioSrc = readFileSync(new URL('../src/audio.js', import.meta.url), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  const body = (name) => {
+    const at = audioSrc.indexOf(`\n  ${name}(`);
+    if (at < 0) return '';
+    let i = audioSrc.indexOf('{', at);
+    let depth = 1;
+    for (let j = i + 1; j < audioSrc.length && depth > 0; j++) {
+      if (audioSrc[j] === '{') depth++;
+      else if (audioSrc[j] === '}') { depth--; if (!depth) return audioSrc.slice(i, j); }
+    }
+    return '';
+  };
+  check('engines still guards on no-change', /if \(this\._mainOn === mainOn && this\._rcsOn === rcsOn\) return;/.test(body('engines')));
+  check('and silence does not clear that guard before asking',
+    !/_mainOn\s*=\s*null/.test(body('silence')) && !/_rcsOn\s*=\s*null/.test(body('silence')),
+    'nulling the dedupe state makes it unreachable, and this method runs every frame off the play screen');
+  check('the laser voice is only re-scheduled when it changes',
+    /if \(this\._laserOn === on\) return;/.test(body('laser')),
+    'the frame loop asks about the beam every frame');
+  check('and the wind bed has a deadband rather than a per-frame write',
+    /_windTarget/.test(body('setWind')),
+    'a 0.4 s envelope re-anchored every 16 ms never settles');
+}
+
 console.log(`\n  ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -138,6 +138,40 @@ export const MAGNETIC = { bite: 50, pull: 12, torque: 0.9 };
 /** Status channels a hazard can raise. */
 export const STATUS_CHANNELS = ['heat', 'cold', 'corrosion', 'radiation', 'charge'];
 
+/**
+ * **Where each channel stops warning and starts costing something**, in one
+ * table, because two readers outside this file had copied the numbers as
+ * literals and both had drifted.
+ *
+ * The rule this exists to keep true is written above `RADIATION`: *below `bite`
+ * the only consequence is instrument noise, which gives the player a warning
+ * they can act on before anything is lost*. That promise is only kept if the
+ * warning fires where the bite is, and it did not. `main.js` gated all five
+ * channels on a flat **60** and `hud.js` carried `60 / 55 / 45 / 50` beside
+ * bites of `55 / 55 / 45 / 50` - so heat's label said the engine was fine
+ * through the whole band where it was already derating (M36 moved `HEAT.bite`
+ * 60 -> 55 and neither reader was told), radiation's colour lagged by five, and
+ * `cold` used 55 for its label and 60 for its colour two lines apart.
+ *
+ * Measured over 1,000 flights across all 50 authored missions: 163 crossed a
+ * bite, and **40 of them never reached 60** - so a quarter of the flights where
+ * a hazard was actually taking hull, thrust or attitude got no callout and no
+ * alarm at all. Corrosion was the worst of it, 23 of 35, because Venus' acid
+ * bites at 45 and rarely climbs past the low 60s.
+ *
+ * This is the `BUILDERS` fault in numbers rather than names: a value defined in
+ * one file and re-typed in another, failing silently. `forces-tests.js` asserts
+ * an entry per `STATUS_CHANNELS`, each against its own constant, and that
+ * neither reader compares a status level to a bare number.
+ */
+export const STATUS_BITE = {
+  heat: HEAT.bite,
+  cold: COLD.bite,
+  corrosion: ACID.bite,
+  radiation: RADIATION.bite,
+  charge: MAGNETIC.bite,
+};
+
 export function freshStatus() {
   const s = {};
   for (const k of STATUS_CHANNELS) s[k] = 0;

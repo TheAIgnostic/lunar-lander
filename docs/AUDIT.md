@@ -66,11 +66,13 @@ the other 19 modules, landing, banking, the supply stop, or any screen.
 
 Ordered by what I would look at first.
 
-> **Updated after the first audit (2026-08-22).** That session found **eleven** faults and every one
-> was in a blind spot named in §1 — seven of them in code no node test executes. Leads **1** and
-> **7** are closed; **2** is half-closed; **3, 4, 5, 6** are untouched. The findings are in
-> `test/BASELINE.md` under "The first audit". Read them before starting: they are the best available
-> evidence of what this codebase's bugs actually look like.
+> **Updated after the second audit (2026-08-22).** Two sessions, sixteen faults, **every one in a
+> blind spot named in §1.** Leads **1** and **7** are closed; **2** is half-closed; **3** and **4**
+> are surveyed and clean but unenforced; **5** and **6** are untouched and are design calls rather
+> than repairs. Of §3a, **A** found a sixth occurrence, **B** found one, **C** is closed and **D**
+> found one. The findings are in `test/BASELINE.md` under "The first audit" and "The second audit".
+> Read them before starting: they are the best available evidence of what this codebase's bugs
+> actually look like.
 
 ### 1. ~~The exemption list is only half-checked~~ — **CLOSED** (`27bd46d`)
 
@@ -128,7 +130,14 @@ Look at what each active writes on the ship (`anchor`, `shieldActive`, `shieldFa
 
 </details>
 
-### 3. Source-grep assertions are text checks wearing a test's clothes
+### 3. Source-grep assertions are text checks wearing a test's clothes — **surveyed, still open**
+
+> The second audit added five more of them and verified each *by mutation* rather than by reading:
+> the crash classifier, the hazard-death table, the bite table, the dangling-`g` scan and the audio
+> guards all fail when the rule they guard is broken, and the crash-log one fails on the exact line
+> that shipped. The existing ones were not re-verified one by one. **That is still the job here**, and
+> `mutate.sh` is still how.
+
 
 Five test files use `readFileSync` to assert things about source text rather than behaviour:
 `loadout-tests`, `settings-tests`, `forces-tests`, and both fixtures. They exist because the rule
@@ -139,12 +148,20 @@ reformat and the check silently stops checking.
 
 Verify each one still fails when the rule it guards is broken. `mutate.sh` is how.
 
-### 4. `level.__forces` is cached on the level object
+### 4. `level.__forces` is cached on the level object — **surveyed clean, still unenforced**
 
 `forcesFor(level)` memoises onto a non-enumerable `__forces` property. **A level mutated after its
 forces are first built keeps the old forces.** The test rigs avoid this by spreading into a fresh
 object; nothing enforces that. If any code path edits `level.hazards` in place after a mission has
 started, the weather silently will not change.
+
+> Checked in the second audit and currently safe: nothing in `src/` assigns `level.hazards`,
+> `.visibility`, `.wind`, `.gust`, `.drag` or `.gravity` after construction, and every builder in
+> `forces.js` is a pure function of `(ship, level, t, dt, terrain)` holding no mutable closure state —
+> so the cache cannot go stale and cannot carry flight state between missions. **Nothing asserts any
+> of that**, and the levels the cache is written onto are module-level constants that live for the
+> whole session, so the day a per-run scale or an in-place hazard edit arrives this becomes a fault
+> with no test to catch it. Worth a guard more than another survey.
 
 ### 5. `hazardLead` — sold, not delivered
 
@@ -159,6 +176,13 @@ mission in five. Heat was in this state from M5 until M36 and its passive could 
 until the number moved. These two were deliberately left — no complaint to aim at — but if you are
 looking for "sold and not delivered", this is where the next one would be.
 
+> **Re-measured in the second audit and this still holds — read the 42 as a median, not a ceiling.**
+> Per Venus mission over 20 seeds, the median peak is 54 / 35 / 18 / 44 / 48, so on three of the five
+> the typical flight never reaches the bite; but the *tail* does, 35 of 100 flights, up to 86. So the
+> balance complaint is unchanged and still a decision. What was a fault, and is fixed, is that those
+> 35 flights got no warning: the callout fired at a flat 60 rather than at `ACID.bite`. **Do not read
+> the fix as having moved this lead** — the channel bites exactly as rarely as it did.
+
 ### 7. ~~Save migration~~ — **CLOSED** (`dd09303`)
 
 A numeric field of the wrong *type* fell through to `+=` string concatenation. Wrong-typed numerics
@@ -171,7 +195,7 @@ fall back to their defaults now, with tests. `save` went 86 → 92 assertions.
 These come from the *shape* of the eleven faults rather than from reading the code cold. They are the
 highest-value place to start.
 
-### A. The M29 name-table fault, occurrence six
+### A. The M29 name-table fault, occurrence six — **found, and it was a number**
 
 A name in content indexing a table in code, failing **silently**. It has now been found five times:
 `BUILDERS` (hazard names), `flightAssist`'s tips, the expedition card's `[object Object]`, the
@@ -183,25 +207,67 @@ So the question is not "are the three readers right", it is **"who else prints o
 content name without going through the accessor"**. Look for `switch` and `if` chains over mission,
 hazard, module, planet or enemy ids anywhere in `screens.js`, `hud.js` and `render.js`.
 
-### B. Silent-drop channels
+> **The sixth was found, and it was not a name.** The three `hazardName` readers are right, the three
+> remaining `switch` statements in the browser-only files are all over internal tags, and
+> `describeThreats`/`planetIcon` both filter or fall back. The occurrence was **the same fault in
+> numbers**: `HEAT.bite` and the rest defined in `forces.js` and re-typed as literals in `hud.js` and
+> `main.js`, where two of them had drifted and a third disagreed with itself two lines apart. Same
+> silence, same shape, no string involved.
+>
+> **So widen the search from names to values.** Anywhere a presentation file states a threshold that
+> a simulation file owns, it is one edit away from lying, and no test draws. `STATUS_BITE` is now the
+> pattern to copy: one exported table, read by every reader, asserted complete against its own
+> constants and asserted to be the *only* thing the readers compare against.
+
+### B. Silent-drop channels — **found: the crash line's `reason`**
 
 `gamelog` drops `undefined` fields silently, so *every* landed entry shipped without its numbers and
 nothing noticed. **Anywhere that serialises an object field-by-field has this hole.** The playtest log
 is the one Tom pastes into chat, so a field that quietly vanishes is a debugging tool lying. Check
 every `Log.log(` call site against the object it reads from.
 
-### C. Anything added in M35–M40 that touches a device or a screen
+> **Found on the crash line, and it was worse than a drop.** All eighteen call sites were read against
+> their objects; seventeen are clean. The eighteenth read `g.crashReason` — **a property nothing has
+> ever assigned** — so the field did not vanish, it silently took the fallback, and every lander lost
+> to a gun, a ram, its own charge or the weather was recorded as `reason=impact`. A channel that is
+> always populated and always wrong is worse than one that is empty, because nothing about the log
+> looks broken.
+>
+> The general guard is now in `settings-tests.js`: every `g.X` read in `main`/`screens`/`actions`
+> against everything anything assigns. It fails on the line that shipped. The same scan was run by
+> hand over `ship`, `meta` and `run` and those are clean — but only `g` is enforced, so **extend the
+> scan rather than re-running it** if you want this class closed properly.
+
+### C. Anything added in M35–M40 that touches a device or a screen — **CLOSED**
 
 Three of the eleven faults were **new features that never reached the touch layer** (MODULE II,
 ARREST, OVERDRIVE — all purchasable, none pressable on a touch device). The pattern: a feature is
 built, bound on keyboard and pad, tested headlessly, and the fourth input path is forgotten. Audit
 every action in `DEFAULT_KEYS` against the touch buttons in `index.html`, and against the pad.
 
-### D. Voices that hold a gain
+> Re-audited in the second audit: all eight actions in `DEFAULT_KEYS` have a touch button in
+> `index.html`, a `bindTouchButton`/`bindAction` wiring in `main.js`, and a pad token. **Nothing the
+> game sells is unreachable on any of the four input paths.** One loose end, deliberately left because
+> it is a design call and not a fault: `t-ability` is the only touch button never hidden, and with
+> nothing fitted in slot one it is completely inert — no sound, no ring, no text. See the second
+> audit's "Observed, not changed".
+
+### D. Voices that hold a gain — **found: a guard made unreachable**
 
 Two audio faults were voices built or held open when they should not have been. `audio.js` has no
 unit suite at all. Every `setTargetAtTime` that ramps *to* a value is a candidate for never being
 ramped back.
+
+> Every one of them was walked in the second audit and none *holds* a gain — but the opposite fault
+> was there: **a voice that has already arrived being re-scheduled every frame, forever.** `silence()`
+> cleared `_mainOn`/`_rcsOn` before calling `engines`, which made M16's dedupe guard unreachable, and
+> the frame loop calls `silence()` every frame the game is not in play. Measured live on the title
+> screen at **240 automation events a second** — the same figure M16's own comment records. `laser`
+> and `setWind` were asked every frame with no guard at all.
+>
+> **So the question for this file is both directions**: what ramps up and never comes down, *and*
+> what is written when nothing has changed. Both are inaudible to every test in the repo; the browser
+> is the instrument, and patching `AudioParam.prototype.setTargetAtTime` and counting is the method.
 
 ---
 
@@ -217,7 +283,8 @@ One exact string replacement, the unit suites, a count of what each lost, the fi
 trap. **Zero failures is the finding, not the result** — it means nothing was checking the behaviour
 you just deleted.
 
-Tally so far: M31 9 mutations / 0 real holes, M32 10/**5**, M33 15/**6**, M35 11/**2**, M39 4/**1**.
+Tally so far: M31 9 mutations / 0 real holes, M32 10/**5**, M33 15/**6**, M35 11/**2**, M39 4/**1**,
+second audit 6/**3** (and the other three were the new guards, run to prove they bite).
 
 When one raises zero, ask which of three it is before writing an assertion:
 

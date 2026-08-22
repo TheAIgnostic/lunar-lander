@@ -5005,3 +5005,151 @@ Plus dead code: unused imports across `actions`, `render`, `screens`, `validate`
 Both fixtures byte-identical. Crossing **641/800 (80%)**, deep-route engagement 751/800, at-once
 distribution unchanged. Suites after: `loadout` 359 → **363**, `save` 86 → **92**, `enemies` 179 →
 **181**, `route` 130 → **131**.
+
+---
+
+## The second audit — five faults, all in the layer between the sim and the player (2026-08-22)
+
+Run against `docs/AUDIT.md` on the same green tree as the first: 2,348 assertions, both fixtures
+`unchanged`, crossing 641/800. **Five faults, and every one was in a blind spot §1 names.** Four of
+them are one shape wearing four costumes: *a value or a name defined in one file and re-typed in
+another, on a path no node test executes.*
+
+| fault | where | class |
+| --- | --- | --- |
+| the crash log read **`g.crashReason`, which nothing in the codebase has ever assigned** — so every lander lost to a gun, a ram, its own charge or the weather was filed as `reason=impact` | `main` | browser-only, silent-drop channel |
+| `crashReason()` had no branch for a hazard at all: a lander taken apart in mid-air by Io's fountains was told *"Touched down off the pad. The surface is not level enough to hold a lander."* | `screens` | browser-only, and the M29 shape |
+| the status callout and alarm were gated on a flat **60** against bites of 45–55, so a quarter of the flights where a hazard was actually taking something got no warning at all | `main` | the promise `forces.js` makes, not kept |
+| the HUD carried the bites as literals and two had drifted: `heat > 60` against `HEAT.bite = 55` (M36 moved it), `radiation > 60` against 55, and `cold` used 55 for its label and 60 for its colour two lines apart | `hud` | no node test draws |
+| `silence()` cleared the `engines` dedupe before asking, so the guard M16 added was unreachable — **240 automation events a second on the title screen**, the same number M16 took out | `audio` | no node test listens |
+
+### The measurements
+
+**The status gap, over 1,000 flights** — all 50 authored missions × 20 seeds, peak per channel:
+
+| channel | bite | HUD literal | warned at | flights past the bite | of those, never reached 60 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| heat | 55 | 60 | 60 | 45 | **9** |
+| cold | 55 | 55 / **60** | 60 | 61 | 3 |
+| corrosion | 45 | 45 | 60 | 35 | **23** |
+| radiation | 55 | **60** | 60 | 100 | 0 |
+| charge | 50 | 50 | 60 | 22 | 5 |
+
+**163 flights crossed a bite; 40 of them never reached 60.** Corrosion is the worst of it — Venus'
+acid bites at 45 and rarely climbs past the low 60s, so on two thirds of the flights where it was
+eating the hull the player was told nothing. Radiation looks clean only because its own sweep pins
+the channel at 100; its *colour* still lagged by five.
+
+**A note on that 86, because it looks like it contradicts AUDIT §6.** §6 records corrosion "peaking
+at 42 against a bite of 45", and both numbers are right — they are different statistics, and it is
+worth saying which is which before anyone reads one as refuting the other. Per Venus mission, 20
+seeds each:
+
+| mission | median peak | p90 | max | over the bite | over 60 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| venus-1 | 54.2 | 60.1 | 69.6 | 11/20 | 2/20 |
+| venus-2 | 35.3 | 49.4 | 49.9 | 4/20 | 0/20 |
+| venus-3 | 18.3 | 37.3 | 72.7 | 1/20 | 1/20 |
+| venus-4 | 43.7 | 85.6 | 86.1 | 7/20 | 5/20 |
+| venus-5 | 47.8 | 72.0 | 85.1 | 12/20 | 4/20 |
+
+§6 is about the **typical** flight and it holds: on three of the five, the median flight never reaches
+the bite at all, which is the "barely bites" complaint and is a balance decision nobody has aimed at.
+This audit is about the **tail**, which is a different question — 35 of 100 Venus flights *do* cross
+it, and those are the ones that were silent. Fixing the warning does not touch the balance; it only
+means the flights where the acid is real now say so.
+
+The first cut of this measurement also split by pad (`padIndex: 0` against the best-multiplier pad)
+and got **byte-identical rows**, which is the §4 shape — a rig measuring the same thing twice and
+reading as a result. The split is dropped rather than reported.
+
+**The audio spam**, measured live in the browser with `AudioParam.prototype.setTargetAtTime`
+counted, driving `__advance` at 60 fps:
+
+```
+title screen, before   240 events/s   (120 gain + 120 filter frequency, all writing values already held)
+title screen, after      4 in the first second, then 0/s
+in flight, engines steady, after   0/s
+```
+
+240 is not an approximation — it is the number M16's own comment on `engines` records, reintroduced
+by `silence()` nulling `_mainOn`/`_rcsOn` before calling it. `laser()` and `setWind()` were asked
+every frame with no guard at all and now have one; the wind's is a deadband, because it is a level
+rather than a switch.
+
+**Can a hazard actually empty a hull?** Placed rather than hoped for (§4): the lander held inside
+io-3's first vent at the altitude the fountain reaches.
+
+```
+io-2   hull 100.0  never       io-3   hull 0.0  killed at 35.5 s   lostToFire=false damageSource=eruption
+io-4   hull 100.0  never       io-5   hull 100.0  never
+```
+
+Acid and radiation carry a floor (`ACID.floor` 0.5, `RADIATION.floor` 0.45) and cannot kill alone;
+eruption has none. So the branch is reachable, and it was unreachable in the code.
+
+### The browser repro, before and after
+
+Five deaths, driven headlessly through `__goMission` / `__advance` / `__settleNow`:
+
+| killed by | crash screen, before | log, before | after (both) |
+| --- | --- | --- | --- |
+| a shot | "The hull failed under fire." ✓ | `reason=impact` | `reason=shot` |
+| a ram | "A drone rammed the hull…" ✓ | `reason=impact` | `reason=ram` |
+| your own charge | "The hull failed under fire." | `reason=impact` | `reason=blast`, and its own sentence |
+| Io's fountain | **"Touched down off the pad…"** | `reason=impact` | `reason=eruption` |
+| Venus' air | **"Touched down off the pad…"** | `reason=impact` | `reason=acid` |
+
+### Mutations — zero before, biting after
+
+The house rule, run both ways.
+
+| mutation | before | after |
+| --- | ---: | ---: |
+| `hud.js` corrosion threshold 45 → 999 | **0** | 1 |
+| `forces.js` `HEAT.bite` 55 → 60 | **0** | 1 |
+| `main.js` status gate 60 → 200 | **0** | 2 |
+| `main.js` crash reason restored to the shipped `\|\| g.crashReason \|\| 'impact'` | — | 2 |
+| `screens.js` hazard-death key `eruption` → `fountain` | — | 2 |
+| `audio.js` `silence()` nulling restored | — | 1 |
+
+The fourth is the useful one: putting the line that shipped *back* now fails.
+
+### What was scanned and found clean
+
+- **Free variables.** There is no linter here and §2 calls a real scope analysis the highest-yield
+  thing available, so one was written: strip comments/strings/regex/templates, over-approximate every
+  declaration in the file, and report identifiers used in a value position that are declared nowhere.
+  Over all of `src/`: **no undeclared identifier anywhere**, the six hits being object-literal keys.
+  The M30e / M31 / M35 class is currently closed.
+- **Dangling property reads.** The `g.crashReason` fault is a *property* read, which no scope
+  analysis catches, so the same idea was run against the receivers that carry state: every `g.X`,
+  `ship.X`, `meta.X` and `run.X` read against what anything actually assigns. `g.crashReason` was the
+  only one. That scan is now `settings-tests.js`, and it fails on the line that shipped.
+- **The touch layer** (AUDIT §3a lead C). Every action in `DEFAULT_KEYS` — all eight — has a touch
+  button and a pad binding. Closed.
+- **`Log.log` call sites** (lead B). All eighteen were read against the objects they serialise; the
+  crash line was the only one reaching for something that does not exist.
+- **`level.__forces` caching** (lead 4). Nothing in `src/` mutates `level.hazards`, `visibility`,
+  `wind`, `gust`, `drag` or `gravity` after construction, and every force builder is a pure function
+  of `(ship, level, t, dt, terrain)` with no mutable closure state. The cache is currently safe; the
+  lead stays open because nothing *enforces* it.
+- **Constants re-typed as literals in the draw files.** Swept every exported numeric constant against
+  every literal in `hud`, `render`, `enemydraw`, `screens`, `main` and `drawkit`. Beyond the status
+  bites the hits are all coincidence — opacities, pixel sizes, camera scales. Not a seam.
+
+### Observed, not changed
+
+`t-ability` (MODULE I) is the one touch button never hidden, and with nothing fitted in slot one it
+is completely dead: `useAbility(0)` finds an unequipped `Abilities`, `trigger` returns false, and the
+refusal blip is gated on `a.equipped`, so there is no sound, no ring and no text. `t-ability2`,
+`t-arrest` and `t-overdrive` are all hidden on exactly this test. It is either the M16 dead-button
+rule with a hole in it or a deliberate exception for the primary control — `index.html`'s comment
+scopes the rule to "the utility and second-module buttons", which reads like the latter. **Tom's
+call, so it was left alone.**
+
+### What did not move
+
+Both fixtures byte-identical. Crossing **641/800 (80%)**, deep-route engagement **751/800 (94%)**,
+at-once distribution identical to the digit. Suites after: `forces` 160 → **170**, `settings`
+222 → **242**. Nothing else moved.

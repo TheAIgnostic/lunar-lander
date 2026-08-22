@@ -87,9 +87,16 @@ export class Audio {
    */
   silence() {
     if (!this.ready) return;
-    this._mainOn = null;
-    this._rcsOn = null;
-    if (this.laserVoice) this.laserVoice.g.gain.setTargetAtTime(0, this.ctx.currentTime, 0.02);
+    // **No `_mainOn = null` here, and that is the whole of a bug M16 already
+    // fixed once.** The frame loop calls this every frame the game is not in
+    // play, so clearing the dedupe state before asking made `engines`' guard
+    // unreachable: it wrote two automation events per voice, every frame,
+    // forever, all of them setting the values the voices already held.
+    // Measured live on the title screen: **240 events a second** - the same
+    // number, to the digit, that M16 took out of `engines` and for the same
+    // reason. `engines(false, false)` on its own does everything the null was
+    // there for, once, and then stops.
+    this.laser(false);
     this.engines(false, false);
     // **The wind is a flight voice too, and it used to leak.** `setWind` is only
     // ever called from the play loop, so leaving a mission simply *stopped
@@ -263,6 +270,11 @@ export class Audio {
     // frame, so without this the oscillator starts on the first frame of the
     // first mission whether or not a laser is even equipped.
     if (!on && !this.laserVoice) return;
+    // And once it exists, the same guard `engines` keeps: the beam is asked
+    // about every frame, so without this every frame after the first shot
+    // re-anchors an envelope that has already arrived.
+    if (this._laserOn === on) return;
+    this._laserOn = on;
     if (!this.laserVoice) {
       const o = this.ctx.createOscillator();
       const g = this.ctx.createGain();
@@ -403,12 +415,20 @@ export class Audio {
     // `setWind(0)` every frame on a windless body, which used to build the
     // resonant noise voice on the first frame just to leave it at gain 0.
     if (!on && !this.windVoice) return;
+    const target = on ? clamp(strength, 0, 1) * 0.22 : 0;
+    // The wind is a continuous level rather than a switch, so the guard is a
+    // deadband rather than an equality: a gust that is still moving keeps
+    // writing, a settled one stops. Without it a windless stretch of a windy
+    // body wrote an event a frame into a 0.4 s envelope - twenty-five times
+    // faster than it can settle, which is the artefact `engines` documents.
+    if (this._windTarget != null && Math.abs(this._windTarget - target) < 0.002) return;
+    this._windTarget = target;
     if (!this.windVoice) {
       this.windVoice = this._thruster(240, 0.25);
       this.windVoice.filt.Q.value = 3;
     }
     const t = this.ctx.currentTime;
-    this.windVoice.g.gain.setTargetAtTime(on ? clamp(strength, 0, 1) * 0.22 : 0, t, 0.4);
+    this.windVoice.g.gain.setTargetAtTime(target, t, 0.4);
   }
 }
 

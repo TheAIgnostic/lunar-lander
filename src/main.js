@@ -10,7 +10,7 @@ import { LANDING } from './landing.js';
 
 import * as Save from './save.js';
 import * as Log from './gamelog.js';
-import { worstVisibility } from './forces.js';
+import { worstVisibility, STATUS_BITE } from './forces.js';
 import { missionReward, addReward, scaleSalvage, settleHaul, nodeWorth, haulOf } from './economy.js';
 
 import { isCheckpoint, isExpeditionComplete, nextPlanet, PLANET_ORDER } from './route.js';
@@ -31,7 +31,7 @@ const ctx = canvas.getContext('2d');
 const overlay = document.getElementById('overlay');
 const touchbar = document.getElementById('touch');
 import { audio, input, particles, ship, meta, setMeta, store, settings, saveSettings, g } from './state.js';
-import { screenHTML, drawHangarPreview } from './screens.js';
+import { crashCause, screenHTML, drawHangarPreview } from './screens.js';
 import { act, wireFlow } from './actions.js';
 
 let W = 0, H = 0, DPR = 1;
@@ -563,9 +563,19 @@ function effects(dt) {
     call('dry', 0, 'TANKS DRY', '#ff3b5c', 'dry');
 
     // Status warnings, once per crossing rather than once per frame.
+    //
+    // **The threshold is the channel's own bite, not a number typed here.** It
+    // was a flat 60 against bites of 45-55, so the callout and the alarm both
+    // arrived *after* the hazard had started taking something - and on Venus,
+    // where acid bites at 45 and rarely climbs past the low 60s, usually never
+    // arrived at all. Measured over 1,000 flights: 163 crossed a bite, 40 of
+    // them stayed under 60. `STATUS_BITE` is the one table both this and the
+    // HUD read, so the promise `forces.js` makes - a warning you can act on
+    // before anything is lost - is kept by construction rather than by two
+    // files happening to hold the same literal.
     const st = ship.statusLevels || {};
     const status = (key, value, text, color) => {
-      if (value < 60) { g.warn[key] = false; return; }
+      if (value < STATUS_BITE[key]) { g.warn[key] = false; return; }
       if (g.warn[key]) return;
       g.warn[key] = true;
       audio.warn(key);
@@ -970,7 +980,12 @@ function onCrash() {
   }
   meta.stats.crashes++;
   Log.log('crash', {
-    mission: g.level && g.level.id, reason: (ship.landingResult && ship.landingResult.blocker) || g.crashReason || 'impact',
+    // `crashCause()` is the screen's own classification, not a second one:
+    // this line used to read `g.crashReason`, which **nothing has ever
+    // assigned**, so every lander lost to a gun, a ram, its own charge or the
+    // weather was logged as `reason=impact` - a field of the playtest log that
+    // was only ever right by accident.
+    mission: g.level && g.level.id, reason: (ship.landingResult && ship.landingResult.blocker) || crashCause(),
     vy: ship.vy, vx: ship.vx, hull: ship.hull, fuel: ship.fuel, shuttles: g.lives,
   });
   recordFlight(null);
@@ -1514,7 +1529,7 @@ window.__input = input;
 window.__padFrame = (dt = 1 / 60) => { padFrame(dt); return g.uiFocus; };
 window.__pad = () => ({
   connected: typeof navigator !== 'undefined' && navigator.getGamepads
-    ? [...navigator.getGamepads()].filter(Boolean).map((g) => `${g.index}: ${g.id}`) : [],
+    ? [...navigator.getGamepads()].filter(Boolean).map((p) => `${p.index}: ${p.id}`) : [],
   using: input.padIndex, name: input.padName,
   amounts: { ...input.pad }, pressing: input.padToken,
   focus: g.uiFocus, nav: { ...input.nav },

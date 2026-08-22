@@ -5,6 +5,7 @@
 import { FONT, flashOf, throb, GREEN, RED, CYAN, MAG, AMBER, VIOLET, panel, label } from './drawkit.js';
 import { clamp, TAU } from './util.js';
 import { normalizeAngle, ENVELOPE } from './ship.js';
+import { STATUS_BITE } from './forces.js';
 import { nodeWorth } from './economy.js';
 import { WORLDS } from './levels.js';
 import { keyLabel } from './input.js';
@@ -586,7 +587,7 @@ function drawHazardStack(ctx, W, H, g, s, py, rad) {
       id: 'rad', label: ship.env.shielded ? 'RADIATION · SHIELDED' : 'RADIATION',
       urgency: clamp(rad / 100, 0, 1) + (ship.env.radiationSweep > 0.4 && !ship.env.shielded ? 0.3 : 0),
       level: clamp(rad / 100, 0, 1),
-      color: ship.env.shielded ? '#7ef2d0' : rad > 60 ? RED : AMBER,
+      color: ship.env.shielded ? '#7ef2d0' : rad > STATUS_BITE.radiation ? RED : AMBER,
     });
   }
   const heat = ship.statusLevels ? ship.statusLevels.heat : 0;
@@ -596,32 +597,44 @@ function drawHazardStack(ctx, W, H, g, s, py, rad) {
   // rather than only how full the gauge is. Until M29 neither was ever raised
   // by anything: `'heat'` and `'cold'` were spelled against builders named
   // `thermal` and `cryo`, so these two lines had never once drawn.
+  //
+  // **Every threshold below is `STATUS_BITE`, never a literal.** All four rows
+  // used to carry the number by hand and two of them were wrong: heat said
+  // `THRUST DOWN` only past 60 while the engine has derated from 55 since M36,
+  // and `cold` used 55 for its label and 60 for its colour two lines apart -
+  // which is what a slip looks like from the outside, not a decision. A gauge
+  // that reads amber while the thing it measures is already costing you thrust
+  // is the instrument lying, and this panel is the only place a player is told.
   if (heat > 2) {
+    const bites = heat > STATUS_BITE.heat;
     entries.push({
-      id: 'heat', label: heat > 60 ? 'ENGINE HEAT · THRUST DOWN' : 'ENGINE HEAT',
-      urgency: heat / 100 + (heat > 60 ? 0.25 : 0), level: heat / 100, color: heat > 60 ? RED : AMBER,
+      id: 'heat', label: bites ? 'ENGINE HEAT · THRUST DOWN' : 'ENGINE HEAT',
+      urgency: heat / 100 + (bites ? 0.25 : 0), level: heat / 100, color: bites ? RED : AMBER,
     });
   }
   if (cold > 2) {
+    const bites = cold > STATUS_BITE.cold;
     entries.push({
-      id: 'cold', label: cold > 55 ? 'COLD SOAK · THRUSTERS SLOW' : 'COLD SOAK',
-      urgency: cold / 100 + (cold > 55 ? 0.25 : 0), level: cold / 100, color: cold > 60 ? RED : CYAN,
+      id: 'cold', label: bites ? 'COLD SOAK · THRUSTERS SLOW' : 'COLD SOAK',
+      urgency: cold / 100 + (bites ? 0.25 : 0), level: cold / 100, color: bites ? RED : CYAN,
     });
   }
   const corrosion = ship.statusLevels ? ship.statusLevels.corrosion : 0;
   const charge = ship.statusLevels ? ship.statusLevels.charge : 0;
   if (corrosion > 2) {
+    const bites = corrosion > STATUS_BITE.corrosion;
     entries.push({
-      id: 'acid', label: corrosion > 45 ? 'CORROSION · HULL' : 'CORROSION',
-      urgency: corrosion / 100 + (corrosion > 45 ? 0.3 : 0), level: corrosion / 100,
-      color: corrosion > 45 ? RED : AMBER,
+      id: 'acid', label: bites ? 'CORROSION · HULL' : 'CORROSION',
+      urgency: corrosion / 100 + (bites ? 0.3 : 0), level: corrosion / 100,
+      color: bites ? RED : AMBER,
     });
   }
   if (charge > 2) {
+    const bites = charge > STATUS_BITE.charge;
     entries.push({
-      id: 'charge', label: charge > 50 ? 'MAGNETIC · PULLING DOWN' : 'MAGNETIC FIELD',
-      urgency: charge / 100 + (charge > 50 ? 0.25 : 0), level: charge / 100,
-      color: charge > 50 ? RED : '#9db4ff',
+      id: 'charge', label: bites ? 'MAGNETIC · PULLING DOWN' : 'MAGNETIC FIELD',
+      urgency: charge / 100 + (bites ? 0.25 : 0), level: charge / 100,
+      color: bites ? RED : '#9db4ff',
     });
   }
   // The two that are places rather than levels. They warn while you are *in*

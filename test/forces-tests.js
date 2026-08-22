@@ -1,6 +1,6 @@
 // Unit tests for the force/status interface:  node test/forces-tests.js
 import { readFileSync } from 'node:fs';
-import { applyForces, forcesFor, freshStatus, freshEnv, RADIATION, STATUS_CHANNELS, CHANNEL_RESIST, NON_FORCE_HAZARDS, HEAT, COLD, ACID, MAGNETIC, hazardName } from '../src/forces.js';
+import { applyForces, forcesFor, freshStatus, freshEnv, RADIATION, STATUS_CHANNELS, STATUS_BITE, CHANNEL_RESIST, NON_FORCE_HAZARDS, HEAT, COLD, ACID, MAGNETIC, hazardName } from '../src/forces.js';
 import { PLANETS, PLANET_IDS, gravityFor, gravityPx } from '../src/planets.js';
 import { CHAPTERS } from '../src/missions.js';
 import { SHIP } from '../src/ship.js';
@@ -527,6 +527,55 @@ check('difficulty cannot reach gravity',
   check('a vent over the safe pad does nothing', at(480) < 1e-9, String(at(480)));
   check('a vent over the prize pad works normally', at(2450) > 0.1, String(at(2450)));
   check('and a vent out on the crossing works normally', at(1500) > 0.1, String(at(1500)));
+}
+
+
+// --- **Where a channel bites, and where its readers say it does.** ------------
+//
+// The rule is written above `RADIATION` in `forces.js`: below `bite` the only
+// consequence is instrument noise, *which gives the player a warning they can
+// act on before anything is lost*. Two readers outside that file had copied the
+// numbers by hand and both had drifted - the HUD carried `heat > 60` against a
+// bite of 55 (M36 moved it and this row was not told), `radiation > 60` against
+// 55, and `cold` used 55 for its label and 60 for its colour two lines apart;
+// `main.js` gated all five callouts on a flat 60.
+//
+// Measured before the fix, 1,000 flights over all 50 authored missions: 163
+// crossed a bite and **40 of them never reached 60**, so a quarter of the
+// flights where a hazard was actually costing hull, thrust or attitude got no
+// callout and no alarm. Corrosion was 23 of 35.
+//
+// Both readers need a browser, so the behavioural half cannot be run here and
+// the honest assertion is structural (AUDIT.md §4 case 3): the table is
+// complete and agrees with its own constants, and **neither reader compares a
+// status level to a bare number**.
+{
+  check('a bite per status channel', STATUS_CHANNELS.every((c) => typeof STATUS_BITE[c] === 'number'),
+    STATUS_CHANNELS.filter((c) => typeof STATUS_BITE[c] !== 'number').join(', '));
+  check('and nothing in the table that is not a channel',
+    Object.keys(STATUS_BITE).every((k) => STATUS_CHANNELS.includes(k)));
+  // Against the constants themselves, so moving one moves the readers with it.
+  check('heat bites at HEAT.bite', STATUS_BITE.heat === HEAT.bite);
+  check('cold bites at COLD.bite', STATUS_BITE.cold === COLD.bite);
+  check('corrosion bites at ACID.bite', STATUS_BITE.corrosion === ACID.bite);
+  check('radiation bites at RADIATION.bite', STATUS_BITE.radiation === RADIATION.bite);
+  check('charge bites at MAGNETIC.bite', STATUS_BITE.charge === MAGNETIC.bite);
+
+  const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  const hud = strip(readFileSync(new URL('../src/hud.js', import.meta.url), 'utf8'));
+  const loop = strip(readFileSync(new URL('../src/main.js', import.meta.url), 'utf8'));
+
+  check('the HUD reads the bite table', /STATUS_BITE\./.test(hud),
+    'a literal beside the gauge is how heat came to say the engine was fine while it derated');
+  check('the loop reads the bite table', /STATUS_BITE\[/.test(loop),
+    'the callout gate was a flat 60 against bites of 45-55');
+  // The specific shape that went wrong: a status level against a number.
+  const literals = [
+    ...hud.matchAll(/\b(heat|cold|corrosion|charge|rad)\s*>\s*(\d+)/g),
+    ...loop.matchAll(/\b(value|heat|cold|corrosion|charge|rad)\s*<\s*(\d+)/g),
+  ].filter((m) => +m[2] > 2);        // `> 2` is "is this channel worth a row at all"
+  check('no status level is compared to a bare number', literals.length === 0,
+    literals.map((m) => m[0]).join(', '));
 }
 
 console.log(`\n  ${pass} passed, ${fail} failed`);
