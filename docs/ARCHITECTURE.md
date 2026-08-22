@@ -27,7 +27,7 @@ Everything under `src/` is a plain ES module, loaded directly in the browser and
 | `src/economy.js` | rewards, the carried haul, what a deposit is worth, the transmitted/cargo split, settlement and banking | M9/M15 |
 | `src/route.js` | the ten-body ladder, the next-body card, the progress trail, checkpoint rule | M9/M27 |
 | `src/components.js` | 5 component tracks, `deriveLoadout` / `deriveFull`, purchase rules, the recommended tier | M10/M11/M28 |
-| `src/skills.js` | 3 skill trees, `deriveSkills`, purchase and gating rules | M11 |
+| `src/skills.js` | 3 skill trees (**21 of 30 nodes; Flight complete**), `deriveSkills`, `skillFeatures`, purchase and gating rules | M11/M34 |
 | `src/modules.js` | **10 active + 9 passive** modules, each active's firing `cue`, the blueprint grant rule | M11/M12/M31-M33 |
 | `src/enemies.js` | enemy roster, placement around the prize, telegraphs, projectiles, damage, rewards | M12/M14 |
 | `src/objectives.js` | the optional objectives: conditions judged at touchdown, and six cargo recoveries | M14/M15 |
@@ -40,7 +40,7 @@ Everything under `src/` is a plain ES module, loaded directly in the browser and
 | `src/debug.js` | F3 telemetry overlay, F4 landing-envelope bars, F5 enemy ranges | M0/M12 |
 | `src/particles.js` | pooled particles, debris, rings, floating text | — |
 | `src/audio.js` | synthesized engines, impacts, chimes | — |
-| `src/input.js` | rebindable key map, touch, and the 0..1 intent the sim reads | —/M13/M30 |
+| `src/input.js` | rebindable key map (**including `arrest`**), touch, and the 0..1 intent the sim reads | —/M13/M30/M34 |
 | `src/levels.js` | the original 12 classic missions, endless generator, world palettes | — |
 | `src/util.js` | math, seeded RNG, `safeStore` | — |
 | `serve.js` | the dev server, `no-store` so an edit always reaches the browser | M13 |
@@ -282,6 +282,25 @@ milestones running, the first version of a measurement proved less than it looke
 M31 picked one route and read four things as inert, M32 parked a lander 60 px from a drone whose
 standoff ring is 195, and M33 measured blast falloff against terrain whose height changed more over
 120 px than the offset being tested. Place what the rule is about; do not go looking for it.
+
+**A limitation that depends on the input magnitude must be checked against the keyboard's two
+values.** RCS Finesse shapes the fractional half of an analog stick, and it is written as a power
+because `Math.pow(1, x)` is 1 and `Math.pow(0, x)` is 0 — so "stick only" is **arithmetic** rather
+than a claim, asserted bit-identical for a held key. The Optical Cloak's drain is the same decision
+from the other side: a threshold there would have made the module pad-only, so it charges in
+proportion to the throttle instead. Anything that reads how *hard* a control is held has this
+question to answer.
+
+**A control that silently refuses is the dry press again.** Emergency Arrest fires only low, upright
+and descending, so most presses would do nothing — and the answer M30a found for the Pulse Laser was
+to make the state readable, not to loosen the rule. The HUD cue asks `ship.canArrest`, the same
+question `ship.step` asks, rather than repeating the three conditions beside it.
+
+**`field.summary()` reports hull left standing, not only kills.** A weapon that wounds without
+killing changes nothing a kill count can see: the Twin-Link arc ran for 1,662 substeps across 50
+flights and the loadout gate read it as inert. Damage is the world's response to a flight and a kill
+is one threshold on it. Same shape as M31's rounded trace, one level up — there the measurement was
+at the wrong precision, here it was of the wrong quantity.
 
 **A thing sold must also be obtainable, and nobody had asked.** Five of the nine modules had no grant
 path at all — Ray Shield, Magnetic Anchor, Thermal Purge, Ice Cleats and Hardened Radar were

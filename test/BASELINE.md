@@ -3734,7 +3734,7 @@ Counted against the spec's own "Full 1.0 target" (section 18), not against inten
 | 10 bodies | **10** | — |
 | 50 missions | **50** | — |
 | seven component tracks at four levels | 5 tracks (all reach L4) | **2 tracks** |
-| all 30 skill nodes | 12 (3 trees × 4) | **18 nodes** |
+| all 30 skill nodes | 12 (3 trees × 4) | **18 nodes** |   ← 21 / **9** after M34
 | ten active modules | 5 | **5** |   ← 8 / 2 after M32, **10 / 0 after M33**
 | ten passive modules | 4 | **6** |   ← 9 / **1** after M31
 | full eight-enemy roster | 2 of the roster, + 1 original | **6 designs** |
@@ -3907,7 +3907,7 @@ Enemies excluded per Tom's call. Against the spec's own section 18:
 Utility Hardpoint (unlock the active slot, reduce cooldown, ordnance support).
 
 **Skill nodes — 18 of 30 missing, six per tree.** Every built node works; these are unwritten, not
-broken.
+broken.  *(**9 of 30 after M34**, and Flight & Survival is complete at 10.)*
 
 | tree | missing |
 | --- | --- |
@@ -4455,3 +4455,143 @@ Pulse Laser precisely so they can only fill an empty slot, never displace a deci
 
 **19 modules now**, 13 of them after one full ladder. The blueprint drip is the thing to watch: see
 the note at the end of the M32 section.
+
+## M34 — nine skill nodes, and the first finished tree (2026-08-22)
+
+Nine of the eighteen missing nodes, all needing no system this build does not already have.
+**Flight & Survival is complete at 10 of 10** — the first of the three trees finished. Technician
+goes to 5, Combat to 6; **21 of the spec's 30**.
+
+| tree | added |
+| --- | --- |
+| Flight & Survival | RCS Finesse · Surface Adaptation · Emergency Arrest · Navigation Forecast · Steady Hands · Fourth Shuttle |
+| Technician | Phoenix Protocol |
+| Combat | Counter-Battery Logic · Twin-Link Control |
+
+Four are proved by the flown gate — Surface Adaptation EUROPA 5/5, Emergency Arrest VENUS 5/5,
+Twin-Link LUNA 3/5, and the existing rigs unchanged. The other five change what a player is *shown*
+or what a **run** is rather than how a mission flies, and are declared with a reason apiece.
+
+### RCS Finesse is keyboard-neutral by arithmetic, not by convention
+
+"Smaller minimum side-thruster pulses" means nothing to a key, which answers exactly 1.0 or exactly
+0.0. The node raises a fractional attitude command to a power, which shrinks it — and
+`Math.pow(1, x)` is **1** and `Math.pow(0, x)` is **0** for any positive x, so the two values a
+keyboard can produce come back untouched.
+
+That turns "stick only" from a note in a blurb into a test: the spin after a held key is asserted
+**bit-identical** with the node and without, in both burners, and it is why the node is excused from
+the flown gate — a boolean pilot cannot see it, and that is a fact about the pilot rather than an
+excuse about the node.
+
+*(The first version of that check pushed only the right burner, so dropping the shaping from the
+**left** line raised nothing at all — half a node, silently uncovered.)*
+
+### Emergency Arrest: four refusals and one use
+
+The spec asks for *"close to upright and just above a safe surface … a short high-thrust braking
+pulse at a large fuel cost"*. Every number in it is a refusal:
+
+| | |
+| --- | ---: |
+| fires below | 200 px |
+| and inside | ±24° of upright |
+| and only while descending faster than | 6 px/s |
+| takes off the sink rate | 92 px/s |
+| costs, of a full tank | **25%** |
+
+**Each refusal was a mutation that raised zero failures until it was written down.** So was "once a
+mission", and so was the fuel cost.
+
+It is a rebindable action like any other (`f`, `pad:3`) — `ACTIONS` is derived from `DEFAULT_KEYS`,
+so the settings screen, the rebind rules, the save format and the pad all learned about it without
+being told, which is what the M30 binding work was for.
+
+The HUD says whether it would fire *right now*, reading `ship.canArrest` — the same question
+`ship.step` asks, not a copy of the three conditions. A control that silently refuses three presses
+in four is the Pulse Laser's dry press again (M30a), and the answer to that was to make the state
+readable rather than to loosen the rule.
+
+Verified in the game on venus-2: fuel 100% → 75%, V-SPD 45 → −46.4, the cue reading **ARREST FIRED**.
+
+**And the "one press, one pulse" rule needed a lander that could physically fire twice.** With the
+single charge the node grants, "fires on the edge" and "fires while held" are indistinguishable — the
+charge runs out either way — and at a gentle 40 px/s the pulse takes the lander out of its own window
+before a second substep. Measured at 200 px/s with two charges, where the difference is one charge
+against none.
+
+### Twin-Link's reach was wrong, and the gate caught it before it shipped
+
+The first cut was 260 px — half the beam's own reach, which *sounded* like "nearby". It changed
+nothing in any flown mission on any body. Measured over **664 machines** across every mission of
+every chapter:
+
+| distance to the nearest *other* machine | |
+| --- | ---: |
+| minimum | 231 px |
+| p10 · p25 | 255 · 299 |
+| **median** | **455** |
+| p75 · max | 821 · 2527 |
+
+| arc reach | reaches a second machine for |
+| ---: | ---: |
+| **260** (first cut) | **12%** of machines |
+| 300 | 25% |
+| 360 | 36% |
+| 420 | 45% |
+| **460** (shipped) | ~50% |
+| 560 | 59% |
+
+460 is the median: it chains about half the time, which is the spec's *"can chain to a nearby
+machine"* rather than "always hits two", and it stays inside the beam's own 520 px reach so the arc
+can never find something the laser could simply have targeted instead. Both bounds are asserted
+against the constants they answer — `COMBAT.minSpacing` below, `ABILITY.laserRange` above — which is
+the M30a rule: **a number nobody asserted is a number that drifts.**
+
+This is the first time that rule has caught something *before* it shipped rather than four
+milestones later.
+
+### The gate could not see the arc, and the reason was the trace again
+
+Even at 460 the flown gate read Twin-Link as inert. Instrumented, the arc was live for **1,662
+substeps across 50 flights** — it was working, and the trace could not see it, because it compared
+`kills` and a wounded machine is not a kill.
+
+`field.summary()` reports `hpLeft` now: hull left standing on the field, of which a kill is one
+threshold. Twin-Link reads LUNA 3/5 with it. Same shape as M31's rounded trace, one level up — the
+measurement was of the wrong quantity rather than at the wrong precision.
+
+### Two repairs the milestone forced
+
+**`skillFeatures(meta)` is one place deciding what a career unlocks.** It was already copied between
+the screen that draws the nodes and the action that buys one, and M34 gave the copies a second field
+to disagree about (`cleared`, for the Fourth Shuttle's five-body gate). `cleared` counts **distinct
+bodies ever finished**, not this run's — skills are wiped on death and the *right* to buy one should
+not be, or the capstone would be unreachable by anybody who had ever lost a run.
+
+**`settings-tests.js` moved the booster onto a hard-coded `f`**, which M34 gave to Emergency Arrest.
+`rebind` correctly refused — it would have left an action with no keyboard control — and the test
+died on a null. It derives a free key from `DEFAULT_KEYS` now. The rule under test was right and the
+constant was stale, which is what a hard-coded key does every time the default map grows.
+
+### One edit that hit the wrong call site
+
+`drawTelegraph(ctx, e, type, time, opts)` appears in **two** functions, and the Counter-Battery mark
+went into the first one — `drawLethalWarnings`, which only draws machines already in `telegraph`.
+The witness read unchanged and said so.
+
+That is precisely what `test/mutate.sh` refuses to do (*"target appears twice — make it unique, or
+you are not mutating what you think you are"*), and I did not apply the same care editing by hand.
+
+### What did not move
+
+**Both fixtures byte-identical.** Full suite green, every encounter-audit figure identical: campaign
+crossing **642/800 (80%)**, at-once 0: 63.1% · 1: 25.9% · 2: 9.5% · 3: 1.4% · 4: 0.1%, deep-route
+engagement 751/800.
+
+`loadout-tests.js` 324 → **396**, `enemies-tests.js` 140 → **149**, `skills-tests.js` 76 → **111**,
+`settings-tests.js` 188 → **193**, `route-tests.js` 126 → **128**.
+
+The Fourth Shuttle is the one node here that touches the attrition curve the whole run model rests on
+(M27, decision 4). It is gated behind five bodies cleared, as the spec asks, and **its effect on run
+length is not measured yet** — that is M36's job, with everything in.

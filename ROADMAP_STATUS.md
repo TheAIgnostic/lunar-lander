@@ -1229,18 +1229,29 @@ declared in `reset()`.
 **All ten active modules exist.** The 1.0 module count is complete: ten actives, nine passives, and
 the tenth passive — the Thermal Sink — is blocked on the heat number rather than on work.
 
-### M34 — the nine skills that need nothing new *(next)*
+### M34 — the nine skills that need nothing new (done, this commit)
 
-Phoenix Protocol · Fourth Shuttle · Emergency Arrest · RCS Finesse · Surface Adaptation · Steady
-Hands · Counter-Battery Logic · Twin-Link Control · Navigation Forecast *(the reveal half only)*.
+Shipped as planned. **Flight & Survival is complete at 10 of 10** — the first finished tree — with
+Technician at 5 and Combat at 6, so **21 of the spec's 30**. Figures in the M34 section of
+`test/BASELINE.md`.
 
-Two are worth knowing about before writing them:
+- **RCS Finesse** is keyboard-neutral *by arithmetic*: it raises a fractional command to a power, and
+  `Math.pow(1, x)` is 1, so a held key is bit-identical with the node and without. "Stick only" is a
+  test now, not a note in a blurb.
+- **Emergency Arrest** is four refusals and one use — low, upright, descending, and a quarter of the
+  tank. Each refusal was a mutation that raised nothing until it was written down. A rebindable
+  action like any other, which is what the M30 binding work was for.
+- **Twin-Link's reach was wrong and the gate caught it before it shipped**: 260 px reaches a second
+  machine for 12% of them against a measured median gap of 455. It is 460, asserted against
+  `COMBAT.minSpacing` below and `ABILITY.laserRange` above — the M30a rule, catching something in
+  advance for the first time.
 
-- **RCS Finesse** was a dead node before M30 and is real now. "Smaller minimum side-thruster pulses"
-  means nothing to a key that answers 1 or 0 — it means something to an analog stick. It is a
-  **pad-only** improvement and should say so.
-- **Fourth Shuttle** touches the attrition curve the whole run model rests on (decision 4). Gate it
-  behind five bodies cleared, as the spec says, and measure a run length before and after.
+The gate needed one repair to see the arc at all: it compared kills and not damage, so a beam that
+wounded a second machine for 1,662 substeps across 50 flights was invisible. `field.summary()`
+reports `hpLeft` now.
+
+**The Fourth Shuttle's effect on run length is deliberately not measured yet** — it touches the
+attrition curve (decision 4), and M36 is where that is looked at with everything in.
 
 ### M35 — the four that waited, and the six that need Tom
 
