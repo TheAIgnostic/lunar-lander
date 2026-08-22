@@ -1391,47 +1391,72 @@ that needs none of the conversation that produced this plan.
 
 ### Handover
 
-*Rewritten 2026-08-21, after the session that ran **M29 through M29h** — the seven survey bodies
-authored, the hollow hazards implemented, `generateChapter` deleted, classic steering split, the
-turret redrawn, the Mast Sniper built, and a soundbed for the title screen.*
+*Rewritten 2026-08-22, after the session that ran **M31 through M34** — the loadout gate rebuilt,
+eleven modules and nine skill nodes built, and the test procedures written down.*
 
 **The first prompt for a new session:**
 
-> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then `docs/PROGRESSION.md`, then the **M30**
-> sections of `test/BASELINE.md` (M30 through M30g — that is one session's work and it is the state
-> you are inheriting). Run `./test/run-all.sh 20` before writing anything; it takes a few minutes and
-> it is how every milestone here that went well started.
+> Read `ROADMAP_STATUS.md` and `docs/ARCHITECTURE.md`, then `test/README.md`, then the **M31 to M34**
+> sections of `test/BASELINE.md` — that is one session's work and it is the state you are inheriting.
+> Run `./test/run-all.sh 20` before writing anything; it takes a few minutes and it is how every
+> milestone here that went well started.
 >
-> Then build **M31**, the first of the M31-M36 plan under "Next task": finishing the active modules,
-> the passive modules and the skill trees so that all thirty-plus of them do something. **Enemies are
-> deferred to v1 — Tom's call — so do not touch the roster.**
+> Then build **M35**, under "Next task". **Four of its nodes land cleanly** now that the Kinetic Bomb
+> Rack and the Repair Nanites exist — Autonomous Repair, Shaped Charges, Ordnance Fabricator,
+> Hardpoint Calibration. **The other six cannot be built as written and need an answer from Tom
+> each**; they are listed under "Open with Tom" with what each one names that this build does not
+> have. Do not invent the system underneath one to make it fit. If the answers are not in the
+> conversation, build the four, say plainly which six you left and why, and stop there.
 >
-> **Build the gate before the content.** M31 starts by raising `loadout-tests.js` from "a declared
-> effect key is read by some file" to "fitting this changes a measured outcome in a flown mission".
-> The weaker check is how `hazardLead` passed for three milestones, and the plan adds eleven modules
-> and eighteen nodes on top of it. `flyMission` already takes `{ loadout }` and `{ ability }`.
+> **Enemies are deferred to v1 — Tom's call — so do not touch the roster.**
 >
-> **Do not plan from the spec alone — six of the eighteen missing skills cannot be built as written**,
-> and the table under "Next task" says which and why. Two of them contradict decisions Tom has
-> already made. They are listed under "Open with Tom" and need an answer each before M35.
+> **The gate is the thing to understand before you add anything.** `loadout-tests.js` will refuse a
+> new effect key with no witness, a module that changes no flown mission on a body its own `good`
+> claims, and a node with nowhere declared to measure it. `test/README.md` §3 is the recipe. It is
+> not an obstacle — it caught three things sold and not delivered in M31 and a wrong constant in M34
+> before it shipped.
 >
-> Three standing rules for this repo. **Measure before you decide** — every milestone that went badly
-> started from an assumption. **Do not retune balance without a specific complaint to aim at**; M31-M35
-> add content and M36 is the only place a number moves. And **a passing test is not a test that
-> bites**: break the code on purpose and check the test notices. Every real fault in the M30 session
-> was found that way or by looking at the screen, and none by reading.
+> Four standing rules, and every one of them was paid for.
 >
-> One thing about the instrument: `./test/run-all.sh` **cannot see a rendering fault**, because no
-> node test draws. A screenshot found six expedition cards printing `[object Object]`, and the only
-> self-inflicted bug of the session was a draw call reaching for a variable it never had. Look at the
-> game, not only at the numbers about the game.
+> **Measure before you decide.** Every milestone that went badly started from an assumption. M31
+> dropped a passive because heat cannot bite; M33 dropped a `good` entry because the pilot never
+> connected there; M34 set an arc's reach from a distribution over 664 machines rather than from
+> feel.
+>
+> **A passing test is not a test that bites.** `./test/mutate.sh <file> <from> <to>` breaks the code
+> on purpose and reports which suites noticed. **Zero failures is the finding, not the result** — it
+> raised zero on 5 of 10 mutations in M32, 6 of 15 in M33 and 5 in M34, and every one was a real
+> hole. Run it on anything you write.
+>
+> **A rig built from whatever the world generated is measuring the world, not the rule.** Three
+> milestones running, the first version of a measurement proved less than it looked like it proved.
+> Place what your claim is about; do not go looking for it.
+>
+> **Do not retune balance without a specific complaint to aim at.** M31–M35 add content and **M36 is
+> the only place a number moves.** Two things are already queued for it and neither should be touched
+> before then: the heat channel (it cannot bite on either body that declares it) and the Fourth
+> Shuttle's effect on run length.
+>
+> And one thing about the instrument: `./test/run-all.sh` **cannot see a rendering fault**, because
+> no node test draws. Two of the last four milestones introduced a bug every suite passed and the
+> first `__draw()` in a browser threw. Look at the game, not only at the numbers about the game.
 
-**What is different about the state you are inheriting.** For most of this project's history the
-standing problem was that nobody had played the thing. That is no longer true — **Tom playtests
-continuously**, and on 2026-08-21 he gave the first direct answer to the question that had been
-blocking four items since M24: *balance seems good*. Read that as unparking pad width, machine
-damage, the landing bands and the fuel budgets — **not** as an instruction to start moving them.
-Nothing gets retuned without a specific complaint to aim at.
+**What is different about the state you are inheriting.**
+
+The 1.0 module count is **finished**: ten actives and nine passives, every one of them proved to
+change a flown mission on a body it claims, and every one obtainable without god mode — which five
+of the original nine were not, and nobody had asked. The skill trees are **21 of 30** with Flight &
+Survival complete at ten.
+
+What is left is nine skill nodes, of which **six are blocked on a decision rather than on work**, and
+the balance pass. That makes M35 the first milestone in this stretch that cannot simply be built.
+
+Three things are true of the codebase that were not before, and they change how you should work in
+it. `loadout-tests.js` is a **gate** rather than a suite — it will stop you shipping something
+hollow, and it is worth reading before you plan. `test/mutate.sh` and `test/README.md` exist, so the
+practice that has found every real fault is a command rather than a habit. And the standing question
+"does this actually reach the player" now has three separate answers that are all checked: is the
+effect read, does fitting it change a flight, and can the player ever get hold of it.
 
 ### Reading order
 
@@ -1441,14 +1466,38 @@ Nothing gets retuned without a specific complaint to aim at.
 3. **`docs/PROGRESSION.md`** — the hangar, the skills and the loadout as one system. Read it before
    touching economy, difficulty or the route. **Three of its figures were wrong when M28 re-measured
    them**; they are corrected in place and the header says so. Re-measure it anyway
-4. **`test/BASELINE.md`** — **M30** for the input contract and the gamepad, **M29** for the ten
-   authored bodies and the hazard audit, **M29a** for what a human actually found, **M28** for the
-   economy, **M27** for the ladder, **M19/M20** for where the wall is on terrain
+4. **`test/README.md`** — how to work on the tests: what the loadout gate asks of anything new, how
+   to check a test actually bites, and the three ways a rig has lied here. Short, and the first thing
+   to read before changing a test or adding something the game sells
+5. **`test/BASELINE.md`** — **M31–M34** for the gate and the modules and skills built against it,
+   **M30** for the input contract and the gamepad, **M29** for the ten authored bodies and the hazard
+   audit, **M29a** for what a human actually found, **M28** for the economy, **M27** for the ladder,
+   **M19/M20** for where the wall is on terrain
 
 Then **measure before editing**: `./test/run-all.sh 20`. It ends with the encounter audit, so one
 command tells you both that the game still works and what a player currently meets in it.
 
-### What this session did
+### What this session did (2026-08-22, M31–M34)
+
+- **M31 — the gate, then five specialists.** `loadout-tests.js` went from "a declared key is
+  mentioned by some file" to a witness table plus a flown differential. It found **three things sold
+  and not delivered**: `beacon` (a passive, an active *and* a component track, read by nothing),
+  `fuelCapacity` never reaching `flyMission`, and **five of nine modules with no grant path at all**.
+  Then five of the six missing passives. The sixth, the Thermal Sink, is **not built**: heat cannot
+  bite on either body that declares it, and the arithmetic is in the M31 section.
+- **M32 — the aero-brake, the nanites and the cloak.** Three actives needing no new system. Five
+  mutations raised zero on the first pass and each was a real hole, including two teardown leaks.
+- **M33 — the bomb rack and the flare.** The M12 telegraph discipline turned on the *player's* own
+  ordnance: inert while unarmed, the blast circle drawn while the fuse burns, and the falloff does
+  not care whose lander it is. **All ten active modules now exist.**
+- **M34 — nine skill nodes**, and **Flight & Survival is complete at 10 of 10**. Twin-Link's reach
+  was wrong and the gate caught it *before* it shipped — the first time that rule has run ahead of a
+  fault rather than behind one.
+- **The test procedures written down**: `test/mutate.sh` and `test/README.md`. Every real fault in
+  M30–M34 was found by breaking the code on purpose, by looking at the screen, or by a human. None
+  was found by reading, and until now the first two were habits rather than tools.
+
+### The session before (2026-08-21, M30–M30g)
 
 - **M30 — analog controller support**, in two commits: the input contract widened from a boolean to a
   0..1 magnitude (provable, committed on its own, 29.5M raw doubles compared with zero differences),
@@ -1596,9 +1645,10 @@ the record, since every one of them is now a number somebody may want to move ag
   it accumulate) or `heatBite`. **Not touched in M31 — M31-M35 add content and M36 is the only place
   a number moves.** Read alongside it: corrosion on Venus peaks at 42 against a bite of 45, and cold
   crosses on one Pluto mission in five. Only Europa's radiation bites reliably.
-- **Six skill nodes need re-specifying before they can be built** (M35). Each names a system this
-  build does not have, and the cheap answer is usually to re-point the node at something that exists
-  rather than to build the system underneath it:
+- **Five skill nodes need re-specifying before they can be built, and they are what M35 is blocked
+  on.** Each names a system this build does not have, and the cheap answer is usually to re-point the
+  node at something that exists rather than to build the system underneath it. *(This was six; the
+  buildable half of Navigation Forecast shipped in M34 — see item 5.)*
   1. **Thermal Reclaimer** and **Combat Overdrive** want module *energy*; actives have *charges* and a
      *cooldown*. Re-point them at cooldown (a purge shortens it / an overdrive removes it briefly), or
      build an energy pool — which is also what the missing **Power Core** component track wants, so
@@ -1609,10 +1659,18 @@ the record, since every one of them is now a number somebody may want to move ag
      free. Most likely a drop, or re-point at material costs in the hangar.
   4. **Rapid Refit** makes a loadout change free. It already is. Re-point at the *window* — letting
      one change happen mid-expedition would be a real ability, and it reverses M29d deliberately.
-  5. **Navigation Forecast** is half buildable: revealing the card's hidden hazard works today
-     (`hiddenHazard` and `incomplete` already exist). **The other half — a route reroll — contradicts
-     the fixed ladder**, which is decision 1 and 3 and the thing the attrition curve rests on. Build
-     the reveal, drop the reroll, unless the ladder decision itself is reopening.
+  5. ~~**Navigation Forecast**~~ — **half of it shipped in M34**: the card gives up the hazard it was
+     holding back, and the rng roll is unchanged either way so the skill prints the forecast rather
+     than altering the weather. **The reroll half is dropped**, because it contradicts the fixed
+     ladder (decisions 1 and 3, the thing the attrition curve rests on). Reopen only if the ladder
+     decision itself is reopening — nothing else needs an answer here.
+- **Nineteen modules against one blueprint per body cleared.** M31 gave every cleared body a
+  blueprint, chosen for the body about to be flown, which fixed five modules being unobtainable. With
+  M32 and M33 the collection is now 19, and a typical run reaches body 3-4 — so it is three or four
+  blueprints a run and roughly **five runs to hold everything**. Blueprints are the only thing that
+  compounds across deaths, so a slow drip is the design; it is now slow enough to be a decision
+  somebody should take deliberately rather than a number that drifted there. Measured in the M32
+  section. The levers are one grant per body (as now), two, or a grant on a first *clean* clear.
 - **Which steering mode is right for you, and for Ian.** M29c split it: CLASSIC settles the rotation
   when you let go, PRO CLASSIC (IAN) is the law you have both been flying. The numbers say the tuned
   mode should feel like pointing the nose rather than fighting momentum, but a control scheme is the
