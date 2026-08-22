@@ -679,6 +679,11 @@ node test/flight-fixture.js          # mission outcomes flown by the autopilot
 ./macos/build.sh                     # bundles, then self-tests the app
 ```
 
+**`test/README.md` is the procedure**: how to check a test actually bites, the three ways a rig has
+lied here, what a new sellable thing has to satisfy to get past the gate, and why `run-all.sh` cannot
+see a rendering fault. `./test/mutate.sh <file> <from> <to>` breaks the code on purpose and reports
+which suites noticed.
+
 `test/pilot.js` is the control law as a pure module, shared by the node validator and the browser
 harness so both fly identically. `test/autopilot.js` is the browser wrapper — it *adapts* the shared
 law rather than reimplementing it, which it used to, having quietly drifted three milestones behind.
@@ -786,7 +791,10 @@ reports a timeout with a full tank — which reads exactly like a broken autopil
 1. `ROADMAP_STATUS.md` — what is done, what is next, and the decisions behind both.
 2. This file — what each module owns and the rules that hold the design together.
 3. `docs/PROGRESSION.md` — the hangar/skills/loadout as one system, and the measured blocker in it.
-4. `test/BASELINE.md` — the measurements, milestone by milestone, ending with the encounter audit.
+4. `test/README.md` — how to work on the tests: mutation testing, the rigs that lied, and what the
+   loadout gate asks of anything new the game sells. Short, and the first thing to read before
+   changing a test.
+5. `test/BASELINE.md` — the measurements, milestone by milestone, ending with the encounter audit.
    The M19 and M20 sections are the two that record *where the wall is* for terrain; M27 is the
    ladder as it stands.
 
