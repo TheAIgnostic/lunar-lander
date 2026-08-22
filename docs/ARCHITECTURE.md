@@ -193,6 +193,14 @@ could measure whether one was any good. **The firing policy is the player's cue*
 HUD's own threat count says something is aiming at you. Deliberately not "fire when a target is in
 range", which measures the ceiling rather than the experience.
 
+**Every effect the game sells must be read by something, and the guard for it may not read
+comments.** `loadout-tests.js` checks all 33 keys declared by skills, modules and components against
+the files that consume them; 32 reach the simulation and **`hazardLead` (Sensors L3/L4) does not**.
+It sat on `KNOWN_GAPS` printing a `GAP` line every run until two *comments* named it, at which point
+the regex decided it was delivered and the guard went silent — the fault it exists to catch,
+occurring inside it. Comments are stripped before the search now. **Anything that greps source for a
+symbol has this hole**; prose about a thing is not an implementation of it.
+
 **Tech Cores buy the top two hangar rungs.** A core drops on a PERFECT landing on a small pad and
 nowhere else, so salvage measures how much you flew, materials measure where you went, and a core
 measures how well you put the lander down. Cores wipe on death, so M28's affordability rule applies

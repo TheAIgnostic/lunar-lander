@@ -1155,6 +1155,13 @@ its own), then the gamepad behind it (stages 2-5). Full measurement in `test/BAS
   fires, `range` is not the lever it looks like, and reach costs twice what vantage does.
 - **Moving landing platforms** (Europa 5, Io 5) — `padAt` and the landing check become time-aware.
 - **The landing bands and the fuel budgets** still await human data, and are still parked.
+- **`hazardLead` is sold and not delivered** — Sensors **L3** costs 1,650 salvage, **3 tech cores**
+  and 40 Silica nanograins, describes itself as *"Hazard trajectory prediction"*, and nothing reads
+  the key. Its `predict`/`beacon` bumps do work, so the rung is not inert, but the feature it is
+  named for does not exist. It is **the only one of the game's 33 effect keys with no reader**.
+  Either draw where a hazard is going — the vents, plumes, sinking air and radiation sweeps all move
+  on a cycle already, so the data is there — or re-describe the rung around what it does deliver.
+  Do not quietly delete it: it is the only step between Sensors L2 and L4.
 
 ### Tom's decisions (2026-08-20) — constraints, not options
 
@@ -1397,6 +1404,11 @@ command tells you both that the game still works and what a player currently mee
   and flight assist *looked them up* under the builder spellings (**8 of 50 missions got a tip**).
   When you find a name-indexes-a-table fault, grep for every other reader of those names before
   calling it fixed.
+- **A guard can be silenced by documenting the thing it guards against.** `loadout-tests.js` prints a
+  `GAP` line for every effect key sold to the player and read by nothing — and it stopped printing
+  one for `hazardLead`, because it matched raw source and **two comments mention the key by name**.
+  Writing down the fault convinced the check the fault was fixed. It strips comments before asking
+  who reads a key now. Any check that greps source for a symbol has this hole.
 - **A test that passes is not a test that bites.** M30 wrote a suite specifically to catch a class of
   fault, then broke the code six ways on purpose — and **two mutations survived**. One was a real gap
   the tests should have caught and only differs for a player who has customised twice, so it looks

@@ -182,9 +182,22 @@ section('2. every declared effect has a reader outside its own file');
   // The M11 guard, automated. A key that only its definition file mentions is
   // a number on a screen, whatever the blurb says about it.
   const DEFINING = new Set(['skills.js', 'modules.js', 'components.js']);
+  // **Comments are not readers, and this check counted them.** `hazardLead` is
+  // sold by Sensors L3 and read by nothing; it sat on KNOWN_GAPS and was
+  // reported every run - until a *comment* elsewhere mentioned it by name, at
+  // which point the guard decided it was delivered and went quiet. Two comments
+  // mention it today and neither is code.
+  //
+  // That is the fault this very check exists to catch, occurring inside the
+  // check: a thing that looks like it is working and is not. Strip comments
+  // before asking who reads a key.
+  const stripComments = (t) => t
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n').filter((l) => !/^\s*(\/\/|\*)/.test(l)).join('\n')
+    .replace(/\/\/.*$/gm, '');
   const src = readdirSync(new URL('../src/', import.meta.url))
     .filter((f) => f.endsWith('.js'))
-    .map((f) => ({ f, text: readFileSync(new URL(`../src/${f}`, import.meta.url), 'utf8') }));
+    .map((f) => ({ f, text: stripComments(readFileSync(new URL(`../src/${f}`, import.meta.url), 'utf8')) }));
 
   const declared = new Map();
   const note = (key, where) => { if (!declared.has(key)) declared.set(key, where); };

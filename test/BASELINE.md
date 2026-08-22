@@ -3795,3 +3795,64 @@ The drawing layer is the least explained part of the tree — `hud.js` 14% comme
 came out of the rules layer, which is the annotated half; the drawing half has been quiet, but M30e's
 one self-inflicted bug (`drawTiltGauge` reaching for a `ship` it never had) came from exactly there,
 and **no node test renders**.
+
+---
+
+## M30f — the skills all work; one component rung does not (2026-08-22)
+
+Tom, on the 1.0 count: *"so some skills are not yet implemented?"* Two different things could have
+been true and only one of them is, so it was worth measuring rather than answering.
+
+### Every skill node works
+
+All **12** authored nodes are live. Measured three ways:
+
+- Each of the **14 effect keys** the trees produce is read by code outside the file that declares it.
+- Each node, at **every rank**, moves exactly the values it declares and nothing else
+  (`loadout-tests.js`, already in place).
+- Every node is named in at least one test.
+
+The 30-node figure is the spec's *target*: **18 nodes are not authored**. They are absent, not
+broken, which is a different and much cheaper problem.
+
+### But one thing is sold and not delivered, and the guard had stopped saying so
+
+Of **33 effect keys** the game sells across skills, modules and components, **32 reach the
+simulation. One does not:**
+
+| | |
+| --- | --- |
+| key | `hazardLead` |
+| sold by | **Sensors L3** (1.4) and **L4** (1.8) |
+| L3 costs | **1,650 salvage + 3 tech cores + 40 Silica nanograins** |
+| L3's blurb | *"Hazard trajectory prediction"* |
+| read by | **nothing** |
+
+L3's other effects — `predict` 1.4→1.9 and `beacon` 1.3→1.6 — do work, so the rung is not entirely
+inert. But the feature it is *named for* does not exist, and tech cores only drop on a PERFECT
+landing on a small pad, which makes this the most expensive hollow thing in the game.
+
+### The guard that exists to catch this had gone quiet, in the way it exists to catch
+
+`loadout-tests.js` has carried an M11 regression guard since M11: every declared effect key must be
+read by some file outside the three that define them, with a `KNOWN_GAPS` list for anything
+deliberately outstanding. `hazardLead` is on that list and used to print a `GAP` line every run.
+
+It stopped, because **the check counted comments as readers**. Two comments name `hazardLead` — one
+in `ship.js` explaining the fault it is the namesake of, and one I added earlier today in
+`envelopeFor`'s doc — and a regex over raw source cannot tell prose from code. The moment the fault
+was *documented*, the guard reported it as fixed.
+
+That is precisely the fault the check exists to detect, occurring inside the check. It strips
+comments before asking who reads a key now, and prints the gap again.
+
+Mutation-tested: a comment naming a hollow key no longer silences it, and a newly-invented effect
+with no reader still hard-fails.
+
+### Left for Tom
+
+**`hazardLead` is a design decision, not a repair.** Making Sensors L3 deliver what it advertises
+means drawing where a hazard is *going* — the vents, the plumes, the sinking-air columns and the
+radiation sweeps all move on a cycle already, so the data exists. The alternative is to re-describe
+the rung around what it does deliver, which is cheaper and honest. It should not be quietly deleted:
+it is the only rung on the Sensors track between L2 and L4.
