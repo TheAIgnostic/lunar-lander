@@ -74,18 +74,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     }
 
     /// Module scripts finish after the load event, so poll rather than assume.
+    ///
+    /// **The probe plays a mission, it does not only boot one.** Booting proves
+    /// the modules loaded; it does not run the game loop, and three bugs have
+    /// now shipped that every node suite passed and the first real frame threw:
+    /// a gauge reading a `ship` it never had (M30e), a draw call reaching for an
+    /// orphaned `rad` (M31), and a kill handler logging a `bonus` that had been
+    /// deleted out from under it (M35, live for two commits). All three are the
+    /// same shape - a free variable on a path no node test can execute, because
+    /// `main.js` is the game loop and needs a browser.
+    ///
+    /// So the smoke test flies: it launches an armed mission, steps the
+    /// simulation, draws, fires a module and **requires something to die**,
+    /// which is the branch that hid the last one. `__bootError` is re-read
+    /// afterwards because a `requestAnimationFrame` throw lands there rather
+    /// than in this `try`.
     private func probe(attempt: Int) {
         let js = """
         (function () {
           if (window.__bootError) return 'BOOTERROR ' + window.__bootError;
           if (!window.__game) return 'PENDING';
+          var kills = 0;
+          try {
+            __act('equip:active:pulse-laser');
+            __setSeed(4242);
+            __goMission('LUNA', 4);
+            __act('launch');
+            var f = __field();
+            var e = f.enemies.filter(function (m) { return !m.dead; })[0];
+            if (!e) return 'NOTHINGTOSHOOT';
+            __ship.x = e.x + 60; __ship.y = e.y - 70; __ship.vx = 0; __ship.vy = 0;
+            __useAbility(0);
+            for (var i = 0; i < 1800; i++) {
+              __advance(1 / 120);
+              if (f.kills > 0) break;
+            }
+            kills = f.kills;
+            __draw();
+          } catch (err) {
+            return 'PLAYERROR ' + (err && err.message ? err.message : err);
+          }
+          if (window.__bootError) return 'BOOTERROR ' + window.__bootError;
+          if (!kills) return 'NOKILL - the kill path did not run, so it was not checked';
           return [__game.state, document.styleSheets.length, __game.ship ? 'ship' : 'no-ship'].join('|');
         })()
         """
         web.evaluateJavaScript(js) { result, error in
             let s = result as? String ?? "eval-failed \(String(describing: error))"
-            if s.hasPrefix("menu|1|ship") {
-                print("SELFTEST OK  \(s)")
+            if s.hasPrefix("play|1|ship") {
+                print("SELFTEST OK  \(s) - flew a mission and killed a machine")
                 exit(0)
             }
             if s == "PENDING", attempt < 40 {

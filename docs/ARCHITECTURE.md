@@ -251,6 +251,23 @@ indistinguishable from the module having failed, so a cloaked lander is drawn tr
 deployed foil is drawn as a foil. Same rule as "if a hazard has a boundary, draw the boundary", from
 the player's side of it.
 
+**A rule drawn but not enforced is decoration, and the blast ring was.** The circle is on screen at
+the full radius while the fuse burns, and under a linear falloff a sentry turret only died inside
+**68 px of a 150 px ring** — 45% of what the player was shown. A dug-in gun inside the ring takes the
+whole charge since M38; a drone and the lander are in the air and keep the falloff, so the charge is
+still dangerous to stand next to. The promise is asserted against `ENEMY_TYPES` rather than as a
+number, so a ground machine tougher than the charge fails a test instead of quietly making the circle
+a lie — the M30a rule again.
+
+**The build canary flies a mission; booting one proves almost nothing.** `macos/build.sh`'s self-test
+asserted `menu|1|ship` and three bugs have shipped past it that every node suite passed and the first
+real frame threw: a gauge reading a `ship` it never had (M30e), a draw call reaching for an orphaned
+`rad` (M31), and a kill handler logging a `bonus` deleted out from under it (M35, live two commits).
+All three are a free variable on a path **no node test can execute**, because `main.js` is the game
+loop. The probe launches an armed mission, steps, draws, fires a module and **requires something to
+die** before it passes, and re-reads `__bootError` afterwards because a `requestAnimationFrame` throw
+lands there rather than in its `try`.
+
 **The telegraph rule runs both ways.** M12 makes a machine show you the shot before it takes it, and
 `muzzleIsSafe` stops a shot appearing already touching the lander. The player's own ordnance lives
 under the mirror image: a charge is **inert for its first 0.35 s** so it can never go off inside the

@@ -360,7 +360,26 @@ export class Abilities {
           if (e.dead) continue;
           const d = Math.hypot(e.x - b.x, e.y - b.y);
           if (d > b.radius) continue;
-          const reward = field.damageEnemy(e, b.damage * (1 - d / b.radius));
+          // **A dug-in gun inside the ring is destroyed, and that is the ring
+          // being made true rather than the weapon being made stronger.**
+          //
+          // The blast circle is drawn at the full radius while the fuse burns -
+          // that is the M12 telegraph rule turned on the player's own ordnance -
+          // and under a linear falloff a turret only died inside **68 px of a
+          // 150 px circle**, 45% of what the screen promised. Tom met that as
+          // "it is impossible to hit them directly", which is also true: a
+          // charge inherits the lander's velocity and detonates on contact
+          // within 26 px, so a direct hit on a 16 px turret from a moving
+          // lander is not a thing you can aim for.
+          //
+          // A ground machine is a fixed emplacement standing *on* the surface
+          // and takes the whole charge; a drone and the lander are in the air
+          // and take the falloff. So the rule the player reads off the screen -
+          // "inside the ring, the gun dies" - is the rule the code runs, and
+          // the answer to a gun is still *getting above it*, which is the one
+          // thing the rack asks of you.
+          const dug = field.kindOf(e) === 'ground';
+          const reward = field.damageEnemy(e, dug ? b.damage : b.damage * (1 - d / b.radius));
           if (reward) events.push({ kind: 'kill', enemy: e, reward, x: e.x, y: e.y });
           hits.push(e);
         }

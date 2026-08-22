@@ -610,16 +610,99 @@ function shipAt(x, y, loadout = {}) {
     return { dealt: hp - e.hp, selfHarm: hull - ship.hull, blast, at: { x: e.x, y: e.y } };
   };
 
-  // **Falloff.** A blast that does full damage to the edge of its circle is a
-  // radius nobody has to think about, and this raised zero failures until it
-  // existed - the witness in `loadout-tests.js` only ever measured the centre.
+  // **The drawn ring is the real ring, for a dug-in gun.** The blast circle is
+  // on screen at the full radius while the fuse burns; under a linear falloff a
+  // turret only died inside 68 px of it - 45% of what the player was shown.
+  // Tom: *"it is impossible to hit them directly"*, which is also true, since a
+  // charge inherits the lander's velocity and only detonates on contact within
+  // 26 px. A ground machine inside the ring now takes the whole charge.
   const centre = drop(0);
   const edge = drop(Math.round(eff.bombRadius * 0.75));
   check('a charge hurts a machine it lands on', centre.dealt > 0, `${centre.dealt.toFixed(1)}`);
-  check('and hurts one at the edge of the blast far less',
-    edge.dealt > 0 && edge.dealt < centre.dealt * 0.6,
+  check('a gun at the edge of the ring takes the same charge as one under it',
+    Math.abs(edge.dealt - centre.dealt) < 1e-6,
     `${centre.dealt.toFixed(1)} at the centre vs ${edge.dealt.toFixed(1)} at ${Math.round(eff.bombRadius * 0.75)} px`);
   check('and nothing at all outside it', drop(eff.bombRadius + 40).dealt === 0);
+
+  // **And the promise is asserted against the roster rather than as a number**,
+  // which is the M30a rule: a reach is a *relationship* with the thing it
+  // answers. A ground machine tougher than the charge would break "inside the
+  // ring, the gun dies" silently, and this is what says so.
+  for (const [id, t] of Object.entries(ENEMY_TYPES)) {
+    if (t.kind !== 'ground') continue;
+    check(`the charge destroys a ${id} anywhere inside its ring`, eff.bombDamage >= t.hp,
+      `${eff.bombDamage} damage against ${t.hp} hull - the drawn circle would be a lie`);
+  }
+
+  // Falloff still exists and still applies to everything that is *not* dug in:
+  // a drone in the air, and the lander. The self-harm check below is the other
+  // half of it, and it is what keeps a charge dangerous to stand next to.
+  {
+    const air = { ...MOON_LEVELS[3], enemyBudget: 2, enemySets: ['seeker-drone'], gravity: 28 };
+    const airTerrain = new Terrain(air, 4242);
+    const dropAir = (off) => {
+      const field = new EnemyField(air, airTerrain, 4242);
+      const e = field.enemies[0];
+      const groundY = airTerrain.heightAt(e.x);
+      // **Held just off the deck, not up where a drone normally flies.** The
+      // first version parked it 200 px up: the charge falls past it and goes
+      // off on the ground, so an offset of 113 px is really 230 px away and the
+      // blast reads zero at every radius. That is M33's terrain fault in a
+      // third form - the distance under test has to be the distance from the
+      // *blast*, and the blast happens where the charge stops.
+      const x0 = e.x;
+      e.x = x0 + off; e.y = groundY - 30;
+      const ship = shipAt(x0, groundY - 260);
+      const hp = e.hp;
+      const a = new Abilities('bomb-rack', {});
+      a.trigger(ship);
+      for (let i = 0; i < 1200 && a.bombs.length; i++) a.update(1 / 120, { ship, field, terrain: airTerrain, level: air });
+      return hp - e.hp;
+    };
+    const near = dropAir(0);
+    const far = dropAir(Math.round(eff.bombRadius * 0.75));
+    check('a drone in the air still takes the falloff', far > 0 && far < near * 0.6,
+      `${near.toFixed(1)} near vs ${far.toFixed(1)} at ${Math.round(eff.bombRadius * 0.75)} px`);
+  }
+
+  // **The lander still takes the falloff, and that is the half that keeps a
+  // charge dangerous to stand next to** (M33). Making the ring true for a dug-in
+  // gun deliberately did *not* exempt the player - a weapon that is safe to be
+  // near is not a decision - and the mutation that gives the ship full damage at
+  // any range raised **zero failures** until this was written down.
+  //
+  // The charge is released and the lander then moved, because a bomb inherits
+  // the velocity it was dropped at: flying away from it takes the charge along.
+  {
+    const selfHarmAt = (away) => {
+      const field = new EnemyField(lvl, terrain, 4242);
+      for (const e of field.enemies) e.dead = true;      // nothing to absorb it
+      const x0 = 900;
+      const groundY = terrain.heightAt(x0);
+      // **Low, because the offset under test has to be the distance that
+      // dominates.** Dropped from 120 px up the charge lands 120 px *below* the
+      // lander, so a 105 px sideways step barely changes the range and the
+      // whole sweep read 11 -> 0. Third time this session, and the same fault
+      // each time (M33's terrain, M37's drone): measure along the axis you are
+      // varying, and make it the big one.
+      const ship = shipAt(x0, groundY - 60);
+      const a = new Abilities('bomb-rack', {});
+      a.trigger(ship);
+      ship.x = x0 + away;                                 // stand off, and wait
+      const hull = ship.hull;
+      for (let i = 0; i < 1200 && a.bombs.length; i++) {
+        a.update(1 / 120, { ship, field, terrain, level: lvl });
+      }
+      return hull - ship.hull;
+    };
+    const onTop = selfHarmAt(0);
+    const backedOff = selfHarmAt(90);
+    check('standing over your own charge costs hull', onTop > 0, `${onTop.toFixed(1)}`);
+    check('and backing away costs less', backedOff < onTop * 0.7,
+      `${onTop.toFixed(1)} on top vs ${backedOff.toFixed(1)} at 90 px`);
+    check('and clearing the ring costs nothing at all',
+      selfHarmAt(eff.bombRadius + 120) === 0);
+  }
 
   // **It goes off where it lands**, not merely when the fuse runs out. Dropped
   // from height the ground arrives long before the fuse, and a charge that fell

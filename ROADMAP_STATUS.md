@@ -1106,6 +1106,69 @@ scheduled until the MVP is stable — the spec says the same.
 
 None.
 
+## Done: M38 — the blast ring is the real ring, and a bug that had shipped
+
+**Tom:** *"kinetic bomb rack needs to do more damage within its radius to destroy guns. it is
+impossible to hit them directly. so they must be destroyed if within the blast radius."*
+
+**Both halves of that were true, and the second one made the first a bug rather than a tuning
+request.** A charge inherits the lander's velocity and only detonates on contact within 26 px, so a
+direct hit on a 16 px turret from a moving lander is not something you can aim for. And the blast
+circle is **drawn at 150 px while the fuse burns** — the M12 telegraph rule turned on the player's own
+ordnance — while a linear falloff meant a turret only died inside **68 px of it**:
+
+| machine | hull | killed within | of the drawn circle |
+| --- | ---: | ---: | ---: |
+| sentry turret | 30 | 68 px | **45%** |
+| mast sniper | 22 | 90 px | 60% |
+| seeker drone | 18 | 101 px | 67% |
+
+That is a rule **drawn but not enforced**, which M33's own comment calls decoration. A dug-in gun
+inside the ring takes the whole charge now; a drone and the lander are in the air and keep the
+falloff, so a charge is still dangerous to stand next to and the answer to a gun is still *getting
+above it*. Asserted against the roster rather than as a number (the M30a rule): a ground machine
+tougher than the charge fails a test rather than making the circle a lie.
+
+**Measured over the whole ladder: the same 30 presses, 6 kills → 10.** The pilot does not press more
+often; far more presses now count.
+
+### The bug it uncovered, and it had been live for two commits
+
+Driving that in the browser threw `ReferenceError: bonus is not defined` on the first kill.
+**M35 removed Salvage Drone, deleted the `bonus` it declared, replaced two of its three uses and
+missed the one inside `Log.log('kill', …)`.** Every machine destroyed in the real game had thrown
+since then, and every suite passed the whole time.
+
+That is the **third** bug of exactly this shape: M30e pointed a gauge at a `ship` it never had, M31
+orphaned a `rad` while extracting a function, and this one. All three are a free variable on a path
+**no node test can execute**, because `main.js` is the game loop and needs a browser.
+
+**So the build canary plays now instead of only booting.** `macos/build.sh`'s self-test used to load
+the page and assert `menu|1|ship`; it launches an armed mission, steps the simulation, draws, fires a
+module and **requires something to die** before it will pass — the branch that hid this one. It
+re-reads `__bootError` afterwards, because a throw inside `requestAnimationFrame` lands there rather
+than in the probe's `try`. Turning "look at the game" from a habit into a gate is the only thing that
+would have caught all three.
+
+### Measured and not taken
+
+A **proximity fuse** was measured, because the charge falling *past* an elevated gun is the other
+half of "impossible to hit directly" — at a 100 px offset the blast landed 176 px away, outside its
+own ring. Detonating near a machine rather than on contact:
+
+```
+26 px (today)   30 fires, 10 kills   33% of presses connect
+60 px           31 fires, 12 kills   39%
+90 px           31 fires, 14 kills   45%
+120 px          30 fires,  4 kills   13%   <- collapses
+```
+
+**Not taken**: it changes what the weapon *is* — it would no longer land where you aimed — and that
+was not the ask. The 120 px row is why it would need measuring rather than choosing: the charge goes
+off early beside a drone and never reaches the guns. Recorded here as an option with its numbers.
+
+---
+
 ## Done: M37 — two active modules
 
 **Tom's playtest call, 2026-08-22:** *"you need laser for enemies. playtest have shown that everyone

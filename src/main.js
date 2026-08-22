@@ -424,7 +424,7 @@ function combatEffect(e) {
       particles.text(e.x, e.y - 24, `+${e.reward} SALVAGE`, '#ffb347', 17);
       g.combatSalvage = (g.combatSalvage || 0) + e.reward;
       meta.stats.threatsDestroyed++;
-      Log.log('kill', { salvage: bonus });
+      Log.log('kill', { salvage: e.reward });
       break;
     }
     case 'shield-down':

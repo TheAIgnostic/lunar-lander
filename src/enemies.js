@@ -872,6 +872,17 @@ export class EnemyField {
     return best;
   }
 
+  /**
+   * What kind of machine this is — `ground` or `air`.
+   *
+   * Exposed so `abilities.js` can ask without importing `ENEMY_TYPES` and
+   * learning what a turret is: the field owns the roster, a module owns its
+   * effect, and the one question between them is which of the two a machine is.
+   */
+  kindOf(e) {
+    return e && !e.dead ? typeOf(e).kind : null;
+  }
+
   /** Apply damage to a machine. Returns the reward if this killed it. */
   damageEnemy(e, amount) {
     if (!e || e.dead) return 0;
