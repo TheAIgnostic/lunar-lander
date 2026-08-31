@@ -126,6 +126,34 @@
   strong { font-weight: 600; }
   em { font-style: italic; color: var(--ink-soft); }
 
+  /* Relative, so the same file works from either repository's Pages site. */
+  .play {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.55rem;
+    margin: 0 0 2.4rem;
+    padding: 0.5rem 0.9rem 0.55rem;
+    border: 1px solid var(--rule-strong);
+    background: var(--surface);
+    font-family: var(--display);
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--ink);
+    text-decoration: none;
+    transition: border-color 120ms ease, color 120ms ease;
+  }
+  .play:hover, .play:focus-visible { border-color: var(--accent); color: var(--accent); }
+  .play span {
+    font-family: var(--mono);
+    font-size: 0.74rem;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .play:hover span, .play:focus-visible span { color: var(--accent); }
+  @media (prefers-reduced-motion: reduce) { .play { transition: none; } }
+
   .num {
     font-family: var(--mono);
     font-variant-numeric: tabular-nums;
@@ -256,6 +284,8 @@
   directing an AI. The interesting result is not the game. It is what the six days say about how
   fast a capable person can now move from idea to shipped product.</p>
 
+  <a class="play" href="../">Play Terminal Velocity <span>in the browser</span></a>
+
   <div class="figures">
     <div class="fig"><b>6</b><span>working days</span></div>
     <div class="fig"><b>25,600</b><span>lines of code</span></div>
@@ -357,7 +387,8 @@
 
   <footer>
     Terminal Velocity · 16–22 August 2026 · 114 commits across 6 working days<br>
-    Source and full engineering record: <a href="https://github.com/TheAIgnostic/lunar-lander">github.com/TheAIgnostic/lunar-lander</a> · <a href="../">play the game</a><br>
+    Play it in a browser: <a href="../">Terminal Velocity</a><br>
+    Source and full engineering record: <a href="https://github.com/TheAIgnostic/lunar-lander">github.com/TheAIgnostic/lunar-lander</a><br>
     Figures measured from the repository, not estimated. The nine-to-eighteen-month
     comparison is an informed estimate and is labelled as one.
   </footer>
