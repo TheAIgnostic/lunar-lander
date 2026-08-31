@@ -273,6 +273,39 @@
   footer a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--rule-strong); }
   footer a:hover, footer a:focus-visible { border-bottom-color: var(--accent); }
   a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  /* ---- print / PDF ----------------------------------------------------
+     Forced to the light palette whatever the reader's theme is: a dark
+     ground is right on a screen and wrong on paper. Relative links cannot
+     be followed off a printed page, so the two that matter are spelled out
+     in full. */
+  @media print {
+    :root, :root[data-theme="dark"] {
+      --ground:      #FFFFFF;
+      --surface:     #FFFFFF;
+      --ink:         #14181D;
+      --ink-soft:    #3D4753;
+      --ink-faint:   #6B7683;
+      --rule:        #D3DAE2;
+      --rule-strong: #A9B4C1;
+      --accent:      #0B6670;
+      --accent-soft: #EFF6F7;
+      --caution:     #8A5309;
+    }
+    @page { margin: 16mm 14mm 15mm; }
+    body { font-size: 10.5pt; line-height: 1.5; background: #FFFFFF; }
+    .wrap { max-width: none; padding: 0; }
+    h1 { font-size: 26pt; }
+    .standfirst { font-size: 12pt; margin-bottom: 1.4rem; }
+    h2 { font-size: 13.5pt; padding-top: 1.5rem; break-after: avoid; }
+    p, li, blockquote { orphans: 3; widows: 3; }
+    .figures, .callout, blockquote, .built { break-inside: avoid; }
+    .fig b { font-size: 15pt; }
+    .play { break-inside: avoid; }
+    .play::after { content: " — theaignostic.github.io/lunar-lander"; font-family: var(--mono); font-size: 8pt; font-weight: 500; color: var(--ink-faint); letter-spacing: 0; }
+    footer { break-inside: avoid; }
+    footer a { border-bottom: 0; color: var(--ink-soft); }
+  }
 </style>
 
 <div class="wrap">

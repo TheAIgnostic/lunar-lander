@@ -3,3 +3,9 @@
 
 # build output — regenerate with `node build.js`
 dist/
+
+# generated from docs/six-day-game.html; regenerate with:
+#   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless \
+#     --no-pdf-header-footer --print-to-pdf=The-Six-Day-Game.pdf \
+#     http://localhost:8791/docs/six-day-game.html
+*.pdf
