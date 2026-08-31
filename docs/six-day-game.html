@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Six-Day Game — Terminal Velocity</title>
+<meta name="description" content="A complete, published video game built in six working days by one person directing an AI — and what that says about moving from idea to shipped product.">
+<meta name="theme-color" content="#0B1119">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🚀</text></svg>">
+<meta property="og:title" content="The Six-Day Game">
+<meta property="og:description" content="Ten worlds, fifty missions, 25,600 lines of tested code — built in six working days.">
+<meta property="og:type" content="article">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,600;1,400&display=swap">
+</head>
+<body>
+
+<style>
+  :root {
+    --ground:      #FBFCFD;
+    --surface:     #FFFFFF;
+    --ink:         #0E1621;
+    --ink-soft:    #46566B;
+    --ink-faint:   #7C8CA1;
+    --rule:        #DDE4EC;
+    --rule-strong: #B9C5D4;
+    --accent:      #0E7C86;
+    --accent-soft: #E3F1F2;
+    --caution:     #9A5D0A;
+
+    --display: "IBM Plex Sans Condensed", "Helvetica Neue", Arial, sans-serif;
+    --body:    "IBM Plex Serif", Georgia, "Times New Roman", serif;
+    --mono:    "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0B1119;
+      --surface:     #121B26;
+      --ink:         #E7EEF6;
+      --ink-soft:    #A2B3C6;
+      --ink-faint:   #74879C;
+      --rule:        #223040;
+      --rule-strong: #35485D;
+      --accent:      #5FD8E4;
+      --accent-soft: #142A31;
+      --caution:     #E0A24B;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #0B1119;
+    --surface:     #121B26;
+    --ink:         #E7EEF6;
+    --ink-soft:    #A2B3C6;
+    --ink-faint:   #74879C;
+    --rule:        #223040;
+    --rule-strong: #35485D;
+    --accent:      #5FD8E4;
+    --accent-soft: #142A31;
+    --caution:     #E0A24B;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 17px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 47rem;
+    margin: 0 auto;
+    padding: clamp(2.5rem, 6vw, 5rem) clamp(1.2rem, 5vw, 2.5rem) 5rem;
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 1.1rem;
+  }
+
+  h1 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(2.1rem, 6.5vw, 3.1rem);
+    line-height: 1.06;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+    margin: 0 0 1rem;
+  }
+
+  .standfirst {
+    font-size: 1.16rem;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    margin: 0 0 2.6rem;
+    text-wrap: pretty;
+  }
+  .standfirst strong { color: var(--ink); font-weight: 600; }
+
+  h2 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 1.34rem;
+    letter-spacing: -0.005em;
+    text-wrap: balance;
+    margin: 0 0 0.7rem;
+    padding-top: 2.6rem;
+    border-top: 1px solid var(--rule);
+  }
+
+  section { display: block; }
+  p { margin: 0 0 1.05rem; text-wrap: pretty; }
+  p:last-child { margin-bottom: 0; }
+  strong { font-weight: 600; }
+  em { font-style: italic; color: var(--ink-soft); }
+
+  .num {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+    font-size: 0.95em;
+  }
+
+  /* ---- the measured band ---- */
+  .figures {
+    display: flex;
+    flex-wrap: wrap;
+    border: 1px solid var(--rule);
+    border-width: 1px 0 0 1px;
+    margin: 0 0 2.4rem;
+  }
+  .fig {
+    flex: 1 1 8rem;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-width: 0 1px 1px 0;
+    padding: 1rem 1.1rem 1.05rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.28rem;
+  }
+  .fig b {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    font-size: 1.5rem;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .fig span {
+    font-family: var(--display);
+    font-size: 0.76rem;
+    font-weight: 500;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  /* ---- inventory list ---- */
+  .built {
+    list-style: none;
+    margin: 1.3rem 0 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    gap: 0.55rem 2rem;
+  }
+  .built li {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px dotted var(--rule-strong);
+    font-family: var(--display);
+    font-size: 0.93rem;
+    color: var(--ink-soft);
+  }
+  .built li b {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  /* ---- pull quote ---- */
+  blockquote {
+    margin: 1.7rem 0;
+    padding: 0 0 0 1.3rem;
+    border-left: 2px solid var(--accent);
+    font-size: 1.05rem;
+    line-height: 1.5;
+    color: var(--ink);
+  }
+  blockquote p { margin: 0 0 0.45rem; }
+  blockquote cite {
+    display: block;
+    font-family: var(--display);
+    font-style: normal;
+    font-size: 0.8rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  .callout {
+    background: var(--accent-soft);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    padding: 1.05rem 1.25rem;
+    margin: 1.6rem 0;
+    font-size: 1.01rem;
+  }
+  .callout p { margin: 0; }
+
+  .note {
+    font-size: 0.92rem;
+    color: var(--ink-faint);
+    font-style: italic;
+  }
+  .note b { color: var(--caution); font-style: normal; font-weight: 600; }
+
+  footer {
+    margin-top: 3.2rem;
+    padding-top: 1.3rem;
+    border-top: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    line-height: 1.7;
+    color: var(--ink-faint);
+  }
+  footer a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--rule-strong); }
+  footer a:hover, footer a:focus-visible { border-bottom-color: var(--accent); }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+</style>
+
+<div class="wrap">
+
+  <p class="eyebrow">Internal summary · August 2026</p>
+  <h1>The Six-Day Game</h1>
+  <p class="standfirst">A complete, published, commercially-shaped video game — ten worlds, fifty
+  missions, a full progression economy — built in <strong>six working days</strong> by one person
+  directing an AI. The interesting result is not the game. It is what the six days say about how
+  fast a capable person can now move from idea to shipped product.</p>
+
+  <div class="figures">
+    <div class="fig"><b>6</b><span>working days</span></div>
+    <div class="fig"><b>25,600</b><span>lines of code</span></div>
+    <div class="fig"><b>11,200</b><span>lines of docs</span></div>
+    <div class="fig"><b>114</b><span>commits</span></div>
+    <div class="fig"><b>2,400+</b><span>test assertions</span></div>
+  </div>
+
+  <section>
+    <h2>What was actually built</h2>
+    <p>Not a prototype or a vertical slice. A finished, playable product, live on the public web and
+    packaged as a native macOS application, with an automated test suite, a mutation-testing
+    workflow, and roughly eleven thousand lines of engineering documentation explaining why each
+    decision was taken.</p>
+    <ul class="built">
+      <li>Worlds <b>10</b></li>
+      <li>Hand-authored missions <b>50</b></li>
+      <li>Loadout modules <b>20</b></li>
+      <li>Skill nodes <b>15</b></li>
+      <li>Upgrade tracks <b>5</b></li>
+      <li>Source modules <b>34</b></li>
+      <li>Test suites <b>12</b></li>
+      <li>Independent AI audits <b>2</b></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Why a game is the right test case</h2>
+    <p>Most AI coding demonstrations produce something with one system in it — a form, a dashboard, a
+    script. They prove the model can write code. They do not prove it can hold a product together.</p>
+    <p>A game of this shape is unusually demanding because it is <strong>many interacting systems that
+    must all remain true at once</strong>: a real-time physics simulation, procedurally generated
+    terrain, an enemy AI with fairness guarantees, an economy, three progression systems, ten distinct
+    environments with their own hazards, controller and touch input, audio synthesis, and save
+    migration across forty iterations of the data format.</p>
+    <p>Change one number and five systems shift. That is precisely the condition under which naive AI
+    output falls apart — and precisely the condition most real business software actually lives in.
+    It is a harder test than it looks, and a more representative one.</p>
+  </section>
+
+  <section>
+    <h2>The time compression</h2>
+    <p>Before AI, a single skilled developer would need somewhere in the region of <strong>nine to
+    eighteen months</strong> to reach this state: designed, built, balanced, tested, documented,
+    packaged and shipped.</p>
+    <p>The arithmetic supports the estimate independently. Sustained professional output — including
+    design, review, testing, rework and documentation — typically lands between twenty and fifty
+    lines of retained code per developer-day. At that rate, 25,600 lines alone brackets
+    <span class="num">500–1,300</span> person-days before a single mission is authored or balanced.</p>
+    <div class="callout">
+      <p>Six days against nine to eighteen months is a compression of roughly <strong>fifty to a
+      hundred times</strong>. Not an efficiency gain. A change in what one person can decide to
+      attempt on a Monday.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>It only worked because the operator was skilled</h2>
+    <p>This is the part that does not survive being left out. The AI wrote effectively all of the
+    code. It did not, and could not, supply the judgement — and the project's own history is the
+    evidence.</p>
+    <p><strong>Every consequential bug was found by the human, not by the 2,400 automated
+    assertions.</strong> A crash that froze the game whenever the player's weapon destroyed anything
+    had shipped to production and passed every test. A soundscape that measured correctly and sounded
+    wrong. A weapon whose displayed blast radius was nearly twice its real one. The tests were green
+    throughout.</p>
+    <p><strong>Every consequential design decision was the human's, and several overruled the AI.</strong>
+    Cutting the skill trees from thirty nodes to fifteen. Giving the player two equipment slots
+    instead of one, because playtesting showed everyone made the same forced choice. Deferring
+    features that were specified but not yet earned.</p>
+    <blockquote>
+      <p>“This is not good design to have the slots twice. You should be able to mark the two active
+      in one area.”</p>
+      <cite>Product direction that no test could have produced</cite>
+    </blockquote>
+    <p>An unskilled operator would have accepted the green test suite, shipped the crash, kept the
+    thirty nodes because the specification said thirty, and never noticed the sound. <strong>The
+    speed comes from the AI. The direction, taste, and the ability to recognise a plausible-looking
+    wrong answer come from the person.</strong></p>
+  </section>
+
+  <section>
+    <h2>What this means beyond games</h2>
+    <p>Nothing about this is specific to games. The same pattern applies to any domain with real
+    complexity and real users: internal tooling, customer-facing applications, data products,
+    automation, analysis.</p>
+    <p><strong>High-agency people with domain knowledge can now go from idea to MVP to shipped
+    product in days rather than quarters — provided they are given the tools and the leeway to do
+    it.</strong></p>
+    <p>Both halves of that condition matter. The tools are the cheaper half. The leeway — permission
+    to start without a business case, to ship without a committee, to throw away what does not work —
+    is the half organisations usually withhold, and the half that determines whether any of this
+    speed is realised.</p>
+    <p class="note"><b>The honest caveat:</b> the ceiling is set by the operator, not the model. Given
+    the same six days and the same tools, someone without the skill to interrogate the output would
+    have produced something that looked finished and was not. This capability multiplies judgement;
+    it does not substitute for it.</p>
+  </section>
+
+  <footer>
+    Terminal Velocity · 16–22 August 2026 · 114 commits across 6 working days<br>
+    Source and full engineering record: <a href="https://github.com/TheAIgnostic/lunar-lander">github.com/TheAIgnostic/lunar-lander</a> · <a href="../">play the game</a><br>
+    Figures measured from the repository, not estimated. The nine-to-eighteen-month
+    comparison is an informed estimate and is labelled as one.
+  </footer>
+
+</div>
+</body>
+</html>

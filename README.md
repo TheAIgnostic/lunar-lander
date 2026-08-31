@@ -27,6 +27,13 @@ is deliberate.
 
 No dependencies, no build step, no image or audio assets — one canvas, ES modules, WebAudio.
 
+## How this was built
+
+**[The Six-Day Game](https://theaignostic.github.io/lunar-lander/docs/six-day-game.html)** — a short
+summary of the project as a case study: what was built, why a game is a demanding test case for
+AI-assisted development, the measured figures, and what it took from the person directing it.
+Source: [`docs/six-day-game.html`](docs/six-day-game.html).
+
 ## Run
 
 ```bash
